@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>PNBOX Acadêmico - Plano de Negócio</title>
+  <link rel="icon" href="icone.png" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@1.12.3/build/stlite.css" />
+  <style>
+    #carregando{font-family:system-ui,sans-serif;max-width:560px;margin:15vh auto;text-align:center;color:#26548c}
+    #carregando small{color:#555}
+  </style>
+</head>
+<body>
+  <div id="carregando">
+    <h2>📊 PNBOX Acadêmico</h2>
+    <p>Carregando o programa no seu navegador...</p>
+    <small>Na primeira vez pode levar de 30 segundos a 1 minuto. Nada é instalado no computador
+    e os seus dados não saem do seu navegador.</small>
+  </div>
+  <div id="root"></div>
+  <script type="module">
+    import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.12.3/build/stlite.js";
+    const versao = new URLSearchParams(location.search).get("versao") || "modelo";
+    mount(
+      {
+        requirements: ["pandas", "openpyxl", "fpdf2", "matplotlib", "altair"],
+        entrypoint: "app_pnbox.py",
+        files: {
+          "app_pnbox.py": { url: "./app_pnbox.py" },
+          "versao.txt": versao,
+        },
+        idbfsMountpoints: ["/home/pyodide/pnbox"],
+      },
+      document.getElementById("root"),
+    );
+    const obs = new MutationObserver(() => {
+      if (document.querySelector("#root [data-testid='stApp']")) {
+        document.getElementById("carregando").remove(); obs.disconnect();
+      }
+    });
+    obs.observe(document.getElementById("root"), { childList: true, subtree: true });
+  </script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+# Gera os instaladores do PNBOX para Windows (versão Modelo FitBox e versão Em branco)
+# e publica na página "Releases" do repositório. Roda sozinho a cada atualização do programa.
+name: Gerar instaladores Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app_pnbox.py"
+      - "installer/**"
+      - ".github/workflows/instalador.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        versao: [modelo, branco]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baixar Python embutido e instalar bibliotecas
+        shell: pwsh
+        run: |
+          $v = "3.12.10"
+          Invoke-WebRequest "https://www.python.org/ftp/python/$v/python-$v-embed-amd64.zip" -OutFile py.zip
+          Expand-Archive py.zip -DestinationPath dist\PNBOX\python
+          $pth = Get-ChildItem dist\PNBOX\python\python*._pth | Select-Object -First 1
+          (Get-Content $pth) -replace '#import site', 'import site' | Set-Content $pth
+          Invoke-WebRequest https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
+          dist\PNBOX\python\python.exe get-pip.py --no-warn-script-location
+          dist\PNBOX\python\python.exe -m pip install --no-warn-script-location -r requirements.txt
+
+      - name: Copiar o programa
+        shell: pwsh
+        run: |
+          Copy-Item app_pnbox.py, installer\iniciar.vbs, installer\pnbox.ico dist\PNBOX\
+          Set-Content -Path dist\PNBOX\versao.txt -Value "${{ matrix.versao }}" -Encoding ascii
+          Set-Content -Path dist\PNBOX\instalado.txt -Value "1" -Encoding ascii
+
+      - name: Testar se as bibliotecas carregam
+        shell: pwsh
+        run: dist\PNBOX\python\python.exe -c "import streamlit, pandas, fpdf, matplotlib, openpyxl, altair; print('ok', streamlit.__version__)"
+
+      - name: Montar o instalador (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DVersao=${{ matrix.versao }}" installer\pnbox.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador-${{ matrix.versao }}
+          path: installer/Output/*.exe
+
+  publicar:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: saida
+          merge-multiple: true
+      - name: Publicar na página Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: instaladores
+          name: "PNBOX Acadêmico - instaladores para Windows"
+          make_latest: true
+          body: |
+            **Como instalar:** baixe um dos arquivos abaixo, dê dois cliques e siga as telas.
+            - `PNBOX-Setup-Modelo-FitBox.exe`: abre com o estudo de caso FitBox preenchido.
+            - `PNBOX-Setup-Em-Branco.exe`: abre com um projeto vazio para começar do zero.
+
+            Não é preciso ter Python instalado. Se o Windows mostrar "O Windows protegeu o computador",
+            clique em **Mais informações** e depois em **Executar assim mesmo** (o programa não tem assinatura digital paga).
+
+            Os projetos ficam em **Documentos\PNBOX**. Atualizado automaticamente a cada nova versão do programa.
+          files: saida/*.exe
+          fail_on_unmatched_files: true

@@ -1,0 +1,5 @@
+projetos/
+*.pnbox
+__pycache__/
+dist/
+installer/Output/
