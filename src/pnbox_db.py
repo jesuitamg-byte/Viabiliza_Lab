@@ -329,3 +329,11 @@ def criar_projeto_modelo(caminho: Path) -> None:
     popular_modelo_fitbox(conn)
     conn.commit()
     conn.close()
+
+
+def criar_projeto_cafe(caminho: Path) -> None:
+    """Cria o segundo estudo de caso: Café Mucuri (cafeteria e padaria artesanal)."""
+    conn = conectar(caminho)
+    popular_modelo_cafe(conn)
+    conn.commit()
+    conn.close()

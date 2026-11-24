@@ -9,6 +9,7 @@ exportação em Word, situação de preenchimento e avaliação (modo professor)
 import io
 import re
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 from fpdf import FPDF
@@ -18,7 +19,7 @@ from pnbox_motor import (brl, num_br, pct, div, QUADRANTES, pontuacao_swot, merc
                          tabela_dre, tabela_indicadores, composicoes, sensibilidade, capacidade_demanda,
                          tabela_checagens_v5, raio_x, executar_motor)
 from pnbox_db import SCHEMA, conectar, ler, ler_unica
-from pnbox_pdf import Relatorio, graficos_png, AZUL
+from pnbox_pdf import Relatorio, graficos_png, AZUL, FONTES_CANDIDATAS
 
 
 # ------------------------------------------------------------------------------
@@ -270,11 +271,8 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
 class Pitch(Relatorio):
     def __init__(self, nome):
         FPDF.__init__(self, orientation="L", unit="mm", format=(190.5, 338.7))
-        Relatorio._iniciar_fontes(self) if hasattr(Relatorio, "_iniciar_fontes") else None
         self.nome = nome
         self.unicode = False
-        from pnbox_pdf import FONTES_CANDIDATAS
-        from pathlib import Path
         for reg, neg, ita in FONTES_CANDIDATAS:
             if all(Path(p).exists() for p in (reg, neg, ita)):
                 self.add_font("Base", "", reg)

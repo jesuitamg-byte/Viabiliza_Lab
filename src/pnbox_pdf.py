@@ -307,7 +307,7 @@ def graficos_png(comp: dict) -> list:
 # ==============================================================================
 def gerar_pdf(proj, d, res, extras) -> bytes:
     """extras: dict com dre, indicadores, cenarios, checagens, swot_diag, quadrantes."""
-    from pnbox_motor import brl, num_br, pct, div, QUADRANTES  # noqa (removido no arquivo único)
+    from pnbox_motor import brl, num_br, pct, div, QUADRANTES, mercado, semaforo, capacidade_demanda  # noqa (removido no arquivo único)
     pdf = Relatorio(proj["nome_negocio"])
     pdf.alias_nb_pages()
     pdf.add_page()

@@ -1,13 +1,13 @@
 import re
-partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_pdf.py","pnbox_app.py"]
+partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_pdf.py","pnbox_extras.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas3.py"]
 cab='''"""
 ================================================================================
-PNBOX ACADÊMICO v4 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+PNBOX ACADÊMICO v5 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir PNBOX.bat" (na mesma pasta); ou
     - dois cliques neste arquivo .py (se o Windows abrir .py com o Python); ou
-    - no terminal:  py app_pnbox_v4.py
+    - no terminal:  py app_pnbox.py
 Na primeira vez ele instala sozinho as bibliotecas que faltarem
 (streamlit, pandas, openpyxl, fpdf2, matplotlib) e já abre o navegador,
 sem pedir e-mail, numa porta livre escolhida na hora.
@@ -15,7 +15,7 @@ Ao fechar a aba do navegador, o programa se encerra sozinho (após ~15 s).
 
 Os projetos ficam na pasta "projetos", criada ao lado deste arquivo.
 Partes do código: (1) banco de dados, (2) modelo FitBox, (3) motor financeiro,
-(4) relatório PDF, (5) interface.
+(4) relatório PDF, (5) extras (IA, pitch, Word, professor), (6) interface.
 ================================================================================
 """
 from __future__ import annotations
@@ -41,4 +41,6 @@ for p in partes:
         out.append(l)
     corpo.append(f"\n\n# {'#'*78}\n# PARTE: {p}\n# {'#'*78}\n"+"\n".join(out))
 BOOT=open('boot.py',encoding='utf-8').read()
-open('app_pnbox_v4.py','w',encoding='utf-8').write(cab+BOOT+"\n".join(sorted(imports))+"\n"+"".join(corpo)+"\n")
+open('app_pnbox.py','w',encoding='utf-8').write(cab+BOOT+"\n".join(sorted(imports))+"\n"+"".join(corpo)+"\n")
+
+import shutil; shutil.copy('app_pnbox.py','../app_pnbox.py'); print('ok')

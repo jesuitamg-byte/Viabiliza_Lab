@@ -1,6 +1,6 @@
 """
 ================================================================================
-PNBOX ACADÊMICO v4 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+PNBOX ACADÊMICO v5 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir PNBOX.bat" (na mesma pasta); ou
@@ -13,7 +13,7 @@ Ao fechar a aba do navegador, o programa se encerra sozinho (após ~15 s).
 
 Os projetos ficam na pasta "projetos", criada ao lado deste arquivo.
 Partes do código: (1) banco de dados, (2) modelo FitBox, (3) motor financeiro,
-(4) relatório PDF, (5) interface.
+(4) relatório PDF, (5) extras (IA, pitch, Word, professor), (6) interface.
 ================================================================================
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def _no_streamlit() -> bool:
 
 def _preparar_ambiente() -> None:
     pacotes = {"streamlit": "streamlit", "pandas": "pandas", "openpyxl": "openpyxl",
-               "matplotlib": "matplotlib", "altair": "altair"}
+               "matplotlib": "matplotlib", "altair": "altair", "docx": "python-docx"}
     faltando = [pip for mod, pip in pacotes.items() if _ilu.find_spec(mod) is None]
     try:
         import fpdf
@@ -72,12 +72,16 @@ if __name__ == "__main__" and not _no_streamlit():
                  f"--server.port={_porta}", "--server.address=localhost",
                  "--browser.gatherUsageStats=false", "--server.headless=false"]
     _sys.exit(_stcli.main())
+from datetime import date
+from datetime import datetime
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 from pathlib import Path
 import altair as alt
+import hashlib
 import io
+import json
 import math
 import os
 import pandas as pd
@@ -102,6 +106,8 @@ import time
 # ------------------------------------------------------------------------------
 # Tabelas "únicas" têm apenas uma linha (id = 1). As demais são listas.
 TABELAS_UNICAS = {"projeto", "proposta_valor"}
+# Tabelas que não são editadas como planilha comum
+TABELAS_INTERNAS = {"projeto", "proposta_valor", "versoes"}
 
 SCHEMA = {
     "projeto": [
@@ -118,6 +124,22 @@ SCHEMA = {
         ("recuperar_giro", "INTEGER"),             # Recupera capital de giro no último ano do VPL
         ("cen_otim_receita_pct", "REAL"), ("cen_otim_custo_pct", "REAL"),
         ("cen_pess_receita_pct", "REAL"), ("cen_pess_custo_pct", "REAL"),
+        # Identificação acadêmica
+        ("autores", "TEXT"), ("turma", "TEXT"), ("professor", "TEXT"), ("data_entrega", "TEXT"),
+        # Mercado (TAM / SAM / SOM)
+        ("tam_desc", "TEXT"), ("tam_clientes", "REAL"), ("sam_desc", "TEXT"), ("sam_clientes", "REAL"),
+        ("som_pct", "REAL"), ("gasto_anual_cliente", "REAL"), ("mercado_fontes", "TEXT"),
+        # Marketing (4Ps) e localização
+        ("mkt_produto", "TEXT"), ("mkt_preco", "TEXT"), ("mkt_praca", "TEXT"), ("mkt_promocao", "TEXT"),
+        ("loc_endereco", "TEXT"), ("loc_justificativa", "TEXT"), ("loc_area_m2", "REAL"),
+        ("loc_fluxo", "TEXT"),
+        # Plano operacional
+        ("op_layout", "TEXT"), ("op_processos", "TEXT"), ("op_capacidade_txt", "TEXT"),
+        ("op_horario", "TEXT"),
+        # Custos e preço
+        ("rateio_criterio", "TEXT"), ("margem_desejada_pct", "REAL"),
+        # Textos finais
+        ("sumario_executivo", "TEXT"), ("conclusao", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL")],
@@ -162,9 +184,26 @@ SCHEMA = {
                  ("qtd_estoque_inicial", "REAL")],
     "ficha_tecnica": [("produto", "TEXT"), ("material", "TEXT"), ("quantidade", "REAL")],
     "custos_variaveis": [("descricao", "TEXT"), ("percentual", "REAL")],
-    "pessoal": [("cargo", "TEXT"), ("num_empregados", "REAL"), ("salario_mensal", "REAL"),
-                ("encargos_pct", "REAL"), ("beneficios_unit", "REAL")],
-    "custos_fixos": [("descricao", "TEXT"), ("valor_mensal", "REAL")],
+    "pessoal": [("cargo", "TEXT"), ("area", "TEXT"), ("num_empregados", "REAL"), ("salario_mensal", "REAL"),
+                ("encargos_pct", "REAL"), ("beneficios_unit", "REAL"), ("atribuicoes", "TEXT")],
+    "custos_fixos": [("descricao", "TEXT"), ("classificacao", "TEXT"), ("valor_mensal", "REAL")],
+    # --- novas tabelas (v5) ---
+    "propostas": [("persona_nome", "TEXT"), ("valores", "TEXT"), ("que_desejam", "TEXT"),
+                  ("por_meio", "TEXT"), ("diferentemente", "TEXT"), ("oferecem", "TEXT")],
+    "capacidade": [("recurso", "TEXT"), ("produto_ou_grupo", "TEXT"), ("capacidade_mensal", "REAL"),
+                   ("observacao", "TEXT")],
+    "fornecedores": [("nome", "TEXT"), ("itens", "TEXT"), ("prazo_pagamento_dias", "REAL"),
+                     ("prazo_entrega_dias", "REAL"), ("condicoes", "TEXT"), ("critico", "INTEGER")],
+    "riscos": [("risco", "TEXT"), ("probabilidade", "REAL"), ("impacto", "REAL"), ("mitigacao", "TEXT"),
+               ("responsavel", "TEXT")],
+    "experimentos": [("hipotese", "TEXT"), ("experimento", "TEXT"), ("metrica", "TEXT"),
+                     ("criterio_sucesso", "TEXT"), ("resultado", "TEXT"), ("status", "TEXT")],
+    "cronograma": [("atividade", "TEXT"), ("mes_inicio", "REAL"), ("duracao_meses", "REAL"),
+                   ("responsavel", "TEXT"), ("custo", "REAL")],
+    "realizado": [("mes", "REAL"), ("receita_real", "REAL"), ("custos_variaveis_real", "REAL"),
+                  ("custos_fixos_real", "REAL")],
+    "listas": [("tipo", "TEXT"), ("valor", "TEXT")],
+    "versoes": [("nome", "TEXT"), ("data", "TEXT"), ("dados", "TEXT")],
 }
 
 # Valores-padrão de um projeto em branco
@@ -177,6 +216,7 @@ PROJETO_PADRAO = {
     "pme_dias": 15.0, "reserva_caixa_extra": 0.0, "recuperar_giro": 1,
     "cen_otim_receita_pct": 10.0, "cen_otim_custo_pct": 5.0,
     "cen_pess_receita_pct": 15.0, "cen_pess_custo_pct": 5.0,
+    "rateio_criterio": "Custo direto", "margem_desejada_pct": 15.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -236,7 +276,17 @@ def garantir_estrutura(conn: sqlite3.Connection) -> None:
 
 
 def _migrar_versao_anterior(conn):
-    """Converte dados de arquivos .pnbox gerados pelas versões 1 e 2 do programa."""
+    """Converte dados de arquivos .pnbox gerados por versões anteriores do programa."""
+    conn.execute("UPDATE custos_fixos SET classificacao='Despesa administrativa' "
+                 "WHERE classificacao IS NULL OR classificacao=''")
+    conn.execute("UPDATE pessoal SET area='Produção / operação' WHERE area IS NULL OR area=''")
+    # Proposta de valor única (v1-v4) -> lista de propostas
+    if conn.execute("SELECT COUNT(*) FROM propostas").fetchone()[0] == 0:
+        pv = conn.execute("SELECT segmento_alvo, beneficios_desejados, meios_entrega, diferencial_competitivo, "
+                          "entrega_produtos_servicos FROM proposta_valor WHERE id=1").fetchone()
+        if pv and any(pv):
+            conn.execute("INSERT INTO propostas (persona_nome, valores, que_desejam, por_meio, diferentemente, "
+                         "oferecem) VALUES (?,?,?,?,?,?)", (pv[0], "", pv[1], pv[2], pv[3], pv[4]))
     # Catálogo: custo_unitario -> custo_aquisicao
     if "custo_unitario" in _colunas(conn, "catalogo"):
         conn.execute("UPDATE catalogo SET custo_aquisicao = custo_unitario "
@@ -304,7 +354,7 @@ def limpar(df: pd.DataFrame, tabela) -> pd.DataFrame:
             df[c] = None
         if t in ("REAL", "INTEGER"):
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-            if c == "priorizado":
+            if c in ("priorizado", "critico"):
                 df[c] = df[c].astype(bool)
         else:
             df[c] = df[c].astype(object).where(df[c].notna(), "")
@@ -364,6 +414,14 @@ def criar_projeto_modelo(caminho: Path) -> None:
     conn.commit()
     conn.close()
 
+
+def criar_projeto_cafe(caminho: Path) -> None:
+    """Cria o segundo estudo de caso: Café Mucuri (cafeteria e padaria artesanal)."""
+    conn = conectar(caminho)
+    popular_modelo_cafe(conn)
+    conn.commit()
+    conn.close()
+
 # ##############################################################################
 # PARTE: pnbox_modelo.py
 # ##############################################################################
@@ -391,7 +449,7 @@ def popular_modelo_fitbox(conn) -> None:
         ("Camila Gomes de Souza", "Sócia comercial", "",
          "Desenvolvimento comercial, parcerias com academias e varejo fitness.", 60000.0),
         ("Cauan Ribeiro de Souza", "Sócio operacional", "",
-         "Acompanhamento de indicadores, expansão e consolidação da empresa no mercado.", 42355.0),
+         "Acompanhamento de indicadores, expansão e consolidação da empresa no mercado.", 43975.0),
     ])
 
     ins("""INSERT INTO segmentos (nome, descricao, nota_tamanho, nota_lucro, nota_longevidade,
@@ -637,19 +695,266 @@ def popular_modelo_fitbox(conn) -> None:
         ("Previsão de inadimplência", 0.3), ("Comissões de aplicativos de delivery", 0.5),
         ("Descontos e cupons promocionais", 0.5), ("Frete subsidiado em entregas", 0.5),
     ])
-    ins("""INSERT INTO pessoal (cargo, num_empregados, salario_mensal, encargos_pct, beneficios_unit)
-           VALUES (?,?,?,?,?)""", [
-        ("Gerente operacional", 1, 3800, 20, 200), ("Chef de cozinha / líder", 1, 3200, 20, 200),
-        ("Cozinheiros", 2, 2400, 20, 200), ("Auxiliares de cozinha", 4, 1850, 20, 200),
-        ("Atendentes / barista / caixa", 6, 1870, 20, 200),
-        ("Vendedores / estoquista / limpeza / entregadores", 8, 1880, 20, 200),
+    P, A, C = "Produção / operação", "Administrativo", "Comercial / vendas"
+    ins("""INSERT INTO pessoal (cargo, area, num_empregados, salario_mensal, encargos_pct, beneficios_unit, atribuicoes)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Gerente operacional", A, 1, 3800, 20, 200, "Coordena equipe, compras, escalas e indicadores."),
+        ("Chef de cozinha / líder", P, 1, 3200, 20, 200, "Cardápio, fichas técnicas e padrão de qualidade."),
+        ("Cozinheiros", P, 2, 2400, 20, 200, "Preparo das refeições conforme fichas técnicas."),
+        ("Auxiliares de cozinha", P, 4, 1850, 20, 200, "Pré-preparo, porcionamento, embalagem e limpeza."),
+        ("Atendentes / barista / caixa", C, 6, 1870, 20, 200, "Atendimento, bebidas, caixa e pedidos on-line."),
+        ("Vendedores / estoquista / limpeza / entregadores", C, 8, 1880, 20, 200, "Loja, estoque, limpeza e entregas."),
     ])
-    ins("INSERT INTO custos_fixos (descricao, valor_mensal) VALUES (?,?)", [
-        ("Aluguel, condomínio e IPTU", 7000), ("Pró-labore", 6000), ("Energia elétrica", 4500),
-        ("Água", 2000), ("Honorários contábeis", 1800), ("Manutenção", 1300), ("Seguros", 1200),
-        ("Serviços de terceiros", 750), ("Marketing e propaganda (fixo)", 600),
-        ("Materiais de limpeza", 600), ("Telefone e internet", 500), ("Material de escritório", 450),
-        ("Tarifas bancárias", 250), ("Mensalidade de máquinas de cartão", 150),
+    CIF, DA, DC, DF = ("Custo indireto de produção", "Despesa administrativa", "Despesa comercial",
+                       "Despesa financeira")
+    ins("INSERT INTO custos_fixos (descricao, classificacao, valor_mensal) VALUES (?,?,?)", [
+        ("Aluguel da área de produção (cozinha)", CIF, 4200), ("Aluguel da loja e escritório", DA, 2800),
+        ("Pró-labore", DA, 6000), ("Energia elétrica da cozinha", CIF, 3600), ("Energia elétrica da loja", DA, 900),
+        ("Água", CIF, 2000), ("Honorários contábeis", DA, 1800), ("Manutenção de equipamentos", CIF, 1300),
+        ("Seguros", DA, 1200), ("Serviços de terceiros", DA, 750), ("Marketing e propaganda (fixo)", DC, 600),
+        ("Materiais de limpeza", CIF, 600), ("Telefone e internet", DA, 500), ("Material de escritório", DA, 450),
+        ("Tarifas bancárias", DF, 250), ("Mensalidade de máquinas de cartão", DC, 150),
+    ])
+
+    conn.execute("""UPDATE projeto SET
+        autores='Alessandra Ribeiro Gonçalves; Paulo Henrique Batista; Camila Gomes de Souza; Cauan Ribeiro de Souza',
+        turma='Administração - Empreendedorismo (exemplo)', professor='', data_entrega='',
+        tam_desc='Moradores de Teófilo Otoni e região que consomem refeições fora de casa (estimativa ilustrativa)',
+        tam_clientes=60000,
+        sam_desc='Trabalhadores, estudantes e praticantes de atividade física no raio de entrega de 10 km',
+        sam_clientes=18000, som_pct=12, gasto_anual_cliente=1600,
+        mercado_fontes='Estimativas ilustrativas para fins didáticos; substitua por dados do IBGE, Sebrae e pesquisa de campo.',
+        mkt_produto='Refeições saudáveis com informação nutricional, planos semanais/mensais, suplementos e moda fitness em um só lugar.',
+        mkt_preco='Preço intermediário: marmitas de R$ 24,90 a R$ 54,90; descontos progressivos em assinaturas.',
+        mkt_praca='Loja física com consumo no local, retirada, delivery próprio até 10 km e pedidos via WhatsApp e aplicativo.',
+        mkt_promocao='Instagram e anúncios segmentados, parcerias com academias, programa de fidelidade e degustações.',
+        loc_endereco='Região central de Teófilo Otoni - MG (próximo a academias e centros comerciais)',
+        loc_justificativa='Alto fluxo de trabalhadores e estudantes, proximidade de academias e facilidade para entregas.',
+        loc_area_m2=180, loc_fluxo='Fluxo intenso no almoço (11h-14h) e no fim da tarde (17h-20h).',
+        op_layout='Cozinha industrial com áreas separadas (pré-preparo, cocção, porcionamento, expedição), salão com 48 lugares e área de loja.',
+        op_processos='Compras semanais -> recebimento e conferência -> pré-preparo -> cocção -> porcionamento e etiquetagem -> venda/entrega -> pós-venda.',
+        op_capacidade_txt='Capacidade estimada pela equipe de cozinha e pelos equipamentos de cocção e refrigeração.',
+        op_horario='Segunda a sábado, das 7h às 21h.',
+        rateio_criterio='Custo direto', margem_desejada_pct=15
+        WHERE id=1""")
+
+    ins("""INSERT INTO propostas (persona_nome, valores, que_desejam, por_meio, diferentemente, oferecem)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Mariana", "Conforto e conveniência; Economia de tempo; Alimentação equilibrada; Transparência nutricional; Rapidez",
+         "manter uma alimentação equilibrada mesmo com a rotina corrida",
+         "refeições prontas com informações nutricionais, planos semanais e entrega no horário do almoço",
+         "restaurantes por quilo e marmitarias tradicionais sem informação nutricional",
+         "praticidade, sabor e controle nutricional por um preço acessível"),
+        ("Rafael", "Desempenho; Confiança; Integração de produtos; Personalização",
+         "atingir sua meta de proteína e comprar suplementos confiáveis",
+         "marmitas hiperproteicas com gramatura informada e loja de suplementos originais",
+         "lojas que vendem só suplementos ou só refeições",
+         "refeição pós-treino, suplementos e roupas de treino em um só lugar"),
+    ])
+    ins("INSERT INTO capacidade (recurso, produto_ou_grupo, capacidade_mensal, observacao) VALUES (?,?,?,?)", [
+        ("Cozinha e bar (equipe + equipamentos)", "Fabricação Própria", 7500, "≈ 290 itens por dia em 26 dias"),
+        ("Equipe de atendimento e serviços", "Serviço", 2600, "Assinaturas, eventos e entregas"),
+        ("Entregadores (2 motos)", "Delivery de 3 a 10 km", 1400, "≈ 54 entregas longas por dia"),
+    ])
+    ins("""INSERT INTO fornecedores (nome, itens, prazo_pagamento_dias, prazo_entrega_dias, condicoes, critico)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Distribuidora de carnes (exemplo)", "Frango, carne bovina, peixe", 28, 2, "Boleto 28 dias; pedido mínimo R$ 800", 1),
+        ("Ceasa / hortifrúti local (exemplo)", "Verduras, legumes e frutas", 7, 1, "Pagamento semanal", 1),
+        ("Atacadista de alimentos (exemplo)", "Arroz, feijão, grãos, óleos", 30, 3, "Boleto 30 dias", 0),
+        ("Fornecedor de embalagens (exemplo)", "Marmitas, copos, etiquetas", 30, 7, "Boleto 30/60 dias", 1),
+        ("Distribuidor de suplementos (exemplo)", "Whey, creatina, barras", 45, 5, "Nota fiscal com rastreabilidade", 0),
+    ])
+    ins("INSERT INTO riscos (risco, probabilidade, impacto, mitigacao, responsavel) VALUES (?,?,?,?,?)", [
+        ("Alta no preço das proteínas", 4, 4, "Contratos de compra programada e cardápio com proteínas alternativas", "Sócio operacional"),
+        ("Vendas abaixo do previsto nos primeiros meses", 3, 5, "Campanha de lançamento, parcerias e reserva de caixa", "Sócia comercial"),
+        ("Interdição sanitária", 1, 5, "Boas práticas, checklists diários e consultoria técnica", "Gerente operacional"),
+        ("Rotatividade de funcionários", 3, 3, "Treinamento, plano de carreira e bom clima de trabalho", "Sócia-administradora"),
+        ("Atraso nas entregas em horário de pico", 3, 3, "Pedidos agendados e terceira moto em períodos de pico", "Gerente operacional"),
+    ])
+    ins("""INSERT INTO experimentos (hipotese, experimento, metrica, criterio_sucesso, resultado, status)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Trabalhadores do centro pagariam R$ 29,90 por marmita com informação nutricional",
+         "Venda-teste de 100 marmitas em 2 semanas via Instagram", "Unidades vendidas e recompra",
+         "Vender 80 unidades e 30% de recompra", "", "Planejado"),
+        ("Alunos de academia assinariam um plano mensal", "Oferta de plano em 3 academias parceiras",
+         "Número de assinaturas", "15 assinaturas no primeiro mês", "", "Planejado"),
+    ])
+    ins("INSERT INTO cronograma (atividade, mes_inicio, duracao_meses, responsavel, custo) VALUES (?,?,?,?,?)", [
+        ("Abertura da empresa e registro de marca", 1, 1, "Sócia-administradora", 12000),
+        ("Reforma e adequação sanitária", 1, 3, "Sócio operacional", 75000),
+        ("Compra e instalação de equipamentos", 2, 2, "Sócio operacional", 330910),
+        ("Contratação e treinamento da equipe", 3, 1, "Sócia-administradora", 10000),
+        ("Campanha de pré-lançamento", 3, 1, "Sócia comercial", 25000),
+        ("Inauguração", 4, 1, "Todos os sócios", 0),
+    ])
+
+
+# ==============================================================================
+# SEGUNDO ESTUDO DE CASO: CAFÉ MUCURI (cafeteria e padaria artesanal)
+# ==============================================================================
+def popular_modelo_cafe(conn) -> None:
+    ins = conn.executemany
+    conn.execute("""
+        UPDATE projeto SET nome_negocio='Café Mucuri', objetivo='Criar um novo negócio',
+            enquadramento='Simples Nacional', periodo_anos=3, porte='Microempresa (ME)',
+            setor_atuacao='Alimentos e bebidas; Padaria e confeitaria; Bares e restaurantes',
+            cidade_uf='Teófilo Otoni - MG', contatos='@cafemucuri',
+            aliquota_imposto_pct=8.0, crescimento_mensal_ano1_pct=1.5, crescimento_anual_pct=7.0,
+            inflacao_custos_anual_pct=4.5, tma_anual_pct=12.0, pme_dias=7, reserva_caixa_extra=25000,
+            recuperar_giro=1, cen_otim_receita_pct=10, cen_otim_custo_pct=5,
+            cen_pess_receita_pct=15, cen_pess_custo_pct=5,
+            autores='Integrante 1; Integrante 2; Integrante 3', turma='Exemplo didático - setor de alimentação',
+            tam_desc='Moradores de Teófilo Otoni que consomem café e lanches fora de casa (estimativa ilustrativa)',
+            tam_clientes=45000, sam_desc='Público do centro e bairros vizinhos num raio de 2 km', sam_clientes=9000,
+            som_pct=10, gasto_anual_cliente=900,
+            mercado_fontes='Estimativas ilustrativas; substitua por IBGE, Sebrae, ABIC e pesquisa de campo.',
+            mkt_produto='Cafés especiais de produtores do Vale do Mucuri e do Jequitinhonha, pães de fermentação natural e quitandas mineiras.',
+            mkt_preco='Preço intermediário; combos de café da manhã e cartão fidelidade (10º café grátis).',
+            mkt_praca='Loja de esquina no centro, retirada no balcão e encomendas pelo WhatsApp.',
+            mkt_promocao='Instagram com a história dos produtores, degustações, parcerias com coworkings e eventos culturais.',
+            loc_endereco='Centro de Teófilo Otoni - MG, próximo a escritórios, bancos e escolas',
+            loc_justificativa='Fluxo de pedestres pela manhã e no fim da tarde, poucos cafés especiais na região.',
+            loc_area_m2=90, loc_fluxo='Picos das 7h às 9h e das 15h às 18h.',
+            op_layout='Padaria compacta nos fundos (forno de lastro, masseira, bancada), balcão de café e salão com 28 lugares.',
+            op_processos='Fermentação noturna -> forneamento às 5h -> abertura às 6h30 -> produção de quitandas -> vendas -> fechamento e limpeza.',
+            op_horario='Segunda a sábado, das 6h30 às 19h.', rateio_criterio='Receita', margem_desejada_pct=12
+        WHERE id=1""")
+    ins("INSERT INTO socios (nome, funcao, contato, perfil, capital_integralizado) VALUES (?,?,?,?,?)", [
+        ("Sócio(a) 1", "Administração e finanças", "", "Gestão financeira, compras e pessoas.", 70000.0),
+        ("Sócio(a) 2", "Produção e barista", "", "Panificação artesanal e preparo de cafés especiais.", 50000.0),
+    ])
+    ins("""INSERT INTO segmentos (nome, descricao, nota_tamanho, nota_lucro, nota_longevidade,
+           nota_concorrencia, nota_aderencia) VALUES (?,?,?,?,?,?,?)""", [
+        ("Trabalhadores do centro", "Pessoas que tomam café da manhã ou lanche perto do trabalho.", 9, 7, 9, 6, 9),
+        ("Estudantes e professores", "Público das escolas e faculdades próximas.", 8, 6, 8, 7, 8),
+        ("Apreciadores de cafés especiais", "Consumidores que valorizam origem e método de preparo.", 5, 9, 8, 8, 10),
+        ("Famílias no fim de semana", "Compra de pães e quitandas para casa.", 7, 7, 9, 5, 7),
+    ])
+    ins("""INSERT INTO personas (nome, idade, profissao, estado_civil, renda_mensal, escolaridade, cidade,
+           descricao, citacao, habitos, ganhos, desafios, duvidas_objecoes, experiencia_ideal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [
+        ("Luciana", 34, "Bancária", "Casada", 5200.0, "Ensino Superior", "Teófilo Otoni - MG",
+         "Chega ao centro às 7h30 e quer um café bem feito antes do expediente.",
+         "Um bom café muda o meu dia, mas não tenho tempo de esperar.",
+         "Usa Instagram, paga por aproximação, valoriza produtos locais.",
+         "Rapidez; qualidade constante; ambiente agradável.", "Filas; café requentado; pouco lugar para sentar.",
+         "O café especial cabe no meu orçamento diário?", "Pede pelo WhatsApp e retira pronto no balcão em 3 minutos."),
+    ])
+    ins("""INSERT INTO jornada_cliente (persona_nome, macro_fase, etapa, acoes_cliente, pensamentos,
+           pontos_contato, estado_emocional, oportunidades) VALUES ('Luciana',?,?,?,?,?,?,?)""", [
+        ("Antes", "Descoberta", "Vê post de colega no Instagram.", "Que lugar é esse?", "Instagram", "Neutro", "Conteúdo sobre os produtores."),
+        ("Antes", "Consideração", "Compara com a padaria do bairro.", "Será caro?", "Cardápio na vitrine", "Neutro", "Combo café + pão de queijo."),
+        ("Antes", "Decisão", "Passa na porta e sente o cheiro do pão.", "Vou experimentar.", "Fachada e vitrine", "Satisfeito", "Degustação na calçada."),
+        ("Durante", "Compra e Pagamento", "Pede no balcão e paga por aproximação.", "Foi rápido.", "Caixa", "Satisfeito", "Pedido antecipado pelo WhatsApp."),
+        ("Durante", "Entrega", "Recebe o café em xícara ou copo para viagem.", "Está quentinho.", "Balcão", "Satisfeito", "Copo reutilizável com desconto."),
+        ("Durante", "Uso", "Consome no salão ou a caminho do trabalho.", "Que sabor!", "Produto", "Entusiasmado", "Cartão com a origem do grão."),
+        ("Depois", "Avaliação", "Posta foto nos stories.", "Vou indicar.", "Instagram", "Entusiasmado", "Repostar clientes e marcar produtores."),
+        ("Depois", "Suporte", "Pergunta sobre encomendas para festa.", "Fazem para 30 pessoas?", "WhatsApp", "Neutro", "Catálogo de encomendas."),
+        ("Depois", "Lealdade e advocacia", "Usa o cartão fidelidade.", "Já é minha parada diária.", "Cartão fidelidade", "Entusiasmado", "Assinatura mensal de café."),
+    ])
+    concs = ["Padaria tradicional do centro", "Rede de cafeteria"]
+    ins("INSERT INTO concorrentes (nome) VALUES (?)", [(c,) for c in concs])
+    notas = {"Qualidade do café": (9, 5, 7), "Pães e quitandas": (9, 8, 5), "Preço": (6, 9, 5),
+             "Atendimento": (8, 6, 7), "Ambiente": (9, 5, 8), "Rapidez": (7, 8, 7), "Presença digital": (8, 3, 9)}
+    ins("INSERT INTO concorrencia_notas (atributo, empresa, nota) VALUES (?,?,?)",
+        [(a, e, v) for a, vals in notas.items() for e, v in zip(["Nossa Empresa"] + concs, vals)])
+    ins("""INSERT INTO swot (ambiente, dimensao, fator, natureza, impacto, diagnostico, plano_acao, priorizado)
+           VALUES (?,?,?,?,?,?,?,?)""", [
+        ("Interno", "Operação", "Panificação artesanal", "Força", "Alto", "Fermentação natural e receitas mineiras.", "Padronizar fichas técnicas.", 1),
+        ("Interno", "Marketing", "Café de origem regional", "Força", "Alto", "Parceria direta com produtores locais.", "Contar a história dos produtores.", 1),
+        ("Interno", "Finanças", "Capital limitado", "Fraqueza", "Alto", "Pouca reserva para os primeiros meses.", "Controle semanal de caixa.", 1),
+        ("Interno", "Operação", "Espaço pequeno", "Fraqueza", "Baixo", "Salão de 28 lugares.", "Estimular o para viagem.", 0),
+        ("Externo", "Social", "Valorização do consumo local", "Oportunidade", "Alto", "Clientes buscam produtos da região.", "Selo de origem nos produtos.", 1),
+        ("Externo", "Econômico", "Alta do preço do café", "Ameaça", "Alto", "Café arábica subiu fortemente.", "Contratos com produtores e revisão de preços.", 1),
+    ])
+    ins("""INSERT INTO inv_fixos (descricao, quantidade, valor_unitario, vida_util_anos, valor_residual_pct)
+           VALUES (?,?,?,?,10)""", [
+        ("Forno de lastro elétrico", 1, 22000, 10), ("Masseira espiral 15 kg", 1, 9500, 10),
+        ("Máquina de café expresso 2 grupos", 1, 28000, 10), ("Moedor de café profissional", 2, 4500, 10),
+        ("Vitrine refrigerada", 1, 7800, 10), ("Geladeira e freezer comerciais", 2, 5200, 10),
+        ("Mesas e cadeiras", 7, 1400, 10), ("Balcão e mobiliário", 1, 15000, 10),
+        ("Computador, PDV e impressora", 1, 6500, 5), ("Utensílios de padaria e café", 1, 6000, 5),
+    ])
+    ins("INSERT INTO inv_pre (descricao, valor) VALUES (?,?)", [
+        ("Reforma e adequação sanitária", 30000), ("Legalização e alvarás", 4000),
+        ("Identidade visual e fachada", 6000), ("Marketing de inauguração", 5000), ("Treinamento da equipe", 2500),
+    ])
+    ins("INSERT INTO emprestimos (descricao, valor, taxa_anual_pct, prazo_meses) VALUES (?,?,?,?)", [
+        ("Pronampe", 60000, 14.0, 36)])
+    ins("INSERT INTO capital_giro_prazos (tipo, prazo_dias, percentual) VALUES (?,?,?)", [
+        ("Recebimento", 0, 75.0), ("Recebimento", 30, 25.0), ("Pagamento", 0, 40.0), ("Pagamento", 30, 60.0)])
+    ins("INSERT INTO materiais (nome, categoria, unidade, valor_unitario, qtd_estoque_inicial) VALUES (?,?,?,?,?)", [
+        ("Café especial em grão", "Matéria-prima", "kg", 95.00, 15), ("Leite integral", "Matéria-prima", "L", 5.50, 60),
+        ("Farinha de trigo", "Matéria-prima", "kg", 5.00, 100), ("Polvilho azedo", "Matéria-prima", "kg", 12.00, 30),
+        ("Queijo minas meia cura", "Matéria-prima", "kg", 48.00, 10), ("Ovos", "Matéria-prima", "dúzia", 12.00, 20),
+        ("Manteiga", "Matéria-prima", "kg", 45.00, 8), ("Açúcar", "Matéria-prima", "kg", 4.50, 30),
+        ("Copo para viagem 200 ml", "Embalagem", "unidade", 0.40, 1000), ("Saco de papel kraft", "Embalagem", "unidade", 0.25, 1000),
+    ])
+    F, R = "Fabricação Própria", "Revenda"
+    ins("""INSERT INTO catalogo (categoria, descricao, preco_venda, custo_aquisicao, qtd_mensal, qtd_estoque_inicial)
+           VALUES (?,?,?,?,?,?)""", [
+        (F, "Café expresso", 6.50, 0, 2200, 0), (F, "Cappuccino", 11.00, 0, 900, 0),
+        (F, "Café coado (método)", 12.00, 0, 450, 0), (F, "Pão de queijo (unidade)", 4.50, 0, 3000, 0),
+        (F, "Pão de fermentação natural (500 g)", 22.00, 0, 520, 0), (F, "Bolo caseiro (fatia)", 9.00, 2.40, 800, 0),
+        (F, "Biscoito de polvilho (pacote)", 8.00, 2.10, 400, 0),
+        (R, "Café em grão 250 g (revenda)", 42.00, 26.00, 120, 30), (R, "Suco engarrafado", 9.00, 4.50, 300, 60),
+    ])
+    ficha = {
+        "Café expresso": [("Café especial em grão", 0.009), ("Copo para viagem 200 ml", 0.4)],
+        "Cappuccino": [("Café especial em grão", 0.009), ("Leite integral", 0.15), ("Copo para viagem 200 ml", 0.5)],
+        "Café coado (método)": [("Café especial em grão", 0.018), ("Copo para viagem 200 ml", 0.3)],
+        "Pão de queijo (unidade)": [("Polvilho azedo", 0.025), ("Queijo minas meia cura", 0.012), ("Leite integral", 0.01),
+                                    ("Ovos", 0.008), ("Saco de papel kraft", 0.2)],
+        "Pão de fermentação natural (500 g)": [("Farinha de trigo", 0.32), ("Saco de papel kraft", 1)],
+    }
+    ins("INSERT INTO ficha_tecnica (produto, material, quantidade) VALUES (?,?,?)",
+        [(p, m, q) for p, itens in ficha.items() for m, q in itens])
+    ins("INSERT INTO custos_variaveis (descricao, percentual) VALUES (?,?)", [
+        ("Taxas de cartões", 2.0), ("Perdas e quebras", 1.5), ("Propaganda variável", 0.5)])
+    P, A, C = "Produção / operação", "Administrativo", "Comercial / vendas"
+    ins("""INSERT INTO pessoal (cargo, area, num_empregados, salario_mensal, encargos_pct, beneficios_unit, atribuicoes)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Padeiro(a)", P, 1, 2300, 20, 200, "Massas, fermentação e forneamento."),
+        ("Auxiliar de produção", P, 1, 1700, 20, 200, "Quitandas, limpeza e apoio."),
+        ("Barista / atendente", C, 2, 1750, 20, 200, "Preparo de cafés, atendimento e caixa."),
+    ])
+    CIF, DA, DC, DF = "Custo indireto de produção", "Despesa administrativa", "Despesa comercial", "Despesa financeira"
+    ins("INSERT INTO custos_fixos (descricao, classificacao, valor_mensal) VALUES (?,?,?)", [
+        ("Aluguel", DA, 3200), ("Energia elétrica (forno e máquinas)", CIF, 1500), ("Água e gás", CIF, 450),
+        ("Pró-labore", DA, 4000), ("Contador", DA, 700), ("Internet e telefone", DA, 180),
+        ("Manutenção de equipamentos", CIF, 300), ("Marketing fixo", DC, 400), ("Tarifas bancárias", DF, 90),
+    ])
+    ins("""INSERT INTO propostas (persona_nome, valores, que_desejam, por_meio, diferentemente, oferecem)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Luciana", "Rapidez; Qualidade; Origem regional; Ambiente acolhedor",
+         "começar o dia com um café de qualidade sem perder tempo",
+         "cafés especiais da região, pão de queijo saindo do forno e pedido antecipado pelo WhatsApp",
+         "padarias tradicionais com café comum e redes sem identidade local",
+         "sabor mineiro autêntico com rapidez e preço justo"),
+    ])
+    ins("INSERT INTO capacidade (recurso, produto_ou_grupo, capacidade_mensal, observacao) VALUES (?,?,?,?)", [
+        ("Máquina de expresso 2 grupos", "Café expresso", 6000, "≈ 230 bebidas por dia"),
+        ("Forno de lastro", "Fabricação Própria", 7000, "Fornadas das 5h às 11h"),
+    ])
+    ins("""INSERT INTO fornecedores (nome, itens, prazo_pagamento_dias, prazo_entrega_dias, condicoes, critico)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Produtor de café do Vale (exemplo)", "Café especial em grão", 30, 7, "Contrato trimestral de preço", 1),
+        ("Laticínio regional (exemplo)", "Leite, queijo e manteiga", 14, 1, "Entrega 3x por semana", 1),
+        ("Atacadista (exemplo)", "Farinha, açúcar, polvilho", 28, 3, "Boleto 28 dias", 0),
+    ])
+    ins("INSERT INTO riscos (risco, probabilidade, impacto, mitigacao, responsavel) VALUES (?,?,?,?,?)", [
+        ("Alta do preço do café", 4, 4, "Contrato com produtor e ajuste trimestral de preços", "Sócio(a) 1"),
+        ("Quebra do forno", 2, 5, "Manutenção preventiva e parceria com padaria vizinha", "Sócio(a) 2"),
+        ("Vendas abaixo do previsto", 3, 4, "Degustações, combos e reserva de caixa", "Sócio(a) 1"),
+    ])
+    ins("""INSERT INTO experimentos (hipotese, experimento, metrica, criterio_sucesso, resultado, status)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Clientes do centro pagariam R$ 12 por café coado especial", "Barraca de degustação em feira por 2 sábados",
+         "Cafés vendidos", "Vender 150 cafés", "", "Planejado")])
+    ins("INSERT INTO cronograma (atividade, mes_inicio, duracao_meses, responsavel, custo) VALUES (?,?,?,?,?)", [
+        ("Abertura da empresa e alvarás", 1, 1, "Sócio(a) 1", 4000), ("Reforma", 1, 2, "Sócio(a) 2", 30000),
+        ("Equipamentos", 2, 1, "Sócio(a) 2", 120000), ("Contratação e treinamento", 3, 1, "Sócio(a) 1", 2500),
+        ("Inauguração", 3, 1, "Todos", 5000),
     ])
 
 # ##############################################################################
@@ -730,6 +1035,8 @@ def cronograma_emprestimos(emp: pd.DataFrame, anos: int = 4) -> dict:
     juros = [0.0] * anos
     amort = [0.0] * anos
     saldo_fim = [0.0] * anos
+    juros_m = [0.0] * (anos * 12)
+    amort_m = [0.0] * (anos * 12)
     for _, r in emp.iterrows():
         pv, n = float(r["valor"]), int(round(r["prazo_meses"]))
         if pv <= 0:
@@ -746,9 +1053,11 @@ def cronograma_emprestimos(emp: pd.DataFrame, anos: int = 4) -> dict:
                 saldo -= a
                 juros[ano] += j
                 amort[ano] += a
+                juros_m[m] += j
+                amort_m[m] += a
             if m % 12 == 11:
                 saldo_fim[ano] += max(saldo, 0.0)
-    return {"juros": juros, "amort": amort, "saldo_fim": saldo_fim}
+    return {"juros": juros, "amort": amort, "saldo_fim": saldo_fim, "juros_m": juros_m, "amort_m": amort_m}
 
 
 # ------------------------------------------------------------------------------
@@ -793,6 +1102,17 @@ def executar_motor(proj: dict, d: dict) -> dict:
     beneficios_m = float((pes["num_empregados"] * pes["beneficios_unit"]).sum())
     pessoal_m = salarios_m + encargos_m + beneficios_m
     fixos_m = float(d["custos_fixos"]["valor_mensal"].sum())
+    pes_total_linha = sal * (1 + pes["encargos_pct"] / 100) + pes["num_empregados"] * pes["beneficios_unit"]
+    area = pes["area"].fillna("") if "area" in pes else pd.Series([""] * len(pes))
+    mod_m = float(pes_total_linha[area.str.startswith("Produ")].sum())          # mão de obra direta (produção)
+    pessoal_adm_m = float(pes_total_linha[area.str.startswith("Admin")].sum())
+    pessoal_com_m = pessoal_m - mod_m - pessoal_adm_m
+    cfx = d["custos_fixos"]
+    cls = cfx["classificacao"].fillna("") if "classificacao" in cfx else pd.Series([""] * len(cfx))
+    cif_m = float(cfx.loc[cls.str.startswith("Custo indireto"), "valor_mensal"].sum())
+    desp_adm_m = float(cfx.loc[cls.str.contains("administrativa") | (cls == ""), "valor_mensal"].sum())
+    desp_com_m = float(cfx.loc[cls.str.contains("comercial"), "valor_mensal"].sum())
+    desp_fin_m = float(cfx.loc[cls.str.contains("financeira"), "valor_mensal"].sum())
 
     inv = d["inv_fixos"].copy()
     inv["total"] = inv["quantidade"] * inv["valor_unitario"]
@@ -944,7 +1264,70 @@ def executar_motor(proj: dict, d: dict) -> dict:
         if a1["mc"] - a1["cf_total"] > 0 else float("nan"),
     }
 
+    # --- Custeio por absorção: MOD + custos indiretos de produção + depreciação rateados
+    overhead_m = mod_m + cif_m + dep_m
+    criterio = proj.get("rateio_criterio") or "Custo direto"
+    prod_mask = cat["categoria"] != "Revenda"
+    base = {"Custo direto": cat["custo_mensal"], "Receita": cat["receita_mensal"],
+            "Quantidade": cat["qtd_mensal"]}.get(criterio, cat["custo_mensal"]).where(prod_mask, 0.0)
+    tot_base = float(base.sum())
+    cat["rateio_mensal"] = base / tot_base * overhead_m if tot_base > 0 else 0.0
+    cat["custo_absorcao_unit"] = [cu + (r / q if q > 0 else 0.0) for cu, r, q in
+                                  zip(cat["custo_unit"], cat["rateio_mensal"], cat["qtd_mensal"])]
+    cat["margem_absorcao_pct"] = [div(p - c, p) for p, c in zip(cat["preco_venda"], cat["custo_absorcao_unit"])]
+
+    # --- Formação de preço (markup divisor)
+    margem_desej = float(proj.get("margem_desejada_pct") or 0) / 100
+    df_pct = div(cf_desemb_m + dep_m, receita_m1) if receita_m1 > 0 else 0.0
+    df_pct = 0.0 if df_pct != df_pct else df_pct
+    divisor = 1 - (aliq + var_pct + df_pct + margem_desej)
+    markup_mult = div(1, divisor) if divisor > 0 else float("nan")
+    cat["preco_sugerido"] = [c * markup_mult if divisor > 0 else float("nan") for c in cat["custo_unit"]]
+    cat["dif_preco_pct"] = [div(p - s_, s_) for p, s_ in zip(cat["preco_venda"], cat["preco_sugerido"])]
+
+    # --- Ponto de equilíbrio em unidades por produto (mix atual de vendas)
+    pe_m = anos[1]["pe_contabil"] / 12 if anos[1]["pe_contabil"] == anos[1]["pe_contabil"] else float("nan")
+    cat["pe_unidades_mes"] = [div(pe_m * div(r, receita_m1), p) if receita_m1 > 0 else float("nan")
+                              for r, p in zip(cat["receita_mensal"], cat["preco_venda"])]
+
+    # --- Fluxo de caixa mensal do Ano 1
+    def distribuir(valores, prazos_df):
+        """Distribui cada valor mensal no tempo conforme os prazos (dias) e percentuais."""
+        saida = [0.0] * 14
+        regras = [(float(p), float(q) / 100) for p, q in zip(prazos_df["prazo_dias"], prazos_df["percentual"])] \
+            or [(0.0, 1.0)]
+        for m, v in enumerate(valores):
+            for dias, frac in regras:
+                lag, resto = int(dias // 30), (dias % 30) / 30
+                if m + lag < 14:
+                    saida[m + lag] += v * frac * (1 - resto)
+                if m + lag + 1 < 14:
+                    saida[m + lag + 1] += v * frac * resto
+        return saida[:12]
+
+    rec_mes = [receita_m1 * (1 + g_m) ** m for m in range(12)]
+    cdir_mes = [cdir_m1 * (1 + g_m) ** m for m in range(12)]
+    entradas = distribuir(rec_mes, rec_pz)
+    pag_forn = distribuir(cdir_mes, pag_pz)
+    saldo = fontes - inv_fixo - inv_pre - inv_estoque
+    fluxo_m = []
+    for m in range(12):
+        sai_var = rec_mes[m] * (aliq + var_pct)
+        parcela = crono["juros_m"][m] + crono["amort_m"][m]
+        sai = pag_forn[m] + sai_var + cf_desemb_m + parcela
+        ini = saldo
+        saldo = saldo + entradas[m] - sai
+        fluxo_m.append({"Mês": f"Mês {m + 1}", "Saldo inicial": ini, "Recebimentos": entradas[m],
+                        "Fornecedores": pag_forn[m], "Impostos e desp. variáveis": sai_var,
+                        "Pessoal e custos fixos": cf_desemb_m, "Parcelas de empréstimos": parcela,
+                        "Saldo final": saldo})
+    df_fluxo_m = pd.DataFrame(fluxo_m)
+
     return dict(
+        mod_m=mod_m, pessoal_adm_m=pessoal_adm_m, pessoal_com_m=pessoal_com_m, cif_m=cif_m,
+        desp_adm_m=desp_adm_m, desp_com_m=desp_com_m, desp_fin_m=desp_fin_m, overhead_m=overhead_m,
+        criterio_rateio=criterio, margem_desejada=margem_desej, df_pct=df_pct, markup_mult=markup_mult,
+        divisor_markup=divisor, fluxo_mensal=df_fluxo_m, g_m=g_m,
         cat=cat, inv=inv, receita_m1=receita_m1, cdir_m1=cdir_m1, var_pct=var_pct, aliq=aliq,
         salarios_m=salarios_m, encargos_m=encargos_m, beneficios_m=beneficios_m, pessoal_m=pessoal_m,
         fixos_m=fixos_m, dep_m=dep_m, dep_anual=dep_anual, inv_fixo=inv_fixo, inv_pre=inv_pre,
@@ -1230,6 +1613,206 @@ def composicoes(res: dict, d: dict) -> dict:
                                            "Acumulado": acum, "Acumulado descontado (TMA)": acum_d})
     return out
 
+
+# ------------------------------------------------------------------------------
+# 11. SIMULADOR "E SE?" E ANÁLISE DE SENSIBILIDADE (Ano 1)
+# ------------------------------------------------------------------------------
+def simular(res: dict, preco=0.0, volume=0.0, materiais=0.0, salarios=0.0, fixos=0.0) -> dict:
+    """Recalcula o resultado do Ano 1 aplicando variações percentuais (0.10 = +10%)."""
+    a1 = res["anos"][1]
+    fp, fv, fm, fs, ff = 1 + preco, 1 + volume, 1 + materiais, 1 + salarios, 1 + fixos
+    rec = a1["rec_bruta"] * fp * fv
+    cdir = a1["custo_dir"] * fv * fm
+    var = rec * (res["aliq"] + res["var_pct"])
+    mc = rec - cdir - var
+    cf = a1["pessoal"] * fs + a1["fixos"] * ff + a1["dep"]
+    resultado = mc - cf - a1["juros"]
+    imc = div(mc, rec)
+    return {"receita": rec, "custos_variaveis": cdir + var, "mc": mc, "custos_fixos": cf,
+            "resultado": resultado, "lucratividade": div(resultado, rec),
+            "pe": div(cf, imc) if imc == imc and imc > 0 else float("nan")}
+
+
+def sensibilidade(res: dict, delta: float = 0.10) -> pd.DataFrame:
+    base = simular(res)["resultado"]
+    linhas = []
+    for nome, chave_, sinal in [("Preço de venda", "preco", 1), ("Volume de vendas", "volume", 1),
+                                ("Custo de materiais e mercadorias", "materiais", -1),
+                                ("Salários e encargos", "salarios", -1), ("Demais custos fixos", "fixos", -1)]:
+        up = simular(res, **{chave_: delta})["resultado"] - base
+        dn = simular(res, **{chave_: -delta})["resultado"] - base
+        linhas.append({"Variável": nome, f"+{int(delta*100)}%": up, f"-{int(delta*100)}%": dn,
+                       "Impacto absoluto": max(abs(up), abs(dn))})
+    return pd.DataFrame(linhas).sort_values("Impacto absoluto", ascending=False).reset_index(drop=True)
+
+
+# ------------------------------------------------------------------------------
+# 12. MERCADO (TAM / SAM / SOM) E CAPACIDADE x DEMANDA
+# ------------------------------------------------------------------------------
+def mercado(proj: dict, res: dict) -> dict:
+    gasto = float(proj.get("gasto_anual_cliente") or 0)
+    tam_c, sam_c = float(proj.get("tam_clientes") or 0), float(proj.get("sam_clientes") or 0)
+    som_c = sam_c * float(proj.get("som_pct") or 0) / 100
+    tam, sam, som = tam_c * gasto, sam_c * gasto, som_c * gasto
+    rec1 = res["anos"][1]["rec_bruta"]
+    return {"tam": tam, "sam": sam, "som": som, "tam_c": tam_c, "sam_c": sam_c, "som_c": som_c,
+            "receita_ano1": rec1, "pct_som": div(rec1, som), "pct_sam": div(rec1, sam),
+            "preenchido": tam > 0 and sam > 0 and som > 0}
+
+
+def capacidade_demanda(d: dict, res: dict) -> pd.DataFrame:
+    cat = res["cat"]
+    fator12 = (1 + res["g_m"]) ** 11
+    linhas = []
+    for _, r in d["capacidade"].iterrows():
+        alvo = str(r["produto_ou_grupo"])
+        if alvo in ("Fabricação Própria", "Serviço", "Revenda"):
+            q = cat.loc[cat["categoria"] == alvo, "qtd_mensal"].sum()
+        elif alvo == "Todos os produtos":
+            q = cat["qtd_mensal"].sum()
+        else:
+            q = cat.loc[cat["descricao"] == alvo, "qtd_mensal"].sum()
+        dem1, dem12 = float(q), float(q) * fator12
+        cap = float(r["capacidade_mensal"])
+        linhas.append({"Recurso": r["recurso"], "Atende": alvo, "Capacidade/mês": cap,
+                       "Demanda Mês 1": dem1, "Demanda Mês 12": dem12,
+                       "Uso Mês 1": div(dem1, cap), "Uso Mês 12": div(dem12, cap)})
+    return pd.DataFrame(linhas)
+
+
+# ------------------------------------------------------------------------------
+# 13. SEMÁFORO DOS INDICADORES COM "EXPLIQUE ESTE NÚMERO"
+# ------------------------------------------------------------------------------
+def semaforo(res: dict) -> list:
+    a1 = res["anos"][1]
+    it, tma = res["investimento_total"], res["tma"]
+    out = []
+
+    def add(nome, valor, txt, status, leitura, conta):
+        out.append({"Indicador": nome, "Valor": txt, "Status": status, "Leitura": leitura,
+                    "Como foi calculado": conta, "valor_num": valor})
+
+    luc = div(a1["resultado"], a1["rec_bruta"])
+    add("Lucratividade líquida (Ano 1)", luc, pct(luc),
+        "🟢" if luc >= 0.10 else ("🟡" if luc > 0 else "🔴"),
+        "Quanto sobra de lucro para cada R$ 1,00 vendido. Acima de 10% é bom para pequenos negócios de alimentação e varejo; "
+        "negativo significa prejuízo.",
+        f"{brl(a1['resultado'])} ÷ {brl(a1['rec_bruta'])} = {pct(luc)}")
+    imc = a1["imc"]
+    add("Margem de contribuição", imc, pct(imc),
+        "🟢" if imc >= 0.40 else ("🟡" if imc >= 0.25 else "🔴"),
+        "Parte de cada venda que sobra, depois dos custos variáveis, para pagar a estrutura fixa. Margens baixas "
+        "exigem volume muito alto.",
+        f"{brl(a1['mc'])} ÷ {brl(a1['rec_bruta'])} = {pct(imc)}")
+    ms = div(a1["rec_bruta"] - a1["pe_contabil"], a1["rec_bruta"])
+    add("Margem de segurança", ms, pct(ms),
+        "🟢" if ms >= 0.20 else ("🟡" if ms > 0 else "🔴"),
+        "Quanto as vendas podem cair antes de o negócio ter prejuízo. Abaixo de 0% significa que a receita prevista "
+        "não cobre o ponto de equilíbrio.",
+        f"({brl(a1['rec_bruta'])} − PE {brl(a1['pe_contabil'])}) ÷ {brl(a1['rec_bruta'])} = {pct(ms)}")
+    add("VPL (3 anos)", res["vpl"], brl(res["vpl"]),
+        "🟢" if res["vpl"] > 0 else "🔴",
+        "Valor criado pelo projeto acima do retorno mínimo exigido (TMA). Positivo: o investimento compensa.",
+        "Soma dos fluxos descontados: " + " + ".join(f"{brl(f)}/(1+{num_br(tma*100,1)}%)^{t}" for t, f in enumerate(res["fluxos"])))
+    tir = res["tir"]
+    add("TIR", tir if tir is not None else float("nan"), pct(tir) if tir is not None else "n.a.",
+        "🟢" if tir is not None and tir > tma else "🔴",
+        f"Rentabilidade anual do projeto. Deve superar a TMA de {pct(tma)}.",
+        "Taxa que faz o VPL ser zero nos fluxos: " + "; ".join(brl(f) for f in res["fluxos"]))
+    pb = res["payback_desc"]
+    add("Payback descontado", pb, f"{num_br(pb,1)} meses" if pb == pb else "> 36 meses",
+        "🟢" if pb == pb and pb <= 24 else ("🟡" if pb == pb else "🔴"),
+        "Tempo para recuperar o investimento considerando o valor do dinheiro no tempo.",
+        f"Investimento de {brl(it)} recuperado pelos fluxos descontados à TMA de {pct(tma)}")
+    lc = div(a1["ac"], a1["pc"])
+    add("Liquidez corrente (Ano 1)", lc, f"{num_br(lc)}x",
+        "🟢" if lc >= 1.5 else ("🟡" if lc >= 1 else "🔴"),
+        "Quantos reais de bens e direitos de curto prazo existem para cada R$ 1,00 de dívida de curto prazo.",
+        f"{brl(a1['ac'])} ÷ {brl(a1['pc'])} = {num_br(lc)}x")
+    pes = div(a1["pessoal"], a1["rec_liquida"])
+    add("Peso da folha de pagamento", pes, pct(pes),
+        "🟢" if pes <= 0.25 else ("🟡" if pes <= 0.35 else "🔴"),
+        "Quanto da receita líquida vai para salários, encargos e benefícios. Acima de 35% costuma apertar o resultado.",
+        f"{brl(a1['pessoal'])} ÷ {brl(a1['rec_liquida'])} = {pct(pes)}")
+    fm = res["fluxo_mensal"]
+    minimo = float(fm["Saldo final"].min()) if not fm.empty else 0.0
+    mes_min = fm.loc[fm["Saldo final"].idxmin(), "Mês"] if not fm.empty else "-"
+    add("Menor saldo de caixa no Ano 1", minimo, brl(minimo),
+        "🟢" if minimo > res["desembolso_m1"] * 0.5 else ("🟡" if minimo >= 0 else "🔴"),
+        f"O caixa fica mais apertado em {mes_min}. Negativo indica que faltará dinheiro nesse mês.",
+        f"Saldo inicial + recebimentos − pagamentos, mês a mês (menor valor em {mes_min})")
+    return out
+
+
+# ------------------------------------------------------------------------------
+# 14. CHECAGENS COM INDICAÇÃO DE ONDE CORRIGIR
+# ------------------------------------------------------------------------------
+def tabela_checagens_v5(res: dict, d: dict, proj: dict) -> pd.DataFrame:
+    base = tabela_checagens(res, d)
+    destinos = {
+        "Fontes de recursos x investimento total": ("investimentos", "Investimentos → Fontes de recursos",
+            "Ajuste o capital dos sócios (aba Projeto) ou os empréstimos para que a soma seja igual ao investimento total."),
+        "Margem unitária positiva": ("produtos", "Produtos e materiais → Produtos e serviços",
+            "Revise o preço de venda ou o custo dos itens listados."),
+        "Produtos com custo cadastrado": ("produtos", "Produtos e materiais → Ficha técnica",
+            "Monte a ficha técnica ou informe o custo dos itens listados."),
+        "Fichas técnicas com materiais válidos": ("produtos", "Produtos e materiais → Ficha técnica",
+            "Cadastre os materiais que faltam ou troque o insumo na ficha técnica."),
+        "Prazos de recebimento somam 100%": ("investimentos", "Investimentos → Capital de giro",
+            "Ajuste os percentuais de recebimento para somarem 100%."),
+        "Prazos de pagamento somam 100%": ("investimentos", "Investimentos → Capital de giro",
+            "Ajuste os percentuais de pagamento para somarem 100%."),
+        "SWOT: ambiente coerente com a classificação": ("forcas", "Estratégia → Fatores internos e externos",
+            "Fatores internos são Forças/Fraquezas; externos são Oportunidades/Ameaças."),
+        "Caixa projetado não negativo": ("fluxo", "Finanças → Fluxo de caixa",
+            "Aumente a reserva/capital de giro, renegocie prazos ou reduza custos."),
+        "Liquidez corrente do Ano 1 >= 1,00": ("investimentos", "Investimentos → Capital de giro",
+            "Aumente o capital de giro ou alongue o prazo das dívidas."),
+        "VPL positivo": ("simulador", "Simulador e sensibilidade",
+            "Veja quais variáveis mais afetam o resultado e teste ajustes de preço, volume e custos."),
+    }
+    base["destino"] = base["Teste"].map(lambda t: destinos.get(t, ("", "", ""))[0])
+    base["Onde corrigir"] = base["Teste"].map(lambda t: destinos.get(t, ("", "", ""))[1])
+    base["Como corrigir"] = base["Teste"].map(lambda t: destinos.get(t, ("", "", ""))[2])
+    extras = []
+    mk = mercado(proj, res)
+    if mk["preenchido"]:
+        ok = mk["pct_som"] <= 1
+        extras.append({"Teste": "Meta de vendas cabe no mercado (SOM)", "Valor apurado": f"Receita = {pct(mk['pct_som'])} do SOM",
+                       "Situação": "OK" if ok else "VERIFICAR",
+                       "Observação": "A receita do Ano 1 não deve superar o mercado que a empresa consegue conquistar.",
+                       "destino": "mercado", "Onde corrigir": "Cliente e mercado → Tamanho do mercado",
+                       "Como corrigir": "Revise as quantidades vendidas ou a estimativa de mercado."})
+    else:
+        extras.append({"Teste": "Tamanho do mercado estimado", "Valor apurado": "não preenchido", "Situação": "VERIFICAR",
+                       "Observação": "Estime TAM, SAM e SOM para verificar se a meta de vendas é realista.",
+                       "destino": "mercado", "Onde corrigir": "Cliente e mercado → Tamanho do mercado",
+                       "Como corrigir": "Preencha clientes, percentual de participação e gasto anual por cliente."})
+    cd = capacidade_demanda(d, res)
+    if not cd.empty:
+        exced = cd[cd["Uso Mês 12"] > 1]
+        extras.append({"Teste": "Capacidade produtiva suficiente", "Valor apurado": f"{len(exced)} recurso(s) acima de 100%",
+                       "Situação": "OK" if exced.empty else "VERIFICAR",
+                       "Observação": ", ".join(exced["Recurso"]) or "A capacidade atende a demanda prevista até o Mês 12.",
+                       "destino": "operacional", "Onde corrigir": "Marketing e operação → Plano operacional",
+                       "Como corrigir": "Aumente a capacidade (equipamentos, pessoas, turnos) ou reveja a meta de vendas."})
+    return pd.concat([base, pd.DataFrame(extras)], ignore_index=True)
+
+
+# ------------------------------------------------------------------------------
+# 15. RAIO-X DO PLANO (nota de 0 a 100 e principais correções)
+# ------------------------------------------------------------------------------
+def raio_x(res: dict, chk: pd.DataFrame, completude: float, sem: list) -> dict:
+    pontos_chk = 30 * (chk["Situação"] == "OK").mean() if len(chk) else 0
+    pontos_comp = 30 * completude
+    verdes = sum(1 for s in sem if s["Status"] == "🟢")
+    amarelos = sum(1 for s in sem if s["Status"] == "🟡")
+    pontos_fin = 40 * (verdes + 0.5 * amarelos) / max(len(sem), 1)
+    nota = round(pontos_chk + pontos_comp + pontos_fin)
+    acoes = [f"{r['Teste']}: {r['Como corrigir'] or r['Observação']}" for _, r in chk[chk["Situação"] != "OK"].iterrows()]
+    acoes += [f"{s['Indicador']} em {s['Valor']}: {s['Leitura']}" for s in sem if s["Status"] == "🔴"]
+    return {"nota": nota, "acoes": acoes[:5], "pontos": (round(pontos_comp), round(pontos_chk), round(pontos_fin))}
+
 # ##############################################################################
 # PARTE: pnbox_pdf.py
 # ##############################################################################
@@ -1295,6 +1878,8 @@ class Relatorio(FPDF):
 
     # --- blocos de conteúdo -------------------------------------------------
     def secao(self, texto, nova_pagina=False):
+        self.n_secao = getattr(self, "n_secao", 0) + 1
+        texto = f"{self.n_secao}. {texto}"
         if nova_pagina:
             self.add_page()
         elif self.get_y() > 245:
@@ -1546,9 +2131,25 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.cell(0, 6, pdf.t(f"{rot}: {proj[k]}"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.cell(0, 6, pdf.t(f"Período de planejamento: {int(proj['periodo_anos'])} ano(s)"), align="C",
              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    autores = [a.strip() for a in re.split(r"[;\n]", proj.get("autores") or "") if a.strip()]
+    if autores or proj.get("turma") or proj.get("professor"):
+        pdf.ln(12)
+        pdf.fonte("B", 10)
+        pdf.cell(0, 6, pdf.t("Elaborado por"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.fonte("", 10)
+        for a in autores:
+            pdf.cell(0, 5.5, pdf.t(a), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        for rot, k in [("Turma", "turma"), ("Professor(a)", "professor"), ("Entrega", "data_entrega")]:
+            if proj.get(k):
+                pdf.cell(0, 5.5, pdf.t(f"{rot}: {proj[k]}"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    if str(proj.get("sumario_executivo") or "").strip():
+        pdf.secao("SUMÁRIO EXECUTIVO", nova_pagina=True)
+        for par in str(proj["sumario_executivo"]).split("\n"):
+            pdf.paragrafo(par, "", 10)
 
     # ---------------- 1. SÓCIOS ----------------
-    pdf.secao("1. INFORMAÇÕES DO PLANO E QUADRO SOCIETÁRIO", nova_pagina=True)
+    pdf.secao("INFORMAÇÕES DO PLANO E QUADRO SOCIETÁRIO", nova_pagina=True)
     s = d["socios"]
     pdf.tabela(pd.DataFrame({
         "Sócio": s["nome"], "Função": s["funcao"], "Minicurrículo": s["perfil"],
@@ -1556,7 +2157,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         alinhar=("LEFT", "LEFT", "LEFT", "RIGHT"))
 
     # ---------------- 2. SEGMENTOS ----------------
-    pdf.secao("2. SEGMENTAÇÃO DE MERCADO")
+    pdf.secao("SEGMENTAÇÃO DE MERCADO")
     sg = d["segmentos"].copy()
     notas = ["nota_tamanho", "nota_lucro", "nota_longevidade", "nota_concorrencia", "nota_aderencia"]
     sg["media"] = sg[notas].mean(axis=1)
@@ -1570,17 +2171,37 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         larguras=(40, 70, 11, 11, 11, 11, 11, 15), alinhar=("LEFT", "LEFT") + ("CENTER",) * 6)
     pdf.paragrafo("Notas de 1 a 10: tamanho do segmento, potencial de lucro, longevidade, pouca concorrência "
                   "e aderência da oferta às demandas do segmento.", "I", 7.5)
+    mk = mercado(proj, res)
+    if mk["preenchido"]:
+        pdf.subtitulo("Tamanho do mercado (TAM, SAM e SOM)")
+        pdf.tabela(pd.DataFrame({
+            "Nível": ["TAM - mercado total", "SAM - mercado alcançável", "SOM - mercado conquistável"],
+            "Descrição": [proj.get("tam_desc", ""), proj.get("sam_desc", ""), f"{num_br(proj.get('som_pct', 0), 1)}% do SAM"],
+            "Clientes": [num_br(mk["tam_c"], 0), num_br(mk["sam_c"], 0), num_br(mk["som_c"], 0)],
+            "R$ por ano": [brl(mk["tam"]), brl(mk["sam"]), brl(mk["som"])]}),
+            larguras=(42, 78, 25, 35), alinhar=("LEFT", "LEFT", "RIGHT", "RIGHT"))
+        pdf.paragrafo(f"A receita prevista no Ano 1 ({brl(mk['receita_ano1'])}) corresponde a {pct(mk['pct_som'])} do SOM "
+                      f"e a {pct(mk['pct_sam'])} do SAM. Fontes: {proj.get('mercado_fontes', '')}", "I", 8)
 
     # ---------------- 3. PROPOSTA DE VALOR ----------------
-    pdf.secao("3. PROPOSTA DE VALOR")
+    pdf.secao("PROPOSTA DE VALOR")
+    props = d.get("propostas")
+    if props is not None and not props.empty:
+        for _, pr in props.iterrows():
+            pdf.subtitulo(f"Persona: {pr['persona_nome']}")
+            if pr["valores"]:
+                pdf.campo("Valores entregues", pr["valores"])
+            pdf.paragrafo(f"{proj['nome_negocio']} ajuda {pr['persona_nome']}, que deseja {pr['que_desejam']}, por meio de "
+                          f"{pr['por_meio']}. Diferentemente de {pr['diferentemente']}, oferecemos {pr['oferecem']}.", "", 10)
     pv = d["proposta_valor"]
-    pdf.paragrafo(f"Nossa empresa ({proj['nome_negocio']}) ajuda {pv['segmento_alvo']} que desejam "
-                  f"{pv['beneficios_desejados']} por meio de {pv['meios_entrega']}. Diferentemente de "
-                  f"{pv['diferencial_competitivo']}, os nossos produtos ou serviços oferecem "
-                  f"{pv['entrega_produtos_servicos']}", "", 10)
+    if (props is None or props.empty) and pv.get("segmento_alvo"):
+        pdf.paragrafo(f"Nossa empresa ({proj['nome_negocio']}) ajuda {pv['segmento_alvo']} que desejam "
+                      f"{pv['beneficios_desejados']} por meio de {pv['meios_entrega']}. Diferentemente de "
+                      f"{pv['diferencial_competitivo']}, os nossos produtos ou serviços oferecem "
+                      f"{pv['entrega_produtos_servicos']}", "", 10)
 
     # ---------------- 4. PERSONAS ----------------
-    pdf.secao("4. PERSONAS", nova_pagina=True)
+    pdf.secao("PERSONAS", nova_pagina=True)
     for _, p in d["personas"].iterrows():
         pdf.subtitulo(f"{p['nome']}, {int(p['idade'])} anos - {p['profissao']}")
         pdf.campo("Estado civil", p["estado_civil"])
@@ -1604,7 +2225,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.tabela(rf, alinhar=("LEFT",) * 3)
 
     # ---------------- 5. JORNADA ----------------
-    pdf.secao("5. JORNADA DO CLIENTE")
+    pdf.secao("JORNADA DO CLIENTE")
     j = d["jornada_cliente"]
     for persona, grupo in j.groupby("persona_nome", sort=False):
         pdf.subtitulo(f"Persona: {persona}")
@@ -1615,7 +2236,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                    larguras=(14, 22, 34, 26, 28, 20, 36), alinhar=("LEFT",) * 7, tam=7)
 
     # ---------------- 6. CONCORRÊNCIA ----------------
-    pdf.secao("6. ANÁLISE DA CONCORRÊNCIA", nova_pagina=True)
+    pdf.secao("ANÁLISE DA CONCORRÊNCIA", nova_pagina=True)
     piv = extras["concorrencia_pivot"]
     if not piv.empty:
         tab = piv.copy()
@@ -1637,7 +2258,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.paragrafo("(sem registros)", "I", 8)
 
     # ---------------- 7. AMBIENTE E SWOT ----------------
-    pdf.secao("7. ANÁLISE DE AMBIENTE E MATRIZ SWOT", nova_pagina=True)
+    pdf.secao("ANÁLISE DE AMBIENTE E MATRIZ SWOT", nova_pagina=True)
     sw = d["swot"]
     pdf.matriz_swot(sw)
     diag = extras["swot_diag"]
@@ -1656,7 +2277,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                larguras=(16, 20, 30, 24, 45, 45), alinhar=("LEFT",) * 6, tam=7)
 
     # ---------------- 8. CANAIS E FUNIL ----------------
-    pdf.secao("8. CANAIS DE AQUISIÇÃO E FUNIL DE VENDAS", nova_pagina=True)
+    pdf.secao("CANAIS DE AQUISIÇÃO E FUNIL DE VENDAS", nova_pagina=True)
     cn = d["canais"].copy()
     if not cn.empty:
         cn["media"] = cn[["atratividade", "alcance", "cliente", "relacionamento", "viabilidade"]].mean(axis=1)
@@ -1675,7 +2296,49 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                larguras=(22, 50, 22, 20, 20, 22, 24), tam=7.5)
 
     # ---------------- 9. INVESTIMENTOS ----------------
-    pdf.secao("9. INVESTIMENTOS, CAPITAL DE GIRO E FONTES DE RECURSOS", nova_pagina=True)
+    # ---------------- MARKETING E OPERAÇÃO ----------------
+    if any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
+        pdf.secao("PLANO DE MARKETING (4Ps)")
+        for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
+            if proj.get(k):
+                pdf.subtitulo(rot)
+                pdf.paragrafo(proj[k])
+    pdf.secao("PLANO OPERACIONAL", nova_pagina=True)
+    for rot, k in [("Localização", "loc_endereco"), ("Justificativa do ponto", "loc_justificativa"),
+                   ("Fluxo de pessoas", "loc_fluxo"), ("Horário de funcionamento", "op_horario")]:
+        pdf.campo(rot, proj.get(k, ""))
+    if proj.get("loc_area_m2"):
+        pdf.campo("Área", f"{num_br(proj['loc_area_m2'], 0)} m²")
+    if proj.get("op_layout"):
+        pdf.subtitulo("Layout")
+        pdf.paragrafo(proj["op_layout"])
+    if proj.get("op_processos"):
+        pdf.subtitulo("Processos operacionais")
+        pdf.paragrafo(proj["op_processos"])
+    cd = capacidade_demanda(d, res)
+    if not cd.empty:
+        pdf.subtitulo("Capacidade produtiva x demanda prevista")
+        pdf.tabela(pd.DataFrame({"Recurso": cd["Recurso"], "Atende": cd["Atende"],
+                                 "Capacidade/mês": cd["Capacidade/mês"].map(lambda v: num_br(v, 0)),
+                                 "Demanda Mês 1": cd["Demanda Mês 1"].map(lambda v: num_br(v, 0)),
+                                 "Demanda Mês 12": cd["Demanda Mês 12"].map(lambda v: num_br(v, 0)),
+                                 "Uso Mês 12": cd["Uso Mês 12"].map(pct)}), larguras=(48, 42, 24, 22, 22, 22), tam=7.5)
+    pes = d["pessoal"]
+    if not pes.empty:
+        pdf.subtitulo("Necessidade de pessoal por área")
+        pdf.tabela(pd.DataFrame({"Área": pes["area"], "Cargo": pes["cargo"], "Nº": pes["num_empregados"].map(lambda v: num_br(v, 0)),
+                                 "Atribuições": pes["atribuicoes"]}), larguras=(38, 52, 10, 80),
+                   alinhar=("LEFT", "LEFT", "CENTER", "LEFT"), tam=7.5)
+    fo = d.get("fornecedores")
+    if fo is not None and not fo.empty:
+        pdf.subtitulo("Fornecedores")
+        pdf.tabela(pd.DataFrame({"Fornecedor": fo["nome"], "Itens": fo["itens"],
+                                 "Pagamento": fo["prazo_pagamento_dias"].map(lambda v: f"{num_br(v, 0)} dias"),
+                                 "Entrega": fo["prazo_entrega_dias"].map(lambda v: f"{num_br(v, 0)} dias"),
+                                 "Condições": fo["condicoes"], "Crítico": fo["critico"].map(lambda v: "Sim" if v else "Não")}),
+                   larguras=(36, 46, 20, 18, 46, 14), alinhar=("LEFT", "LEFT", "RIGHT", "RIGHT", "LEFT", "CENTER"), tam=7.5)
+
+    pdf.secao("INVESTIMENTOS, CAPITAL DE GIRO E FONTES DE RECURSOS", nova_pagina=True)
     inv = res["inv"]
     pdf.subtitulo("Investimentos fixos e depreciação")
     tinv = pd.DataFrame({"Descrição": inv["descricao"], "Qtd.": inv["quantidade"].map(lambda v: num_br(v, 0)),
@@ -1728,7 +2391,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     pdf.tabela(tf, larguras=(65, 60, 35, 20), alinhar=("LEFT", "LEFT", "RIGHT", "RIGHT"), destaque_total=True)
 
     # ---------------- 10. PRODUTOS ----------------
-    pdf.secao("10. PRODUTOS, SERVIÇOS E CUSTOS UNITÁRIOS", nova_pagina=True)
+    pdf.secao("PRODUTOS, SERVIÇOS E CUSTOS UNITÁRIOS", nova_pagina=True)
     c = res["cat"]
     for categoria in ("Fabricação Própria", "Revenda", "Serviço"):
         sub = c[c["categoria"] == categoria]
@@ -1762,7 +2425,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.tabela(tf, larguras=(70, 20, 18, 26, 26, 20), destaque_total=True, tam=7.5)
 
     # ---------------- 11. CUSTOS ----------------
-    pdf.secao("11. CUSTOS DE COMERCIALIZAÇÃO, PESSOAL E CUSTOS FIXOS", nova_pagina=True)
+    pdf.secao("CUSTOS DE COMERCIALIZAÇÃO, PESSOAL E CUSTOS FIXOS", nova_pagina=True)
     a1 = res["anos"][1]
     pdf.subtitulo("Custos variáveis de comercialização (% sobre a receita)")
     cv = d["custos_variaveis"]
@@ -1792,7 +2455,31 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     pdf.tabela(tcf, larguras=(130, 50), destaque_total=True)
 
     # ---------------- 12. PROJEÇÕES E DRE ----------------
-    pdf.secao("12. PROJEÇÃO DE RESULTADOS E DRE", nova_pagina=True)
+    pdf.subtitulo("Classificação dos custos e despesas (mensal)")
+    pdf.tabela(pd.DataFrame({
+        "Classificação": ["Custos diretos (materiais e mercadorias) - Mês 1", "Mão de obra direta (produção)",
+                          "Custos indiretos de produção", "Depreciação", "Pessoal administrativo e comercial",
+                          "Despesas administrativas", "Despesas comerciais", "Despesas financeiras"],
+        "Valor mensal": [brl(v) for v in (res["cdir_m1"], res["mod_m"], res["cif_m"], res["dep_m"],
+                                          res["pessoal_adm_m"] + res["pessoal_com_m"], res["desp_adm_m"],
+                                          res["desp_com_m"], res["desp_fin_m"])],
+        "Vai para o produto (absorção)?": ["Sim (direto)", "Sim (rateio)", "Sim (rateio)", "Sim (rateio)",
+                                           "Não (despesa do período)", "Não", "Não", "Não"]}),
+        larguras=(90, 40, 50), alinhar=("LEFT", "RIGHT", "LEFT"))
+    pdf.paragrafo(f"Critério de rateio dos custos indiretos: {res['criterio_rateio']}.", "I", 8)
+
+    pdf.secao("FORMAÇÃO DE PREÇO E PONTO DE EQUILÍBRIO POR PRODUTO", nova_pagina=True)
+    pdf.paragrafo(f"Markup divisor = 1 / [1 - (impostos {pct(res['aliq'])} + despesas variáveis {pct(res['var_pct'])} "
+                  f"+ despesas fixas {pct(res['df_pct'])} + margem desejada {pct(res['margem_desejada'])})] = "
+                  f"{num_br(res['markup_mult'], 3)}. Preço sugerido = custo direto x markup.", "", 9)
+    cp = res["cat"]
+    pdf.tabela(pd.DataFrame({"Produto/serviço": cp["descricao"], "Custo variável": cp["custo_unit"].map(brl),
+                             "Custo absorção": cp["custo_absorcao_unit"].map(brl), "Preço": cp["preco_venda"].map(brl),
+                             "Sugerido": cp["preco_sugerido"].map(brl), "Margem abs.": cp["margem_absorcao_pct"].map(pct),
+                             "PE un./mês": cp["pe_unidades_mes"].map(lambda v: num_br(v, 0))}),
+               larguras=(56, 21, 21, 20, 20, 21, 21), tam=7)
+
+    pdf.secao("PROJEÇÃO DE RESULTADOS E DRE", nova_pagina=True)
     pdf.paragrafo(f"Premissas: crescimento de {num_br(proj['crescimento_mensal_ano1_pct'])}% ao mês no Ano 1 e "
                   f"{num_br(proj['crescimento_anual_pct'])}% ao ano a partir do Ano 2; custos fixos corrigidos em "
                   f"{num_br(proj['inflacao_custos_anual_pct'])}% ao ano; TMA de {num_br(proj['tma_anual_pct'])}% ao ano.", "I", 8)
@@ -1805,7 +2492,24 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     pdf.tabela(extras["dre"], larguras=(70, 30, 30, 30, 20), tam=7.5)
 
     # ---------------- 13. INDICADORES ----------------
-    pdf.secao("13. INDICADORES DE VIABILIDADE", nova_pagina=True)
+    pdf.secao("FLUXO DE CAIXA MENSAL (ANO 1)", nova_pagina=True)
+    fm = res["fluxo_mensal"]
+    if not fm.empty:
+        tf_ = fm.copy()
+        for col in tf_.columns[1:]:
+            tf_[col] = tf_[col].map(brl)
+        tf_ = tf_.rename(columns={"Impostos e desp. variáveis": "Impostos/var.", "Pessoal e custos fixos": "Pessoal/fixos",
+                                  "Parcelas de empréstimos": "Empréstimos"})
+        pdf.tabela(tf_, larguras=(14, 25, 25, 23, 22, 24, 22, 25), tam=6.5)
+        pdf.paragrafo(f"Menor saldo de caixa: {brl(fm['Saldo final'].min())} ({fm.loc[fm['Saldo final'].idxmin(), 'Mês']}).", "B", 9)
+
+    pdf.secao("INDICADORES DE VIABILIDADE", nova_pagina=True)
+    sem = semaforo(res)
+    pdf.subtitulo("Semáforo da saúde do negócio")
+    pdf.tabela(pd.DataFrame({"Situação": [{"🟢": "Bom", "🟡": "Atenção", "🔴": "Crítico"}.get(s_["Status"], "") for s_ in sem],
+                             "Indicador": [s_["Indicador"] for s_ in sem], "Valor": [s_["Valor"] for s_ in sem],
+                             "Leitura": [s_["Leitura"] for s_ in sem]}), larguras=(18, 45, 27, 90),
+               alinhar=("CENTER", "LEFT", "RIGHT", "LEFT"), tam=7.5)
     rs = res["resumo"]
     pdf.subtitulo("Resumo financeiro (Ano 1, padrão PNBOX)")
     pdf.tabela(pd.DataFrame({
@@ -1843,7 +2547,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     # ---------------- 14. GRÁFICOS ----------------
     imgs = graficos_png(extras["comp"]) if extras.get("comp") else []
     if imgs:
-        pdf.secao("14. GRÁFICOS", nova_pagina=True)
+        pdf.secao("GRÁFICOS", nova_pagina=True)
         roscas = imgs[:5]
         outros = imgs[5:]
         largura = (pdf.epw - 6) / 2
@@ -1865,36 +2569,714 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
             pdf.ln(4)
 
     # ---------------- 15. CENÁRIOS E CHECAGENS ----------------
-    pdf.secao("15. SIMULADOR DE CENÁRIOS E CHECAGENS", nova_pagina=True)
+    # ---------------- FERRAMENTAS COMPLEMENTARES ----------------
+    rk, cr, ex = d.get("riscos"), d.get("cronograma"), d.get("experimentos")
+    if any(x is not None and not x.empty for x in (rk, cr, ex)):
+        pdf.secao("RISCOS, CRONOGRAMA E VALIDAÇÃO", nova_pagina=True)
+        if rk is not None and not rk.empty:
+            pdf.subtitulo("Riscos e plano de contingência")
+            pdf.tabela(pd.DataFrame({"Risco": rk["risco"], "Prob.": rk["probabilidade"].map(lambda v: num_br(v, 0)),
+                                     "Impacto": rk["impacto"].map(lambda v: num_br(v, 0)),
+                                     "Nível": (rk["probabilidade"] * rk["impacto"]).map(lambda v: num_br(v, 0)),
+                                     "Mitigação": rk["mitigacao"], "Responsável": rk["responsavel"]}),
+                       larguras=(42, 12, 14, 12, 72, 28), alinhar=("LEFT", "CENTER", "CENTER", "CENTER", "LEFT", "LEFT"), tam=7.5)
+        if cr is not None and not cr.empty:
+            pdf.subtitulo("Cronograma de implantação")
+            pdf.tabela(pd.DataFrame({"Atividade": cr["atividade"], "Início (mês)": cr["mes_inicio"].map(lambda v: num_br(v, 0)),
+                                     "Duração (meses)": cr["duracao_meses"].map(lambda v: num_br(v, 1)),
+                                     "Responsável": cr["responsavel"], "Custo": cr["custo"].map(brl)}),
+                       larguras=(70, 22, 25, 35, 28), alinhar=("LEFT", "CENTER", "CENTER", "LEFT", "RIGHT"), tam=7.5)
+        if ex is not None and not ex.empty:
+            pdf.subtitulo("Quadro de experimentação")
+            pdf.tabela(pd.DataFrame({"Hipótese": ex["hipotese"], "Experimento": ex["experimento"], "Métrica": ex["metrica"],
+                                     "Critério": ex["criterio_sucesso"], "Resultado": ex["resultado"], "Situação": ex["status"]}),
+                       larguras=(38, 38, 24, 26, 34, 20), alinhar=("LEFT",) * 6, tam=7)
+
+    pdf.secao("SIMULADOR DE CENÁRIOS E CHECAGENS", nova_pagina=True)
     pdf.tabela(extras["cenarios"], larguras=(45, 45, 45, 45), tam=7.5)
     pdf.subtitulo("Checagens de consistência")
     ch = extras["checagens"]
     pdf.tabela(ch[["Teste", "Valor apurado", "Situação", "Observação"]], larguras=(50, 40, 20, 70),
                alinhar=("LEFT", "LEFT", "CENTER", "LEFT"), tam=7.5)
 
+    if str(proj.get("conclusao") or "").strip():
+        pdf.secao("CONCLUSÃO E PARECER FINAL", nova_pagina=True)
+        for par in str(proj["conclusao"]).split("\n"):
+            pdf.paragrafo(par, "", 10)
+
     out = pdf.output()
     return bytes(out)
 
 # ##############################################################################
-# PARTE: pnbox_app.py
+# PARTE: pnbox_extras.py
+# ##############################################################################
+
+
+
+
+
+
+
+# ------------------------------------------------------------------------------
+# 1. SITUAÇÃO DE PREENCHIMENTO DE CADA FERRAMENTA
+# ------------------------------------------------------------------------------
+def regras_situacao(proj: dict, d: dict) -> dict:
+    def tem(t, n=1):
+        return len(d[t]) >= n
+    sw = d["swot"]
+    return {
+        "projeto": (bool(proj["nome_negocio"]) and bool(proj["cidade_uf"]), tem("socios")),
+        "segmentos": (tem("segmentos", 2), tem("segmentos")),
+        "personas": (tem("personas") and bool(d["personas"]["desafios"].astype(str).str.strip().ne("").any()), tem("personas")),
+        "jornada": (d["jornada_cliente"]["etapa"].nunique() >= 6, tem("jornada_cliente")),
+        "mercado": (proj["tam_clientes"] > 0 and proj["sam_clientes"] > 0 and proj["som_pct"] > 0 and proj["gasto_anual_cliente"] > 0,
+                    proj["tam_clientes"] > 0 or proj["gasto_anual_cliente"] > 0),
+        "proposta": (tem("propostas"), bool(d["proposta_valor"]["segmento_alvo"])),
+        "concorrencia": (tem("concorrentes") and tem("concorrencia_notas", 3), tem("concorrencia_notas")),
+        "forcas": ((sw["natureza"] == "Força").any() and (sw["natureza"] == "Fraqueza").any(),
+                   sw["natureza"].isin(["Força", "Fraqueza"]).any()),
+        "oportunidades": ((sw["natureza"] == "Oportunidade").any() and (sw["natureza"] == "Ameaça").any(),
+                          sw["natureza"].isin(["Oportunidade", "Ameaça"]).any()),
+        "swot": (sw["natureza"].nunique() >= 4, len(sw) > 0),
+        "marketing": (all(proj[k] for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")),
+                      any(proj[k] for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao"))),
+        "canais": (tem("canais") and tem("funil_vendas"), tem("canais") or tem("funil_vendas")),
+        "operacional": (bool(proj["loc_endereco"]) and tem("capacidade"), bool(proj["loc_endereco"]) or tem("capacidade")),
+        "fornecedores": (tem("fornecedores", 2), tem("fornecedores")),
+        "investimentos": (tem("inv_fixos") and (tem("socios") or tem("emprestimos")), tem("inv_fixos")),
+        "produtos": (tem("catalogo") and tem("materiais"), tem("catalogo") or tem("materiais")),
+        "custos": (tem("pessoal") and tem("custos_fixos"), tem("pessoal") or tem("custos_fixos")),
+        "preco": (tem("catalogo"), tem("catalogo")),
+        "dre": (tem("catalogo") and tem("custos_fixos"), tem("catalogo")),
+        "fluxo": (tem("catalogo") and tem("capital_giro_prazos"), tem("catalogo")),
+        "indicadores": (tem("catalogo") and tem("inv_fixos"), tem("catalogo")),
+        "graficos": (tem("catalogo"), tem("catalogo")),
+        "simulador": (tem("catalogo"), tem("catalogo")),
+        "experimentos": (tem("experimentos"), tem("experimentos")),
+        "riscos": (tem("riscos", 3), tem("riscos")),
+        "cronograma": (tem("cronograma", 3), tem("cronograma")),
+        "realizado": (tem("realizado"), tem("realizado")),
+        "sumario": (len(str(proj["sumario_executivo"])) > 200, bool(proj["sumario_executivo"])),
+    }
+
+
+def completude_de(proj, d) -> float:
+    r = regras_situacao(proj, d)
+    # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
+    vals = [1 if c else (0.5 if i else 0) for k, (c, i) in r.items() if k != "realizado"]
+    return sum(vals) / max(len(vals), 1)
+
+
+# ------------------------------------------------------------------------------
+# 2. SUMÁRIO EXECUTIVO AUTOMÁTICO (rascunho para o aluno revisar)
+# ------------------------------------------------------------------------------
+def gerar_sumario(proj: dict, d: dict, res: dict) -> str:
+    a1 = res["anos"][1]
+    nome = proj["nome_negocio"] or "O negócio"
+    seg = d["segmentos"]
+    seg_top = ""
+    if not seg.empty:
+        s_ = seg.assign(m=seg.iloc[:, 2:7].mean(axis=1)).sort_values("m", ascending=False)
+        seg_top = s_["nome"].iloc[0]
+    props = d.get("propostas")
+    valores = ""
+    if props is not None and not props.empty:
+        valores = "; ".join(dict.fromkeys(v.strip() for x in props["valores"] for v in str(x).split(";") if v.strip()))
+    cat = res["cat"]
+    top = cat.sort_values("receita_mensal", ascending=False)["descricao"].head(3).tolist() if not cat.empty else []
+    socios = ", ".join(d["socios"]["nome"].tolist())
+    diag = pontuacao_swot(d["swot"])
+    estrategia = QUADRANTES[diag["predominante"]][0] if diag["predominante"] else "não definida"
+    mk = mercado(proj, res)
+    tir = res["tir"]
+    pb = res["payback_desc"]
+    viavel = res["vpl"] > 0 and a1["resultado"] > 0
+    p = []
+    p.append(f"{nome} é um empreendimento do setor de {proj['setor_atuacao'] or 'atuação a definir'}, localizado em "
+             f"{proj['cidade_uf'] or 'cidade a definir'}, com o objetivo de {str(proj['objetivo']).lower()}. "
+             f"O enquadramento tributário previsto é o {proj['enquadramento']} e o porte, {proj['porte']}.")
+    if seg_top or valores:
+        p.append(f"O segmento de clientes priorizado é {seg_top or 'a definir'}. A proposta de valor se apoia em "
+                 f"{valores or 'benefícios a definir'}" + (f", com destaque para {', '.join(top)}." if top else "."))
+    if mk["preenchido"]:
+        p.append(f"O mercado alcançável foi estimado em {num_br(mk['sam_c'], 0)} clientes ({brl(mk['sam'])} por ano), e a meta "
+                 f"de conquista (SOM) em {num_br(mk['som_c'], 0)} clientes. A receita prevista para o primeiro ano representa "
+                 f"{pct(mk['pct_som'])} desse SOM.")
+    p.append(f"A análise SWOT indica a {estrategia.lower()} como postura predominante.")
+    p.append(f"O investimento total necessário é de {brl(res['investimento_total'])}, composto por {brl(res['inv_fixo'])} em "
+             f"investimentos fixos, {brl(res['inv_pre'])} em gastos pré-operacionais, {brl(res['inv_estoque'])} em estoque inicial "
+             f"e {brl(res['capital_giro'])} de capital de giro. As fontes são {brl(res['capital_proprio'])} de capital próprio"
+             + (f" ({socios})" if socios else "") + f" e {brl(res['capital_terceiros'])} de capital de terceiros.")
+    p.append(f"Para o primeiro ano, projeta-se receita bruta de {brl(a1['rec_bruta'])}, margem de contribuição de {pct(a1['imc'])} "
+             f"e resultado líquido de {brl(a1['resultado'])} (lucratividade de {pct(div(a1['resultado'], a1['rec_bruta']))}). "
+             f"O ponto de equilíbrio contábil é de {brl(a1['pe_contabil'])} por ano.")
+    p.append(f"Na avaliação do investimento em três anos, à TMA de {pct(res['tma'])} ao ano, o VPL é de {brl(res['vpl'])}"
+             + (f", a TIR é de {pct(tir)}" if tir is not None else "")
+             + (f" e o payback descontado ocorre em {num_br(pb, 1)} meses." if pb == pb else " e o investimento não se paga em 36 meses."))
+    p.append("Com base nesses resultados, o negócio se mostra " + ("economicamente viável" if viavel else
+             "ainda não viável nas premissas atuais, sendo necessário rever preços, custos ou investimentos") + ".")
+    return "\n".join(p)
+
+
+# ------------------------------------------------------------------------------
+# 3. TEXTO PARA ANÁLISE COM IA (copiar e colar no ChatGPT, Gemini, Claude...)
+# ------------------------------------------------------------------------------
+TAREFAS_IA = {
+    "indicadores": "Diagnóstico de cada indicador: situação atual, o que significa para a saúde do negócio e sinais de alerta",
+    "concorrencia": "Estratégias para se diferenciar e superar os concorrentes",
+    "custos": "Plano de redução de custos e de melhoria de margens",
+    "preco": "Revisão da política de preços por produto",
+    "marketing": "Plano de marketing e de aquisição de clientes para os primeiros 6 meses",
+    "riscos": "Principais riscos do plano e como mitigá-los",
+    "graficos": "Gráficos interpretativos dos principais números",
+    "banca": "Simulação de banca examinadora: perguntas difíceis sobre o plano",
+}
+
+
+def _md_tabela(df: pd.DataFrame, max_linhas=40) -> str:
+    if df is None or df.empty:
+        return "(sem dados)"
+    df = df.head(max_linhas).copy()
+    cols = list(df.columns)
+    linhas = ["| " + " | ".join(map(str, cols)) + " |", "|" + "---|" * len(cols)]
+    for _, r in df.iterrows():
+        linhas.append("| " + " | ".join(str(r[c]).replace("|", "/").replace("\n", " ") for c in cols) + " |")
+    return "\n".join(linhas)
+
+
+def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estudante de Administração",
+                    piv_conc: pd.DataFrame | None = None) -> str:
+    a1 = res["anos"][1]
+    sem = semaforo(res)
+    cat = res["cat"]
+    chk = tabela_checagens_v5(res, d, proj)
+    mk = mercado(proj, res)
+    diag = pontuacao_swot(d["swot"])
+    b = []
+    b.append(f"Você é um consultor de negócios e professor de finanças empresariais. Analise o plano de negócio abaixo, "
+             f"elaborado por um {publico}, com linguagem clara, didática e em português do Brasil.")
+    b.append("REGRAS: use SOMENTE os números fornecidos (não invente valores); quando fizer contas, mostre o cálculo; "
+             "aponte dados incoerentes ou faltantes; separe fatos dos dados de suas sugestões; seja específico para este negócio.")
+    b.append("\n## 1. Identificação")
+    b.append(f"- Negócio: {proj['nome_negocio']} | Cidade: {proj['cidade_uf']} | Setor: {proj['setor_atuacao']}")
+    b.append(f"- Enquadramento: {proj['enquadramento']} | Porte: {proj['porte']} | Objetivo: {proj['objetivo']}")
+    seg = d["segmentos"]
+    if not seg.empty:
+        s_ = seg.assign(Média=seg.iloc[:, 2:7].mean(axis=1).round(1)).sort_values("Média", ascending=False)
+        b.append("\n## 2. Segmentos de clientes (notas 1 a 10)")
+        b.append(_md_tabela(s_[["nome", "descricao", "Média"]].rename(columns={"nome": "Segmento", "descricao": "Descrição"})))
+    props = d.get("propostas")
+    if props is not None and not props.empty:
+        b.append("\n## 3. Propostas de valor")
+        for _, p_ in props.iterrows():
+            b.append(f"- Persona {p_['persona_nome']}: deseja {p_['que_desejam']}; por meio de {p_['por_meio']}; "
+                     f"diferente de {p_['diferentemente']}; oferecemos {p_['oferecem']}. Valores: {p_['valores']}")
+    if mk["preenchido"]:
+        b.append("\n## 4. Mercado")
+        b.append(f"- TAM {num_br(mk['tam_c'], 0)} clientes ({brl(mk['tam'])}/ano); SAM {num_br(mk['sam_c'], 0)} ({brl(mk['sam'])}); "
+                 f"SOM {num_br(mk['som_c'], 0)} ({brl(mk['som'])}). Receita do Ano 1 = {pct(mk['pct_som'])} do SOM.")
+    if piv_conc is not None and not piv_conc.empty:
+        b.append("\n## 5. Matriz de concorrência (notas 0 a 10)")
+        b.append(_md_tabela(piv_conc.round(1)))
+    sw = d["swot"]
+    if not sw.empty:
+        b.append("\n## 6. SWOT")
+        for nat in ("Força", "Fraqueza", "Oportunidade", "Ameaça"):
+            itens = sw[sw["natureza"] == nat]
+            if not itens.empty:
+                b.append(f"- {nat}s: " + "; ".join(f"{r['fator']} ({r['impacto']})" for _, r in itens.iterrows()))
+        if diag["predominante"]:
+            b.append(f"- Quadrante predominante: {QUADRANTES[diag['predominante']][0]}")
+    if any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
+        b.append("\n## 7. Marketing (4Ps)")
+        for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
+            b.append(f"- {rot}: {proj.get(k, '')}")
+    b.append("\n## 8. Investimento e fontes")
+    b.append(f"- Investimento total {brl(res['investimento_total'])}: fixos {brl(res['inv_fixo'])}; pré-operacionais {brl(res['inv_pre'])}; "
+             f"estoque {brl(res['inv_estoque'])}; capital de giro {brl(res['capital_giro'])}.")
+    b.append(f"- Fontes: próprio {brl(res['capital_proprio'])}; terceiros {brl(res['capital_terceiros'])}.")
+    if not cat.empty:
+        b.append("\n## 9. Produtos (Mês 1)")
+        t = pd.DataFrame({"Produto": cat["descricao"], "Categoria": cat["categoria"], "Preço": cat["preco_venda"].map(brl),
+                          "Custo variável": cat["custo_unit"].map(brl), "Custo absorção": cat["custo_absorcao_unit"].map(brl),
+                          "Margem": cat["margem_pct"].map(pct), "Qtd/mês": cat["qtd_mensal"].map(lambda v: num_br(v, 0)),
+                          "Receita/mês": cat["receita_mensal"].map(brl)})
+        b.append(_md_tabela(t, 60))
+    b.append("\n## 10. Estrutura de custos mensal")
+    b.append(f"- Custos diretos {brl(res['cdir_m1'])}; impostos {pct(res['aliq'])} e despesas variáveis {pct(res['var_pct'])} da receita; "
+             f"MOD {brl(res['mod_m'])}; custos indiretos de produção {brl(res['cif_m'])}; depreciação {brl(res['dep_m'])}; "
+             f"pessoal adm./comercial {brl(res['pessoal_adm_m'] + res['pessoal_com_m'])}; despesas adm. {brl(res['desp_adm_m'])}, "
+             f"comerciais {brl(res['desp_com_m'])}, financeiras {brl(res['desp_fin_m'])}.")
+    cf = d["custos_fixos"]
+    if not cf.empty:
+        b.append(_md_tabela(pd.DataFrame({"Custo fixo": cf["descricao"], "Classificação": cf["classificacao"],
+                                          "R$/mês": cf["valor_mensal"].map(brl)})))
+    b.append("\n## 11. DRE (Anos 1 a 3)")
+    b.append(_md_tabela(tabela_dre(res)))
+    b.append("\n## 12. Indicadores e semáforo")
+    b.append(_md_tabela(pd.DataFrame({"Indicador": [s_["Indicador"] for s_ in sem], "Valor": [s_["Valor"] for s_ in sem],
+                                      "Situação": [{"🟢": "bom", "🟡": "atenção", "🔴": "crítico"}[s_["Status"]] for s_ in sem]})))
+    b.append(f"- VPL {brl(res['vpl'])}; TIR {pct(res['tir']) if res['tir'] is not None else 'n.a.'}; TMA {pct(res['tma'])}; "
+             f"payback descontado {num_br(res['payback_desc'], 1) + ' meses' if res['payback_desc'] == res['payback_desc'] else '> 36 meses'}; "
+             f"PE contábil {brl(a1['pe_contabil'])}/ano; margem de segurança {pct(div(a1['rec_bruta'] - a1['pe_contabil'], a1['rec_bruta']))}.")
+    sens = sensibilidade(res)
+    b.append("- Sensibilidade (efeito de ±10% no resultado do Ano 1): " +
+             "; ".join(f"{r['Variável']} {brl(r['Impacto absoluto'])}" for _, r in sens.iterrows()))
+    pend = chk[chk["Situação"] != "OK"]
+    if not pend.empty:
+        b.append("\n## 13. Inconsistências apontadas pelo programa")
+        for _, r in pend.iterrows():
+            b.append(f"- {r['Teste']}: {r['Valor apurado']}")
+    fm = res["fluxo_mensal"]
+    if not fm.empty:
+        b.append(f"\n- Fluxo de caixa: menor saldo {brl(fm['Saldo final'].min())} em {fm.loc[fm['Saldo final'].idxmin(), 'Mês']}; "
+                 f"saldo no fim do Ano 1 {brl(fm['Saldo final'].iloc[-1])}.")
+
+    b.append("\n# O QUE EU PRECISO QUE VOCÊ FAÇA")
+    pedidos = {
+        "indicadores": "Para CADA indicador da seção 12, explique em linguagem simples: (a) o que ele mede; (b) a situação atual deste "
+                       "negócio com o valor exato; (c) o que isso significa para a saúde do negócio; (d) uma ação concreta para melhorar. "
+                       "Termine com um parecer geral (viável, viável com ressalvas ou inviável) e justifique.",
+        "concorrencia": "Com base na concorrência, na SWOT e nas propostas de valor, proponha 5 estratégias para driblar os concorrentes, "
+                        "cada uma com: objetivo, ação prática, custo estimado (baixo/médio/alto), prazo e indicador de sucesso.",
+        "custos": "Identifique os 5 itens de custo que mais pesam e proponha como reduzi-los sem prejudicar a qualidade. Para cada um, "
+                  "estime o efeito no resultado anual em R$ usando os números fornecidos. Aponte também produtos com margem baixa.",
+        "preco": "Analise preço x custo variável x custo por absorção de cada produto. Diga quais preços estão baixos ou altos demais, "
+                 "sugira ajustes e explique o raciocínio (markup, concorrência, percepção de valor).",
+        "marketing": "Monte um plano de marketing de 6 meses (mês a mês), com canais, ações, orçamento estimado e metas, coerente com a "
+                     "persona e a proposta de valor.",
+        "riscos": "Liste os 5 maiores riscos que você enxerga neste plano (financeiros, de mercado e operacionais), a probabilidade, o "
+                  "impacto e uma ação de prevenção para cada um.",
+        "graficos": "Gere gráficos interpretativos (se puder executar código, use Python/matplotlib; se não, descreva o gráfico e monte "
+                    "uma tabela pronta para virar gráfico no Excel): (1) composição do investimento; (2) estrutura de custos; "
+                    "(3) receita x custos x resultado nos 3 anos; (4) ponto de equilíbrio; (5) saldo de caixa mês a mês. "
+                    "Abaixo de cada gráfico, escreva 2 ou 3 frases de interpretação.",
+        "banca": "Faça o papel de uma banca examinadora: elabore 10 perguntas difíceis sobre este plano (mercado, números, premissas, "
+                 "riscos) e, para cada uma, indique o que uma boa resposta deveria conter.",
+    }
+    for i, t in enumerate([t for t in tarefas if t in pedidos], start=1):
+        b.append(f"{i}. {pedidos[t]}")
+    b.append("\nOrganize a resposta com títulos, use tabelas quando ajudar e termine com uma lista de próximos passos.")
+    return "\n".join(b)
+
+
+# ------------------------------------------------------------------------------
+# 4. PITCH DECK EM PDF (slides 16:9)
+# ------------------------------------------------------------------------------
+class Pitch(Relatorio):
+    def __init__(self, nome):
+        FPDF.__init__(self, orientation="L", unit="mm", format=(190.5, 338.7))
+        self.nome = nome
+        self.unicode = False
+        for reg, neg, ita in FONTES_CANDIDATAS:
+            if all(Path(p).exists() for p in (reg, neg, ita)):
+                self.add_font("Base", "", reg)
+                self.add_font("Base", "B", neg)
+                self.add_font("Base", "I", ita)
+                self.unicode = True
+                break
+        self.fam = "Base" if self.unicode else "Helvetica"
+        self.set_auto_page_break(False)
+        self.set_margins(18, 14, 18)
+
+    def footer(self):
+        self.set_y(-10)
+        self.fonte("", 8)
+        self.set_text_color(150, 150, 150)
+        self.cell(0, 5, self.t(f"{self.nome}  ·  {self.page_no()}"), align="R")
+        self.set_text_color(0, 0, 0)
+
+    def slide(self, titulo, sub=""):
+        self.add_page()
+        self.set_fill_color(*AZUL)
+        self.rect(0, 0, self.w, 22, style="F")
+        self.set_xy(18, 6)
+        self.fonte("B", 20)
+        self.set_text_color(255, 255, 255)
+        self.cell(0, 10, self.t(titulo))
+        self.set_text_color(0, 0, 0)
+        self.set_xy(18, 28)
+        if sub:
+            self.fonte("I", 12)
+            self.set_text_color(90, 90, 90)
+            self.multi_cell(0, 6, self.t(sub), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.set_text_color(0, 0, 0)
+            self.ln(2)
+
+    def topicos(self, itens, tam=15):
+        self.fonte("", tam)
+        for it in itens:
+            if not str(it).strip():
+                continue
+            self.set_x(self.l_margin)
+            self.multi_cell(0, tam * 0.5, self.t(f"•  {it}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            self.ln(2)
+
+    def numeros(self, pares):
+        n = len(pares)
+        w = (self.w - 36 - (n - 1) * 6) / n
+        y = self.get_y() + 4
+        for i, (rot, val) in enumerate(pares):
+            x = 18 + i * (w + 6)
+            self.set_fill_color(232, 240, 251)
+            self.rect(x, y, w, 34, style="F")
+            self.set_xy(x, y + 6)
+            self.fonte("B", 20)
+            self.set_text_color(*AZUL)
+            self.cell(w, 10, self.t(val), align="C")
+            self.set_xy(x, y + 20)
+            self.fonte("", 11)
+            self.set_text_color(60, 60, 60)
+            self.cell(w, 6, self.t(rot), align="C")
+        self.set_text_color(0, 0, 0)
+        self.set_y(y + 40)
+
+
+def gerar_pitch(proj: dict, d: dict, res: dict) -> bytes:
+    a1 = res["anos"][1]
+    pp = Pitch(proj["nome_negocio"])
+    # 1. Capa
+    pp.add_page()
+    pp.set_fill_color(*AZUL)
+    pp.rect(0, 0, pp.w, pp.h, style="F")
+    pp.set_text_color(255, 255, 255)
+    pp.set_xy(18, 60)
+    pp.fonte("B", 40)
+    pp.multi_cell(0, 18, pp.t(proj["nome_negocio"]), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pp.fonte("", 16)
+    props = d.get("propostas")
+    frase = props["oferecem"].iloc[0] if props is not None and not props.empty and props["oferecem"].iloc[0] else "Plano de negócio"
+    pp.multi_cell(0, 9, pp.t(frase), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pp.ln(10)
+    pp.fonte("", 12)
+    pp.multi_cell(0, 7, pp.t(" · ".join(x for x in [proj["cidade_uf"], proj.get("turma", ""), proj.get("autores", "").replace("\n", ", ")] if x)),
+                  align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pp.set_text_color(0, 0, 0)
+    # 2. Problema
+    pers = d["personas"]
+    pp.slide("O problema", "Quem é o cliente e qual dor ele sente")
+    itens = []
+    for _, p_ in pers.head(2).iterrows():
+        itens.append(f"{p_['nome']}, {int(p_['idade'])} anos, {p_['profissao']}: \"{p_['citacao']}\"")
+        if p_["desafios"]:
+            itens.append(f"Dores: {p_['desafios']}")
+    pp.topicos(itens or ["Descreva as personas no programa para preencher este slide."])
+    # 3. Solução
+    pp.slide("A solução", "Proposta de valor")
+    itens = [f"Para {p_['persona_nome']}: {p_['por_meio']} — oferecemos {p_['oferecem']}" for _, p_ in props.iterrows()] \
+        if props is not None and not props.empty else []
+    top = res["cat"].sort_values("receita_mensal", ascending=False)["descricao"].head(5).tolist()
+    if top:
+        itens.append("Principais produtos: " + ", ".join(top))
+    pp.topicos(itens)
+    # 4. Mercado
+    mk = mercado(proj, res)
+    pp.slide("Mercado", proj.get("sam_desc") or "Tamanho do mercado")
+    if mk["preenchido"]:
+        pp.numeros([("TAM - mercado total", brl(mk["tam"])), ("SAM - alcançável", brl(mk["sam"])), ("SOM - meta", brl(mk["som"]))])
+        pp.topicos([f"{num_br(mk['som_c'], 0)} clientes conquistáveis; a receita do Ano 1 equivale a {pct(mk['pct_som'])} do SOM."], 13)
+    else:
+        pp.topicos(["Preencha a ferramenta Tamanho do mercado para completar este slide."])
+    # 5. Concorrência
+    pp.slide("Concorrência e diferencial", "Como nos posicionamos")
+    notas = d["concorrencia_notas"]
+    if not notas.empty:
+        med = notas.groupby("empresa")["nota"].mean().sort_values(ascending=False)
+        pp.topicos([f"{e}: média {num_br(v, 1)}" for e, v in med.items()] +
+                   [f"Diferente de: {props['diferentemente'].iloc[0]}" if props is not None and not props.empty else ""], 14)
+    # 6. Modelo de negócio / marketing
+    pp.slide("Como vamos vender", "Plano de marketing (4Ps)")
+    pp.topicos([f"Produto: {proj['mkt_produto']}", f"Preço: {proj['mkt_preco']}", f"Praça: {proj['mkt_praca']}",
+                f"Promoção: {proj['mkt_promocao']}"], 13)
+    # 7. Operação
+    pp.slide("Operação", proj.get("loc_endereco") or "")
+    cd = capacidade_demanda(d, res)
+    itens = [proj.get("op_processos", "")] + [f"{r['Recurso']}: uso de {pct(r['Uso Mês 12'])} da capacidade no Mês 12"
+                                             for _, r in cd.iterrows()]
+    pp.topicos(itens, 13)
+    # 8. Números
+    pp.slide("Os números", "Projeção do primeiro ano")
+    pp.numeros([("Investimento total", brl(res["investimento_total"])), ("Receita - Ano 1", brl(a1["rec_bruta"])),
+                ("Lucro - Ano 1", brl(a1["resultado"])), ("Lucratividade", pct(div(a1["resultado"], a1["rec_bruta"])))])
+    pp.numeros([("VPL (3 anos)", brl(res["vpl"])), ("TIR", pct(res["tir"]) if res["tir"] is not None else "n.a."),
+                ("Payback descontado", f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else "> 36 meses"),
+                ("Ponto de equilíbrio", brl(a1["pe_contabil"]))])
+    # 9. Gráficos
+    imgs = graficos_png(composicoes(res, d))
+    escolhidos = [i for i in imgs if i[0] in ("Composição do investimento total", "Ponto de equilíbrio")]
+    if escolhidos:
+        pp.slide("Investimento e equilíbrio")
+        x = 18
+        for tit, png in escolhidos[:2]:
+            pp.image(io.BytesIO(png), x=x, y=30, h=140)
+            x += 160
+    # 10. Investimento pedido
+    pp.slide("O que precisamos", "Uso e fontes dos recursos")
+    pp.numeros([("Capital próprio", brl(res["capital_proprio"])), ("Capital de terceiros", brl(res["capital_terceiros"])),
+                ("Total", brl(res["fontes"]))])
+    pp.topicos([f"Investimentos fixos: {brl(res['inv_fixo'])}", f"Pré-operacionais: {brl(res['inv_pre'])}",
+                f"Estoque inicial: {brl(res['inv_estoque'])}", f"Capital de giro: {brl(res['capital_giro'])}"], 14)
+    # 11. Equipe
+    pp.slide("Equipe", "Quem faz acontecer")
+    pp.topicos([f"{r['nome']} — {r['funcao']}: {r['perfil']}" for _, r in d["socios"].iterrows()], 13)
+    # 12. Encerramento
+    pp.add_page()
+    pp.set_fill_color(*AZUL)
+    pp.rect(0, 0, pp.w, pp.h, style="F")
+    pp.set_text_color(255, 255, 255)
+    pp.set_xy(18, 75)
+    pp.fonte("B", 34)
+    pp.cell(0, 16, pp.t("Obrigado!"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pp.fonte("", 14)
+    pp.cell(0, 10, pp.t(proj.get("contatos") or ""), align="C")
+    return bytes(pp.output())
+
+
+# ------------------------------------------------------------------------------
+# 5. EXPORTAÇÃO EM WORD (.docx)
+# ------------------------------------------------------------------------------
+def gerar_docx(proj: dict, d: dict, res: dict, piv_conc=None) -> bytes | None:
+    try:
+        from docx import Document
+        from docx.shared import Pt, Cm, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+    except ImportError:
+        return None
+    doc = Document()
+    st_ = doc.styles["Normal"]
+    st_.font.name = "Arial"
+    st_.font.size = Pt(11)
+    for s in doc.sections:
+        s.left_margin = s.right_margin = Cm(2.5)
+        s.top_margin = s.bottom_margin = Cm(2.5)
+
+    def tabela(df: pd.DataFrame):
+        if df is None or df.empty:
+            doc.add_paragraph("(sem registros)")
+            return
+        t = doc.add_table(rows=1, cols=len(df.columns))
+        t.style = "Light Grid Accent 1"
+        for i, c in enumerate(df.columns):
+            t.rows[0].cells[i].text = str(c)
+        for _, r in df.iterrows():
+            cells = t.add_row().cells
+            for i, c in enumerate(df.columns):
+                cells[i].text = str(r[c])
+        for row in t.rows:
+            for c in row.cells:
+                for p_ in c.paragraphs:
+                    for run in p_.runs:
+                        run.font.size = Pt(8.5)
+        doc.add_paragraph()
+
+    p_ = doc.add_paragraph()
+    p_.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_ = p_.add_run(proj["nome_negocio"])
+    r_.bold, r_.font.size = True, Pt(26)
+    r_.font.color.rgb = RGBColor(0x1C, 0x31, 0x50)
+    p_ = doc.add_paragraph("Plano de Negócio e Análise de Viabilidade Econômico-Financeira")
+    p_.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for linha in [proj["cidade_uf"], proj.get("turma", ""), proj.get("autores", ""), proj.get("professor", ""),
+                  proj.get("data_entrega", "") or date.today().strftime("%d/%m/%Y")]:
+        if linha:
+            q = doc.add_paragraph(str(linha))
+            q.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_page_break()
+
+    doc.add_heading("Sumário executivo", 1)
+    for par in str(proj.get("sumario_executivo") or gerar_sumario(proj, d, res)).split("\n"):
+        doc.add_paragraph(par)
+    doc.add_heading("1. Análise de mercado", 1)
+    doc.add_heading("1.1 Segmentos de clientes", 2)
+    seg = d["segmentos"]
+    if not seg.empty:
+        tabela(seg.assign(Média=seg.iloc[:, 2:7].mean(axis=1).round(1))[["nome", "descricao", "Média"]]
+               .rename(columns={"nome": "Segmento", "descricao": "Descrição"}))
+    doc.add_heading("1.2 Personas", 2)
+    for _, p in d["personas"].iterrows():
+        doc.add_paragraph(f"{p['nome']}, {int(p['idade'])} anos, {p['profissao']}", style="List Bullet")
+        doc.add_paragraph(f"{p['descricao']} Ganhos: {p['ganhos']} Dores: {p['desafios']}")
+    mk = mercado(proj, res)
+    if mk["preenchido"]:
+        doc.add_heading("1.3 Tamanho do mercado", 2)
+        doc.add_paragraph(f"TAM: {num_br(mk['tam_c'], 0)} clientes ({brl(mk['tam'])}/ano). SAM: {num_br(mk['sam_c'], 0)} clientes "
+                          f"({brl(mk['sam'])}/ano). SOM: {num_br(mk['som_c'], 0)} clientes ({brl(mk['som'])}/ano). "
+                          f"Fontes: {proj.get('mercado_fontes', '')}")
+    doc.add_heading("1.4 Concorrência", 2)
+    if piv_conc is not None and not piv_conc.empty:
+        tabela(piv_conc.round(1))
+    doc.add_heading("2. Proposta de valor", 1)
+    props = d.get("propostas")
+    if props is not None:
+        for _, pr in props.iterrows():
+            doc.add_paragraph(f"{proj['nome_negocio']} ajuda {pr['persona_nome']}, que deseja {pr['que_desejam']}, por meio de "
+                              f"{pr['por_meio']}. Diferentemente de {pr['diferentemente']}, oferecemos {pr['oferecem']}.")
+    doc.add_heading("3. Análise estratégica (SWOT)", 1)
+    sw = d["swot"]
+    tabela(sw[["ambiente", "natureza", "fator", "impacto", "plano_acao"]].rename(columns={
+        "ambiente": "Ambiente", "natureza": "Classificação", "fator": "Fator", "impacto": "Impacto", "plano_acao": "Ação"}))
+    diag = pontuacao_swot(sw)
+    if diag["predominante"]:
+        doc.add_paragraph(f"Estratégia predominante: {QUADRANTES[diag['predominante']][0]}. {QUADRANTES[diag['predominante']][2]}")
+    doc.add_heading("4. Plano de marketing", 1)
+    for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
+        doc.add_paragraph(f"{rot}: {proj.get(k, '')}")
+    doc.add_heading("5. Plano operacional", 1)
+    for rot, k in [("Localização", "loc_endereco"), ("Justificativa", "loc_justificativa"), ("Layout", "op_layout"),
+                   ("Processos", "op_processos"), ("Horário", "op_horario")]:
+        if proj.get(k):
+            doc.add_paragraph(f"{rot}: {proj[k]}")
+    doc.add_heading("6. Plano financeiro", 1)
+    doc.add_heading("6.1 Investimento total", 2)
+    it = res["investimento_total"]
+    tabela(pd.DataFrame({"Item": ["Investimentos fixos", "Pré-operacionais", "Estoque inicial", "Capital de giro", "Total"],
+                         "Valor": [brl(x) for x in (res["inv_fixo"], res["inv_pre"], res["inv_estoque"], res["capital_giro"], it)]}))
+    doc.add_heading("6.2 Demonstração do resultado", 2)
+    tabela(tabela_dre(res))
+    doc.add_heading("6.3 Indicadores de viabilidade", 2)
+    sem = semaforo(res)
+    tabela(pd.DataFrame({"Indicador": [s["Indicador"] for s in sem], "Valor": [s["Valor"] for s in sem],
+                         "Leitura": [s["Leitura"] for s in sem]}))
+    imgs = graficos_png(composicoes(res, d))
+    if imgs:
+        doc.add_heading("6.4 Gráficos", 2)
+        for tit, png in imgs:
+            doc.add_picture(io.BytesIO(png), width=Cm(14))
+            doc.add_paragraph(f"Figura - {tit}. Fonte: elaborado pelos autores com o PNBOX Acadêmico.").runs[0].italic = True
+    doc.add_heading("7. Conclusão", 1)
+    doc.add_paragraph(str(proj.get("conclusao") or "Escreva aqui a conclusão do grupo sobre a viabilidade do negócio."))
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+# ------------------------------------------------------------------------------
+# 6. MODO PROFESSOR: AVALIAÇÃO DE VÁRIOS PROJETOS
+# ------------------------------------------------------------------------------
+RUBRICA_PADRAO = [
+    ("Cliente e mercado (segmentos, personas, jornada, TAM/SAM/SOM)", 20),
+    ("Proposta de valor, concorrência e estratégia (SWOT)", 20),
+    ("Marketing e plano operacional", 15),
+    ("Plano financeiro completo e consistente", 25),
+    ("Viabilidade e interpretação dos indicadores", 10),
+    ("Sumário executivo e conclusão", 10),
+]
+GRUPOS_RUBRICA = [
+    ["segmentos", "personas", "jornada", "mercado"],
+    ["proposta", "concorrencia", "forcas", "oportunidades", "swot"],
+    ["marketing", "canais", "operacional", "fornecedores"],
+    ["investimentos", "produtos", "custos"],
+    None,
+    ["sumario"],
+]
+
+
+def carregar_projeto_arquivo(caminho) -> tuple:
+    conn = conectar(caminho)
+    proj = ler_unica(conn, "projeto")
+    d = {t: ler(conn, t) for t in SCHEMA if t not in ("projeto", "proposta_valor")}
+    d["proposta_valor"] = ler_unica(conn, "proposta_valor")
+    conn.close()
+    return proj, d
+
+
+def avaliar(proj: dict, d: dict, rubrica=RUBRICA_PADRAO) -> dict:
+    res = executar_motor(proj, d)
+    chk = tabela_checagens_v5(res, d, proj)
+    sem = semaforo(res)
+    comp = completude_de(proj, d)
+    rx = raio_x(res, chk, comp, sem)
+    regras = regras_situacao(proj, d)
+
+    def frac(chaves):
+        v = [1 if regras[k][0] else (0.5 if regras[k][1] else 0) for k in chaves]
+        return sum(v) / len(v)
+
+    ok_chk = float((chk["Situação"] == "OK").mean()) if len(chk) else 0
+    verdes = sum(1 for s in sem if s["Status"] == "🟢") / max(len(sem), 1)
+    notas = []
+    for (crit, peso), grupo in zip(rubrica, GRUPOS_RUBRICA + [None] * max(0, len(rubrica) - len(GRUPOS_RUBRICA))):
+        if grupo is None and "consistente" in crit.lower():
+            f = 0.5 * frac(["investimentos", "produtos", "custos"]) + 0.5 * ok_chk
+        elif grupo is None:
+            f = 0.5 * verdes + 0.5 * (1 if len(str(proj.get("conclusao", ""))) > 150 else 0.3)
+        else:
+            f = frac(grupo)
+            if "consistente" in crit.lower():
+                f = 0.5 * f + 0.5 * ok_chk
+            if grupo == ["sumario"]:
+                f = 0.6 * f + 0.4 * (1 if len(str(proj.get("conclusao", ""))) > 150 else 0)
+        notas.append(round(peso * f, 1))
+    a1 = res["anos"][1]
+    return {"Projeto": proj["nome_negocio"], "Integrantes": str(proj.get("autores", "")).replace("\n", "; "),
+            "Turma": proj.get("turma", ""), "Preenchimento": comp, "Checagens OK": ok_chk, "Raio-X": rx["nota"],
+            "Investimento": res["investimento_total"], "Receita Ano 1": a1["rec_bruta"], "Lucro Ano 1": a1["resultado"],
+            "VPL": res["vpl"], "TIR": res["tir"], "Payback desc. (meses)": res["payback_desc"],
+            "Pendências": "; ".join(chk.loc[chk["Situação"] != "OK", "Teste"]), "notas": notas,
+            "Nota sugerida": round(sum(notas), 1), "res": res}
+
+
+def ficha_avaliacao_pdf(avaliacoes: list, rubrica=RUBRICA_PADRAO, professor="", disciplina="") -> bytes:
+    pdf = Relatorio("Fichas de avaliação")
+    pdf.alias_nb_pages()
+    for av in avaliacoes:
+        pdf.add_page()
+        pdf.n_secao = 0
+        pdf.fonte("B", 15)
+        pdf.set_text_color(*AZUL)
+        pdf.cell(0, 9, pdf.t("FICHA DE AVALIAÇÃO DE PLANO DE NEGÓCIO"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+        pdf.fonte("", 9)
+        pdf.cell(0, 5, pdf.t(f"{disciplina}  ·  Professor(a): {professor}"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(3)
+        pdf.campo("Projeto", av["Projeto"])
+        pdf.campo("Integrantes", av["Integrantes"])
+        pdf.campo("Turma", av["Turma"])
+        pdf.campo("Indicadores", f"Investimento {brl(av['Investimento'])} · Receita Ano 1 {brl(av['Receita Ano 1'])} · "
+                                 f"Lucro Ano 1 {brl(av['Lucro Ano 1'])} · VPL {brl(av['VPL'])} · "
+                                 f"TIR {pct(av['TIR']) if av['TIR'] is not None else 'n.a.'}")
+        pdf.campo("Preenchimento / checagens", f"{pct(av['Preenchimento'], 0)} preenchido · {pct(av['Checagens OK'], 0)} das checagens OK · "
+                                               f"Raio-X {av['Raio-X']}/100")
+        if av["Pendências"]:
+            pdf.campo("Pendências apontadas pelo programa", av["Pendências"])
+        pdf.ln(2)
+        notas_fin = av.get("notas_finais") or av["notas"]
+        tab = pd.DataFrame({"Critério": [c for c, _ in rubrica], "Peso": [num_br(p, 0) for _, p in rubrica],
+                            "Nota sugerida": [num_br(n, 1) for n in av["notas"]],
+                            "Nota da banca": [num_br(n, 1) if av.get("notas_finais") else "" for n in notas_fin]})
+        tab.loc[len(tab)] = ["TOTAL", num_br(sum(p for _, p in rubrica), 0), num_br(sum(av["notas"]), 1),
+                             num_br(sum(notas_fin), 1) if av.get("notas_finais") else ""]
+        pdf.tabela(tab, larguras=(110, 15, 27, 28), alinhar=("LEFT", "CENTER", "CENTER", "CENTER"), destaque_total=True)
+        pdf.subtitulo("Comentários da banca")
+        y = pdf.get_y() + 2
+        for i in range(8):
+            pdf.line(pdf.l_margin, y + i * 8, pdf.w - pdf.r_margin, y + i * 8)
+        pdf.set_y(y + 70)
+        pdf.cell(0, 6, pdf.t("Assinatura: ____________________________________    Data: ____/____/______"),
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    return bytes(pdf.output())
+
+# ##############################################################################
+# PARTE: pnbox_ui_base.py
 # ##############################################################################
 # ==============================================================================
-# PNBOX ACADÊMICO - INTERFACE (Streamlit)
+# PNBOX ACADÊMICO - INTERFACE: BASE (configuração, projetos, navegação, salvamento)
 # ==============================================================================
 
 
 
 
 
-
-st.set_page_config(page_title="PNBOX Acadêmico - Plano de Negócio", page_icon="📊", layout="wide")
-
+st.set_page_config(page_title="PNBOX Acadêmico - Plano de Negócio", page_icon="📊", layout="wide",
+                   initial_sidebar_state="expanded")
+ss = st.session_state
+VERSAO_PROGRAMA = "5.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
-# o programa termina sozinho (só quando aberto pelo próprio arquivo / .bat).
+# o programa termina sozinho (só quando aberto pelo próprio arquivo / .bat / .exe).
 # ------------------------------------------------------------------------------
-TEMPO_ESPERA_FECHAR = 15  # segundos sem nenhuma aba aberta (dá tempo de recarregar a página)
+TEMPO_ESPERA_FECHAR = 15
 
 
 @st.cache_resource
@@ -1928,11 +3310,9 @@ _vigia_de_encerramento()
 # ------------------------------------------------------------------------------
 # ONDE O PROGRAMA ESTÁ RODANDO E QUAL VERSÃO ABRIR
 # ------------------------------------------------------------------------------
-
-ss = st.session_state
 APP_DIR = Path(__file__).resolve().parent
-# Modo web: no navegador (stlite/GitHub Pages) ou no Streamlit Community Cloud
-MODO_WEB = sys.platform == "emscripten" or Path("/mount/src").exists() or os.environ.get("PNBOX_WEB") == "1"
+NAVEGADOR = sys.platform == "emscripten"                      # GitHub Pages (stlite)
+MODO_WEB = NAVEGADOR or Path("/mount/src").exists() or os.environ.get("PNBOX_WEB") == "1"
 
 
 def _versao_inicial() -> str:
@@ -1955,11 +3335,10 @@ def _versao_inicial() -> str:
 
 VERSAO = _versao_inicial()
 
-if sys.platform == "emscripten":
-    # Navegador (GitHub Pages): pasta guardada no próprio navegador (IndexedDB) deste computador
+if NAVEGADOR:
+    # Pasta guardada no próprio navegador (IndexedDB): sobrevive a atualizações do programa
     PASTA = Path("/home/pyodide/pnbox")
 elif MODO_WEB:
-    # Cada visitante tem sua própria pasta temporária (um aluno não vê o projeto do outro)
     if "sessao_web" not in ss:
         try:
             from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -1969,19 +3348,179 @@ elif MODO_WEB:
             ss.sessao_web = uuid.uuid4().hex
     PASTA = Path(tempfile.gettempdir()) / "pnbox" / ss.sessao_web
 elif (APP_DIR / "instalado.txt").exists():
-    # Versão instalada pelo .exe: projetos em Documentos\PNBOX
     PASTA = Path.home() / "Documents" / "PNBOX"
 else:
     PASTA = APP_DIR / "projetos"
 PASTA.mkdir(parents=True, exist_ok=True)
-ss.setdefault("ver", {})
 
-UNIDADES = ["kg", "g", "L", "ml", "unidade", "dúzia", "pacote", "maço", "caixa", "kit", "galão", "lata", "par", "m", "hora"]
-DIMENSOES = ["Pessoas", "Marketing", "Finanças", "Operação", "Político-Legal", "Econômico", "Social",
-             "Tecnológico", "Ambiental", "Demográfico"]
-CATEG_MATERIAIS = ["Matéria-prima", "Embalagem", "Limpeza e higiene", "Material de consumo", "Outros insumos"]
-ETAPAS = ["Descoberta", "Consideração", "Decisão", "Compra e Pagamento", "Entrega", "Uso",
-          "Avaliação", "Suporte", "Lealdade e advocacia"]
+for k, v in {"ver": {}, "buf": {}, "snap": {}, "hash": {}, "pagina": "inicio", "gen": 0,
+             "alerta": None, "ultimo_salvo": None, "tema": "claro"}.items():
+    ss.setdefault(k, v)
+
+# ------------------------------------------------------------------------------
+# LISTAS PADRÃO (o aluno pode acrescentar outras em Configurações)
+# ------------------------------------------------------------------------------
+LISTAS_PADRAO = {
+    "unidade": ["kg", "g", "L", "ml", "unidade", "dúzia", "pacote", "maço", "caixa", "kit", "galão",
+                "lata", "par", "m", "m²", "hora", "serviço"],
+    "categoria_material": ["Matéria-prima", "Embalagem", "Limpeza e higiene", "Material de consumo",
+                           "Mercadoria para revenda", "Outros insumos"],
+    "dimensao_interna": ["Pessoas", "Marketing", "Finanças", "Operação", "Tecnologia", "Gestão"],
+    "dimensao_externa": ["Político-Legal", "Econômico", "Social", "Tecnológico", "Ambiental",
+                         "Demográfico", "Concorrencial"],
+    "valor_proposta": ["Conforto e conveniência", "Economia de dinheiro", "Economia de tempo", "Esforço reduzido",
+                       "Rapidez", "Segurança", "Variedade", "Personalização", "Qualidade", "Design e estética",
+                       "Durabilidade", "Bem-estar", "Status", "Exclusividade", "Comunidade e pertencimento",
+                       "Realização pessoal", "Sustentabilidade", "Confiança", "Desempenho", "Simplicidade",
+                       "Aprendizado e autodesenvolvimento", "Integração de produtos"],
+    "area_pessoal": ["Produção / operação", "Administrativo", "Comercial / vendas"],
+    "classe_custo_fixo": ["Custo indireto de produção", "Despesa administrativa", "Despesa comercial",
+                          "Despesa financeira"],
+    "setor": ["Comércio", "Serviço", "Indústria", "Agronegócio", "Alimentos e bebidas", "Bares e restaurantes",
+              "Varejo", "Moda", "Saúde e bem-estar", "Tecnologia", "Educação", "Turismo", "Beleza e estética"],
+    "canal": ["Marketing de Conteúdo", "Publicidade em Redes Sociais", "Marketing Viral", "Comunidade",
+              "Plataformas Existentes", "Acordos e Parcerias", "Eventos", "Indicação (boca a boca)",
+              "Vendas Diretas", "E-mail e WhatsApp"],
+}
+NOMES_LISTAS = {
+    "unidade": "Unidades de medida", "categoria_material": "Categorias de materiais",
+    "dimensao_interna": "Dimensões internas (forças e fraquezas)",
+    "dimensao_externa": "Dimensões externas (oportunidades e ameaças)",
+    "valor_proposta": "Valores da proposta de valor", "area_pessoal": "Áreas da mão de obra",
+    "classe_custo_fixo": "Classificação dos custos fixos", "setor": "Setores de atuação",
+    "canal": "Canais de aquisição",
+}
+ETAPAS_FASE = {
+    "Antes": ["Descoberta", "Consideração", "Decisão"],
+    "Durante": ["Compra e Pagamento", "Entrega", "Uso"],
+    "Depois": ["Avaliação", "Suporte", "Lealdade e advocacia"],
+}
+ETAPAS = [e for v in ETAPAS_FASE.values() for e in v]
+EMOCOES = {"Entusiasmado": "🤩", "Satisfeito": "🙂", "Neutro": "😐", "Insatisfeito": "🙁", "Frustrado": "😠"}
+
+# ------------------------------------------------------------------------------
+# PÁGINAS (ferramentas) DO PLANO
+# ------------------------------------------------------------------------------
+PAGINAS = [
+    ("projeto", "Identificação", "🏢", "Informações e sócios",
+     "Dados do negócio, integrantes do grupo, premissas financeiras e quadro societário."),
+    ("segmentos", "Cliente e mercado", "🎯", "Segmentação de mercado",
+     "Liste os grupos de clientes possíveis e dê notas para descobrir qual atender primeiro."),
+    ("personas", "Cliente e mercado", "🧑", "Gerador de personas",
+     "Crie personagens que representam o cliente ideal: dados, características, rotina e insights."),
+    ("jornada", "Cliente e mercado", "🧭", "Jornada do cliente",
+     "Descreva o que a persona faz, pensa e sente antes, durante e depois da compra."),
+    ("mercado", "Cliente e mercado", "📐", "Tamanho do mercado",
+     "Estime o mercado total (TAM), o alcançável (SAM) e o conquistável (SOM) e confira se a meta de vendas é realista."),
+    ("proposta", "Problema e solução", "❤️", "Proposta de valor",
+     "Defina, para cada persona, os benefícios que o negócio entrega e o que o diferencia."),
+    ("concorrencia", "Problema e solução", "🔍", "Análise da concorrência",
+     "Compare o seu negócio com os concorrentes em notas de 0 a 10 por atributo."),
+    ("forcas", "Estratégia", "💪", "Forças e fraquezas",
+     "Fatores internos: o que o negócio faz bem e o que precisa melhorar."),
+    ("oportunidades", "Estratégia", "💡", "Oportunidades e ameaças",
+     "Fatores externos: tendências que ajudam e riscos que vêm do ambiente."),
+    ("swot", "Estratégia", "🧩", "Análise SWOT",
+     "Matriz SWOT gerada automaticamente e a estratégia indicada para o negócio."),
+    ("marketing", "Marketing e operação", "📣", "Plano de marketing (4Ps)",
+     "Produto, preço, praça e promoção: como o negócio vai chegar ao cliente."),
+    ("canais", "Marketing e operação", "🛒", "Canais e funil de vendas",
+     "Avalie os canais de aquisição e acompanhe a conversão do funil."),
+    ("operacional", "Marketing e operação", "🏭", "Plano operacional",
+     "Localização, layout, processos, capacidade produtiva e organograma."),
+    ("fornecedores", "Marketing e operação", "🚚", "Fornecedores",
+     "Quem fornece cada item, prazos de pagamento e de entrega."),
+    ("investimentos", "Finanças", "💰", "Investimentos e fontes",
+     "Investimentos fixos, pré-operacionais, capital de giro e de onde vem o dinheiro."),
+    ("produtos", "Finanças", "📦", "Produtos e materiais",
+     "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
+    ("custos", "Finanças", "🧾", "Custos e despesas",
+     "Custos variáveis, mão de obra (produção e administrativa) e custos fixos classificados."),
+    ("preco", "Finanças", "🏷️", "Formação de preço",
+     "Custeio variável e por absorção, preço sugerido pelo markup e ponto de equilíbrio por produto."),
+    ("dre", "Finanças", "📄", "DRE e projeções",
+     "Demonstração do resultado dos Anos 1 a 3 e a projeção mês a mês."),
+    ("fluxo", "Finanças", "💵", "Fluxo de caixa mensal",
+     "Entradas e saídas de dinheiro em cada mês do Ano 1."),
+    ("indicadores", "Finanças", "📊", "Indicadores financeiros",
+     "Semáforo de saúde, VPL, TIR, payback, pontos de equilíbrio e checagens."),
+    ("graficos", "Finanças", "📈", "Gráficos",
+     "Composição do investimento, dos custos e da receita, ponto de equilíbrio e payback."),
+    ("simulador", "Ferramentas complementares", "🎚️", "Simulador de resultados",
+     "Cenários otimista e pessimista, simulador “e se?” e análise de sensibilidade."),
+    ("experimentos", "Ferramentas complementares", "🧪", "Quadro de experimentação",
+     "Hipóteses e testes para validar a ideia antes de investir."),
+    ("riscos", "Ferramentas complementares", "⚠️", "Riscos e contingência",
+     "Mapa de riscos (probabilidade x impacto) e o que fazer em cada caso."),
+    ("cronograma", "Ferramentas complementares", "🗓️", "Cronograma de implantação",
+     "O que precisa ser feito antes de abrir as portas, e quando."),
+    ("realizado", "Ferramentas complementares", "📏", "Orçado x realizado",
+     "Depois de abrir, lance os números reais e compare com o planejado."),
+    ("ia", "Ferramentas complementares", "🤖", "Analisar com IA",
+     "Monte o texto pronto para colar no ChatGPT, Gemini ou Claude e receber análises e estratégias."),
+    ("sumario", "Conclusão e entrega", "📝", "Sumário executivo",
+     "Resumo do plano gerado automaticamente, para revisar e completar."),
+    ("apresentacao", "Conclusão e entrega", "🎤", "Modo apresentação",
+     "Telas grandes com os principais números para apresentar o plano."),
+    ("relatorio", "Conclusão e entrega", "📤", "Relatório e exportação",
+     "PDF completo, pitch deck, Word, Excel e arquivo do projeto."),
+    ("professor", "Conclusão e entrega", "🎓", "Modo professor",
+     "Compare os projetos da turma, aplique a rubrica e gere fichas de avaliação."),
+    ("config", "Conclusão e entrega", "⚙️", "Configurações e listas",
+     "Listas personalizadas (unidades, categorias...), versões salvas e dados deste computador."),
+]
+PAG = {p[0]: p for p in PAGINAS}
+GRUPOS = list(dict.fromkeys(p[1] for p in PAGINAS))
+
+
+def ir(pagina: str, alerta: str | None = None):
+    ss.pagina = pagina
+    ss.alerta = (pagina, alerta) if alerta else None
+
+
+# ------------------------------------------------------------------------------
+# TEMA (CLARO / ESCURO) E ESTILO VISUAL
+# ------------------------------------------------------------------------------
+def aplicar_tema():
+    base = "dark" if ss.tema == "escuro" else "light"
+    try:
+        if st.get_option("theme.base") != base:
+            st._config.set_option("theme.base", base)
+    except Exception:
+        pass
+    escuro = ss.tema == "escuro"
+    fundo_card = "linear-gradient(135deg,#1f4f8f 0%,#2f6fd0 100%)" if not escuro else \
+        "linear-gradient(135deg,#1b2d4f 0%,#24467d 100%)"
+    css_escuro = """
+      .stApp, [data-testid="stHeader"] {background-color:#0f1724 !important; color:#e6e9ef !important;}
+      [data-testid="stSidebar"] {background-color:#151f30 !important;}
+      .stApp p, .stApp span, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4,
+      .stApp div[data-testid="stMarkdownContainer"] {color:#e6e9ef;}
+      [data-testid="stMetricValue"] {color:#ffffff !important;}
+      .pn-card-info {background:#1a2638 !important; border-color:#2b3a52 !important;}
+    """ if escuro else ""
+    st.markdown(f"""
+    <style>
+      [class*="st-key-card_"] button {{
+        min-height: 128px; width: 100%; border-radius: 16px; border: 0;
+        background: {fundo_card}; color: #fff; box-shadow: 0 4px 14px rgba(20,40,80,.18);
+        transition: transform .12s ease, box-shadow .12s ease; white-space: pre-line;
+      }}
+      [class*="st-key-card_"] button:hover {{ transform: translateY(-3px); box-shadow: 0 8px 22px rgba(20,40,80,.28);
+        color:#fff; border:0; }}
+      [class*="st-key-card_"] button p {{ font-size: 1.02rem; font-weight: 600; line-height: 1.35; color:#fff; }}
+      [class*="st-key-nav_"] button {{ justify-content: flex-start; text-align: left; padding: .25rem .6rem;
+        min-height: 2rem; }}
+      [class*="st-key-voltar"] button {{ font-weight: 600; }}
+      .pn-grupo {{ font-size: 1.15rem; font-weight: 700; margin: 1.2rem 0 .4rem 0; }}
+      .pn-card-info {{ border: 1px solid #dfe5ee; border-radius: 12px; padding: 14px 16px; background: #f7f9fc; }}
+      .pn-face {{ font-size: 1.8rem; line-height: 1; }}
+      .pn-etapa {{ border-left: 4px solid #2f6fd0; padding: 6px 12px; margin: 8px 0; }}
+      {css_escuro}
+    </style>""", unsafe_allow_html=True)
+
+
+aplicar_tema()
 
 
 # ------------------------------------------------------------------------------
@@ -1999,8 +3538,17 @@ def caminho_livre(nome: str) -> Path:
     return p
 
 
+def trocar_projeto(caminho):
+    ss.db = str(caminho)
+    ss.gen += 1
+    for k in ("buf", "snap", "hash"):
+        ss[k] = {}
+    ss.pagina = "inicio"
+    ss.alerta = None
+
+
 if not listar_projetos():
-    antigo = PASTA.parent / "plano_negocio_completo.pnbox"
+    antigo = APP_DIR / "plano_negocio_completo.pnbox"
     if antigo.exists():
         shutil.copy(antigo, PASTA / "Projeto da versão anterior.pnbox")
     if VERSAO == "branco":
@@ -2010,82 +3558,63 @@ if not listar_projetos():
 
 projetos = listar_projetos()
 if "db" not in ss or not Path(ss.db).exists():
-    ss.db = str(projetos[0])
-
-with st.sidebar:
-    st.header("📁 Projetos")
-    nomes = [p.stem for p in projetos]
-    atual = Path(ss.db).stem
-    escolha = st.selectbox("Projeto ativo", nomes, index=nomes.index(atual) if atual in nomes else 0)
-    if escolha != atual:
-        ss.db = str(PASTA / f"{escolha}.pnbox")
-        st.rerun()
-
-    with st.expander("➕ Novo projeto", expanded=False):
-        novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")
-        tipo = st.radio("Começar a partir de", ["Em branco (do zero)", "Modelo FitBox (exemplo preenchido)",
-                                                "Cópia do projeto atual"])
-        if st.button("Criar projeto", type="primary", width="stretch"):
-            if not novo_nome.strip():
-                st.error("Informe um nome.")
-            else:
-                destino = caminho_livre(novo_nome)
-                if tipo.startswith("Em branco"):
-                    criar_projeto_em_branco(destino, novo_nome.strip())
-                elif tipo.startswith("Modelo"):
-                    criar_projeto_modelo(destino)
-                else:
-                    shutil.copy(ss.db, destino)
-                c = conectar(destino)
-                salvar_unica(c, "projeto", {"nome_negocio": novo_nome.strip()})
-                c.close()
-                ss.db = str(destino)
-                st.rerun()
-
-    with st.expander("📂 Abrir arquivo .pnbox"):
-        arq = st.file_uploader("Selecione um arquivo .pnbox", type=["pnbox"])
-        if arq is not None and st.button("Importar", width="stretch"):
-            dados = arq.getvalue()
-            if not dados.startswith(b"SQLite format 3"):
-                st.error("Arquivo inválido: não é um projeto .pnbox.")
-            else:
-                destino = caminho_livre(Path(arq.name).stem)
-                destino.write_bytes(dados)
-                conectar(destino).close()   # atualiza a estrutura, se for de versão antiga
-                ss.db = str(destino)
-                st.rerun()
-
-    with st.expander("🗑️ Excluir projeto atual"):
-        confirma = st.checkbox(f"Confirmo a exclusão de “{atual}”")
-        if st.button("Excluir", disabled=not confirma, width="stretch"):
-            Path(ss.db).unlink(missing_ok=True)
-            ss.pop("db")
-            st.rerun()
-
-    if MODO_WEB:
-        st.warning("**Versão on-line:** o projeto fica só nesta aba do navegador. Ao terminar, use "
-                   "**🗄️ Baixar arquivo do projeto (.pnbox)** na aba Relatório. Para continuar depois, "
-                   "abra o arquivo em **📂 Abrir arquivo .pnbox**.")
-    else:
-        st.caption(f"Arquivos salvos em:\n`{PASTA}`")
-    st.divider()
-    if not MODO_WEB and st.button("⏻ Encerrar o programa", width="stretch"):
-        st.success("Programa encerrado. Pode fechar esta aba.")
-        threading.Timer(1.0, lambda: os._exit(0)).start()
-        st.stop()
-
+    trocar_projeto(projetos[0])
 
 # ------------------------------------------------------------------------------
-# CARREGAMENTO DOS DADOS
+# CARREGAMENTO DOS DADOS DO PROJETO ATIVO
 # ------------------------------------------------------------------------------
 conn = conectar(Path(ss.db))
 proj = ler_unica(conn, "projeto")
 d = {t: ler(conn, t) for t in SCHEMA if t not in ("projeto", "proposta_valor")}
 d["proposta_valor"] = ler_unica(conn, "proposta_valor")
-PID = Path(ss.db).stem
+PID = f"{Path(ss.db).stem}_{ss.gen}"
 
 
-ss.setdefault("buf", {})
+def opcoes(tipo: str, extras=()) -> list:
+    """Lista padrão + itens personalizados do projeto + valores já usados nos dados."""
+    pers = d["listas"].loc[d["listas"]["tipo"] == tipo, "valor"].tolist() if "listas" in d else []
+    out = []
+    for v in list(LISTAS_PADRAO.get(tipo, [])) + pers + [x for x in extras if x]:
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
+def marcar_salvo():
+    ss.ultimo_salvo = datetime.now().strftime("%H:%M:%S")
+
+
+# ------------------------------------------------------------------------------
+# MOTOR FINANCEIRO SOB DEMANDA
+# ------------------------------------------------------------------------------
+_CACHE = {}
+
+
+def R() -> dict:
+    """Resultado do motor com os dados atuais (recalcula quando algo muda)."""
+    if "res" not in _CACHE:
+        _CACHE["res"] = executar_motor(proj, d)
+    return _CACHE["res"]
+
+
+def invalidar():
+    _CACHE.clear()
+
+
+def CHK():
+    if "chk" not in _CACHE:
+        _CACHE["chk"] = tabela_checagens_v5(R(), d, proj)
+    return _CACHE["chk"]
+
+
+# ------------------------------------------------------------------------------
+# TABELAS EDITÁVEIS COM SALVAMENTO AUTOMÁTICO
+# ------------------------------------------------------------------------------
+def _h(df: pd.DataFrame) -> str:
+    try:
+        return hashlib.md5(df.to_csv(index=False).encode("utf-8")).hexdigest()
+    except Exception:
+        return ""
 
 
 def chave(tabela, extra=""):
@@ -2096,54 +3625,112 @@ def _nova_versao(tabela, extra=""):
     ss.ver[(PID, tabela, extra)] = ss.ver.get((PID, tabela, extra), 0) + 1
 
 
-def gravar(tabela, df, campo_chave, extra=""):
-    salvar(conn, tabela, df, campo_chave)
-    ss.buf.pop((PID, tabela, extra), None)
-    _nova_versao(tabela, extra)
-    st.toast("Dados salvos!", icon="✅")
-    st.rerun()
-
-
-def tabela_editavel(df_base, config, tabela, extra="", normalizar=None, altura=None):
+def tabela_editavel(df_base, config, tabela, extra="", normalizar=None, salvar_fn=None, altura=None,
+                    adicionar=True):
     """
-    Mostra uma tabela editável com os botões "Adicionar linha" e "Apagar linhas marcadas".
-    As alterações ficam guardadas na sessão até o usuário clicar em Salvar.
-    Devolve (dados_editados, coluna_onde_vai_o_botao_salvar).
+    Tabela editável com botões "Adicionar linha" e "Apagar marcadas" e SALVAMENTO AUTOMÁTICO:
+    toda alteração válida é gravada no projeto na hora, sem precisar clicar em Salvar.
     """
     kb = (PID, tabela, extra)
     normalizar = normalizar or (lambda x: x)
-    base = ss.buf.get(kb, df_base).copy().reset_index(drop=True)
+    wkey = chave(tabela, extra)
+    if wkey not in ss.snap:
+        ss.snap[wkey] = normalizar(ss.buf.get(kb, df_base).copy().reset_index(drop=True))
+        ss.hash.setdefault(kb, _h(normalizar(df_base.copy().reset_index(drop=True))))
+    base = ss.snap[wkey].copy()
     base.insert(0, "Excluir", False)
     cfg = {"Excluir": st.column_config.CheckboxColumn("🗑️", help="Marque as linhas que deseja apagar", width="small")}
     cfg.update(config)
-    ed = st.data_editor(base, num_rows="dynamic", width="stretch", hide_index=True, column_config=cfg,
-                        key=chave(tabela, extra), **({"height": altura} if altura else {}))
+    ed = st.data_editor(base, num_rows="dynamic" if adicionar else "fixed", width="stretch", hide_index=True,
+                        column_config=cfg, key=wkey, **({"height": altura} if altura else {}))
     marcadas = ed["Excluir"].fillna(False).astype(bool)
     dados = normalizar(ed.drop(columns="Excluir"))
-    b1, b2, b3, _ = st.columns([1.1, 1.4, 1.4, 2])
-    if b1.button("➕ Adicionar linha", key="add_" + chave(tabela, extra), width="stretch"):
+
+    def _gravar(df_novo):
+        if salvar_fn:
+            salvar_fn(df_novo)
+        ss.hash[kb] = _h(df_novo)
+        marcar_salvo()
+
+    # Salvamento automático
+    if _h(dados) != ss.hash.get(kb):
+        _gravar(dados)
+        invalidar()
+
+    b1, b2, b3 = st.columns([1.2, 1.6, 3])
+    if adicionar and b1.button("➕ Adicionar linha", key="add_" + wkey, width="stretch"):
         vazia = normalizar(pd.DataFrame([{c: None for c in dados.columns}]))
         ss.buf[kb] = pd.concat([normalizar(ed[~marcadas].drop(columns="Excluir")), vazia], ignore_index=True)
         _nova_versao(tabela, extra)
         st.rerun()
-    if b2.button(f"🗑️ Apagar marcadas ({int(marcadas.sum())})", key="del_" + chave(tabela, extra),
+    if b2.button(f"🗑️ Apagar marcadas ({int(marcadas.sum())})", key="del_" + wkey,
                  disabled=not marcadas.any(), width="stretch"):
-        ss.buf[kb] = normalizar(ed[~marcadas].drop(columns="Excluir"))
+        novo = normalizar(ed[~marcadas].drop(columns="Excluir"))
+        ss.buf[kb] = novo
+        _gravar(novo)
         _nova_versao(tabela, extra)
-        st.toast("Linhas removidas. Clique em Salvar para gravar.", icon="🗑️")
+        st.toast("Linhas apagadas.", icon="🗑️")
         st.rerun()
-    if kb in ss.buf:
-        st.caption("⚠️ Há alterações ainda não salvas nesta tabela.")
-    return dados, b3
+    b3.caption(f"💾 Salvo automaticamente{' às ' + ss.ultimo_salvo if ss.ultimo_salvo else ''}")
+    return dados
 
 
-def editor(tabela, config, campo_chave, rotulo="💾 Salvar", altura=None):
-    """Tabela editável com botões de adicionar, apagar e salvar. Devolve os dados editados."""
-    ed, col_salvar = tabela_editavel(d[tabela], config, tabela, normalizar=lambda x: limpar(x, tabela), altura=altura)
-    if col_salvar.button(rotulo, key="bt_" + chave(tabela), type="primary", width="stretch"):
-        gravar(tabela, ed, campo_chave)
-    d[tabela] = ed
+def editor(tabela, config, campo_chave, altura=None, filtro=None):
+    """
+    Tabela editável ligada diretamente a uma tabela do projeto.
+    filtro={coluna: valor}: edita só as linhas daquele grupo, mantendo as demais intactas.
+    """
+    filtro = filtro or {}
+    if filtro:
+        mask = pd.Series(True, index=d[tabela].index)
+        for col, val in filtro.items():
+            mask &= d[tabela][col] == val
+        df_base = d[tabela][mask].reset_index(drop=True)
+        extra = "|".join(f"{c}={v}" for c, v in filtro.items())
+    else:
+        df_base, extra = d[tabela], ""
+
+    def norm(x):
+        x = limpar(x, tabela)
+        for col, val in filtro.items():
+            x[col] = val
+        return x
+
+    def gravar(df_novo):
+        if filtro:
+            m = pd.Series(True, index=d[tabela].index)
+            for col, val in filtro.items():
+                m &= d[tabela][col] == val
+            completo = pd.concat([d[tabela][~m], df_novo], ignore_index=True)
+        else:
+            completo = df_novo
+        salvar(conn, tabela, completo, campo_chave)
+        validos = completo[completo[campo_chave].astype(str).str.strip() != ""] if campo_chave else completo
+        d[tabela] = limpar(validos.reset_index(drop=True), tabela)
+
+    cfg = {k: v for k, v in config.items() if k not in filtro}
+    cfg.update({k: None for k in filtro})          # esconde as colunas do filtro
+    ed = tabela_editavel(df_base, cfg, tabela, extra, normalizar=norm, salvar_fn=gravar, altura=altura)
+    if not filtro:
+        d[tabela] = ed[ed[campo_chave].astype(str).str.strip() != ""].reset_index(drop=True) if campo_chave else ed
+    invalidar()
     return ed
+
+
+def auto_unica(tabela: str, novos: dict):
+    """Salva automaticamente campos de tabelas de linha única (projeto, proposta) quando mudam."""
+    atual = proj if tabela == "projeto" else d["proposta_valor"]
+    mudou = {k: v for k, v in novos.items() if str(atual.get(k, "")) != str(v)}
+    if mudou:
+        salvar_unica(conn, tabela, mudou)
+        atual.update(mudou)
+        marcar_salvo()
+        invalidar()
+
+
+def wk(nome: str) -> str:
+    """Chave de widget única por projeto (evita mostrar dados de outro projeto)."""
+    return f"{PID}_w_{nome}"
 
 
 T = st.column_config.TextColumn
@@ -2156,243 +3743,720 @@ def moeda(rot, **kw):
     return N(rot, min_value=0.0, format="R$ %.2f", **kw)
 
 
-def nota(rot):
-    return N(rot, min_value=0, max_value=10, step=1, format="%d")
+def nota(rot, maximo=10):
+    return N(rot, min_value=0, max_value=maximo, step=1, format="%d")
 
 
-st.title(f"📊 {proj['nome_negocio']}")
-st.caption("Plano de Negócio e Viabilidade Econômico-Financeira · estrutura inspirada no PNBOX/Sebrae")
+# ------------------------------------------------------------------------------
+# SITUAÇÃO DE CADA FERRAMENTA (selo nos cartões)
+# ------------------------------------------------------------------------------
+def _tem(tab, minimo=1):
+    return len(d[tab]) >= minimo
 
-abas = st.tabs([
-    "1. Projeto", "2. Segmentos e Valor", "3. Personas", "4. Jornada", "5. Concorrência",
-    "6. SWOT", "7. Canais e Funil", "8. Investimentos", "9. Produtos e Materiais",
-    "10. Custos", "11. Resultados", "12. Gráficos", "13. Relatório",
-])
 
-# ==============================================================================
-# ABA 1 - PROJETO E SÓCIOS
-# ==============================================================================
-with abas[0]:
-    st.subheader("Informações do plano")
-    with st.form("f_proj"):
-        c1, c2, c3 = st.columns(3)
-        v = {}
-        v["nome_negocio"] = c1.text_input("Nome do negócio", proj["nome_negocio"])
-        objs = ["Criar um novo negócio", "Expandir um negócio existente", "Captar recursos", "Outro"]
-        v["objetivo"] = c2.selectbox("Objetivo", objs, index=objs.index(proj["objetivo"]) if proj["objetivo"] in objs else 0)
-        v["periodo_anos"] = c3.number_input("Período de planejamento (anos)", 1, 3, int(proj["periodo_anos"] or 3))
-        regs = ["Simples Nacional", "MEI", "Lucro Presumido", "Lucro Real"]
-        v["enquadramento"] = c1.selectbox("Enquadramento tributário", regs,
-                                          index=regs.index(proj["enquadramento"]) if proj["enquadramento"] in regs else 0)
-        portes = ["MEI", "Microempresa (ME)", "Pequena Empresa (EPP)", "Médio/Grande Porte"]
-        v["porte"] = c2.selectbox("Porte", portes, index=portes.index(proj["porte"]) if proj["porte"] in portes else 1)
-        setores = ["Comércio", "Serviço", "Indústria", "Agronegócio", "Alimentos e bebidas", "Bares e restaurantes",
-                   "Varejo", "Moda", "Saúde e bem-estar", "Tecnologia", "Educação", "Turismo"]
-        atuais = [x.strip() for x in proj["setor_atuacao"].split(";") if x.strip()]
-        v["setor_atuacao"] = "; ".join(c3.multiselect("Setores de atuação", sorted(set(setores + atuais)), atuais))
-        v["cidade_uf"] = c1.text_input("Cidade / UF", proj["cidade_uf"])
-        v["contatos"] = c2.text_input("Contatos (site, redes, e-mail)", proj["contatos"])
-        v["aliquota_imposto_pct"] = c3.number_input("Impostos sobre vendas (%)", 0.0, 40.0,
-                                                    proj["aliquota_imposto_pct"], 0.1,
-                                                    help="Alíquota efetiva do Simples ou soma de PIS/COFINS/ISS/ICMS etc.")
-        st.markdown("**Premissas de projeção**")
-        p1, p2, p3, p4, p5, p6 = st.columns(6)
-        v["crescimento_mensal_ano1_pct"] = p1.number_input("Cresc. mensal Ano 1 (%)", -10.0, 30.0, proj["crescimento_mensal_ano1_pct"], 0.5)
-        v["crescimento_anual_pct"] = p2.number_input("Cresc. anual Anos 2-3 (%)", -50.0, 200.0, proj["crescimento_anual_pct"], 1.0)
-        v["inflacao_custos_anual_pct"] = p3.number_input("Inflação custos fixos (% a.a.)", 0.0, 50.0, proj["inflacao_custos_anual_pct"], 0.5)
-        v["tma_anual_pct"] = p4.number_input("TMA (% a.a.)", 0.0, 60.0, proj["tma_anual_pct"], 0.5)
-        v["pme_dias"] = p5.number_input("Prazo médio de estoques (dias)", 0.0, 365.0, proj["pme_dias"], 1.0)
-        v["reserva_caixa_extra"] = p6.number_input("Reserva financeira (R$)", 0.0, 1e8, proj["reserva_caixa_extra"], 1000.0)
-        v["recuperar_giro"] = int(st.checkbox("No cálculo do VPL, recuperar o capital de giro no último ano",
-                                              bool(proj["recuperar_giro"])))
-        if st.form_submit_button("💾 Salvar informações", type="primary"):
-            salvar_unica(conn, "projeto", v)
-            st.toast("Informações salvas!", icon="✅")
-            st.rerun()
+def situacao(p: str) -> str:
+    """✅ completo · ◐ em andamento · ○ não iniciado"""
+    sw = d["swot"]
+    regras = {
+        "projeto": (bool(proj["nome_negocio"]) and bool(proj["cidade_uf"]), _tem("socios")),
+        "segmentos": (_tem("segmentos", 2), _tem("segmentos")),
+        "personas": (_tem("personas") and bool(d["personas"]["desafios"].astype(str).str.strip().ne("").any()), _tem("personas")),
+        "jornada": (d["jornada_cliente"]["etapa"].nunique() >= 6, _tem("jornada_cliente")),
+        "mercado": (proj["tam_clientes"] > 0 and proj["sam_clientes"] > 0 and proj["som_pct"] > 0 and proj["gasto_anual_cliente"] > 0,
+                    proj["tam_clientes"] > 0 or proj["gasto_anual_cliente"] > 0),
+        "proposta": (_tem("propostas"), bool(d["proposta_valor"]["segmento_alvo"])),
+        "concorrencia": (_tem("concorrentes") and _tem("concorrencia_notas", 3), _tem("concorrencia_notas")),
+        "forcas": ((sw["natureza"] == "Força").any() and (sw["natureza"] == "Fraqueza").any(),
+                   sw["natureza"].isin(["Força", "Fraqueza"]).any()),
+        "oportunidades": ((sw["natureza"] == "Oportunidade").any() and (sw["natureza"] == "Ameaça").any(),
+                          sw["natureza"].isin(["Oportunidade", "Ameaça"]).any()),
+        "swot": (sw["natureza"].nunique() >= 4, len(sw) > 0),
+        "marketing": (all(proj[k] for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")),
+                      any(proj[k] for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao"))),
+        "canais": (_tem("canais") and _tem("funil_vendas"), _tem("canais") or _tem("funil_vendas")),
+        "operacional": (bool(proj["loc_endereco"]) and _tem("capacidade"), bool(proj["loc_endereco"]) or _tem("capacidade")),
+        "fornecedores": (_tem("fornecedores", 2), _tem("fornecedores")),
+        "investimentos": (_tem("inv_fixos") and (_tem("socios") or _tem("emprestimos")), _tem("inv_fixos")),
+        "produtos": (_tem("catalogo") and _tem("materiais"), _tem("catalogo") or _tem("materiais")),
+        "custos": (_tem("pessoal") and _tem("custos_fixos"), _tem("pessoal") or _tem("custos_fixos")),
+        "preco": (_tem("catalogo"), _tem("catalogo")),
+        "dre": (_tem("catalogo") and _tem("custos_fixos"), _tem("catalogo")),
+        "fluxo": (_tem("catalogo") and _tem("capital_giro_prazos"), _tem("catalogo")),
+        "indicadores": (_tem("catalogo") and _tem("inv_fixos"), _tem("catalogo")),
+        "graficos": (_tem("catalogo"), _tem("catalogo")),
+        "simulador": (_tem("catalogo"), _tem("catalogo")),
+        "experimentos": (_tem("experimentos"), _tem("experimentos")),
+        "riscos": (_tem("riscos", 3), _tem("riscos")),
+        "cronograma": (_tem("cronograma", 3), _tem("cronograma")),
+        "realizado": (_tem("realizado", 1), _tem("realizado")),
+        "sumario": (len(proj["sumario_executivo"]) > 200, bool(proj["sumario_executivo"])),
+    }
+    if p not in regras:
+        return ""
+    completo, iniciado = regras[p]
+    return "✅" if completo else ("◐" if iniciado else "○")
 
-    st.subheader("Sócios")
-    editor("socios", {
-        "nome": T("Nome", required=True), "funcao": T("Função"), "contato": T("Contato"),
-        "perfil": T("Minicurrículo / atribuições", width="large"),
-        "capital_integralizado": moeda("Capital investido (R$)")}, "nome")
-    st.caption(f"Capital próprio total: **{brl(d['socios']['capital_integralizado'].sum())}**")
 
-# ==============================================================================
-# ABA 2 - SEGMENTOS E PROPOSTA DE VALOR
-# ==============================================================================
-with abas[1]:
-    st.subheader("Segmentos de clientes (notas de 1 a 10)")
-    sg = editor("segmentos", {
-        "nome": T("Segmento", required=True), "descricao": T("Descrição", width="large"),
-        "nota_tamanho": nota("É grande o suficiente?"), "nota_lucro": nota("Potencial de lucro"),
-        "nota_longevidade": nota("Não tende a desaparecer?"), "nota_concorrencia": nota("Poucos concorrentes?"),
-        "nota_aderencia": nota("Oferta atende o segmento?")}, "nome")
-    if not sg.empty:
-        rk = sg.assign(Média=sg.iloc[:, 2:].mean(axis=1)).sort_values("Média", ascending=False)
-        rk.insert(0, "Prioridade", [f"{i}º" for i in range(1, len(rk) + 1)])
-        st.dataframe(rk[["Prioridade", "nome", "Média"]].rename(columns={"nome": "Segmento"}),
-                     hide_index=True, width="stretch")
+def completude() -> float:
+    sts = [situacao(p[0]) for p in PAGINAS if situacao(p[0])]
+    return sum(1 if s == "✅" else (0.5 if s == "◐" else 0) for s in sts) / max(len(sts), 1)
 
-    st.divider()
-    st.subheader("Proposta de valor")
-    pv = d["proposta_valor"]
-    with st.form("f_pv"):
-        a = st.text_input("Nossa empresa ajuda (público / persona)", pv["segmento_alvo"])
-        b = st.text_area("que desejam (benefícios funcionais, emocionais e sociais)", pv["beneficios_desejados"])
-        c = st.text_area("por meio de (produtos, serviços, canais)", pv["meios_entrega"])
-        e = st.text_area("diferentemente de (concorrentes / alternativas)", pv["diferencial_competitivo"])
-        f = st.text_area("os nossos produtos ou serviços oferecem", pv["entrega_produtos_servicos"])
-        if st.form_submit_button("💾 Salvar proposta de valor", type="primary"):
-            salvar_unica(conn, "proposta_valor", {"segmento_alvo": a, "beneficios_desejados": b, "meios_entrega": c,
-                                                  "diferencial_competitivo": e, "entrega_produtos_servicos": f})
-            st.rerun()
-    st.info(f"Nossa empresa (**{proj['nome_negocio']}**) ajuda **{pv['segmento_alvo']}** que desejam "
-            f"**{pv['beneficios_desejados']}** por meio de **{pv['meios_entrega']}**. Diferentemente de "
-            f"**{pv['diferencial_competitivo']}**, os nossos produtos ou serviços oferecem **{pv['entrega_produtos_servicos']}**")
 
-# ==============================================================================
-# ABA 3 - PERSONAS (formulário completo, uma persona por vez)
-# ==============================================================================
-CAMPOS_PERSONA = [
-    ("nome", "Nome", "txt"), ("idade", "Idade", "int"), ("profissao", "Profissão", "txt"),
-    ("estado_civil", "Estado civil", "txt"), ("renda_mensal", "Renda mensal (R$)", "num"),
-    ("escolaridade", "Escolaridade", "txt"), ("cidade", "Cidade", "txt"),
-    ("descricao", "Descrição da persona", "area"), ("citacao", "Frase que a representa", "area"),
-    ("habitos", "Hábitos e comportamentos", "area"), ("caracteristicas", "Características (#tags)", "txt"),
-    ("fluencia_digital", "Fluência digital (computador, smartphone, apps, compras on-line)", "txt"),
-    ("redes_sociais", "Redes sociais utilizadas", "txt"), ("quem_influencia", "Quem a influencia", "txt"),
-    ("rotina_manha", "Rotina - manhã", "area"), ("rotina_tarde", "Rotina - tarde", "area"),
-    ("rotina_noite", "Rotina - noite", "area"), ("ganhos", "Ganhos esperados", "area"),
-    ("desafios", "Desafios / dores", "area"), ("duvidas_objecoes", "Dúvidas ou objeções", "area"),
-    ("aborrecimentos", "Aborrecimentos que devem ser evitados", "area"),
-    ("experiencia_ideal", "Experiência ideal e como o negócio ajuda", "area"),
-]
-with abas[2]:
-    st.subheader("Personas")
-    pers = pd.read_sql("SELECT * FROM personas ORDER BY id", conn)
-    opcoes = ["➕ Nova persona"] + [f"{r['id']} - {r['nome']}" for _, r in pers.iterrows()]
-    sel = st.selectbox("Selecione a persona", opcoes, key=f"{PID}_sel_persona")
-    atual_p = {} if sel.startswith("➕") else pers[pers["id"] == int(sel.split(" - ")[0])].iloc[0].to_dict()
-    with st.form(f"f_persona_{sel}"):
-        valores = {}
-        cols = st.columns(4)
-        for i, (k, rot, tipo) in enumerate(CAMPOS_PERSONA[:7]):
-            val = atual_p.get(k)
-            alvo = cols[i % 4]
-            if tipo == "int":
-                valores[k] = alvo.number_input(rot, 0, 120, int(val or 30))
-            elif tipo == "num":
-                valores[k] = alvo.number_input(rot, 0.0, 1e7, float(val or 0), 100.0)
-            else:
-                valores[k] = alvo.text_input(rot, val or "")
-        c1, c2 = st.columns(2)
-        for i, (k, rot, tipo) in enumerate(CAMPOS_PERSONA[7:]):
-            alvo = c1 if i % 2 == 0 else c2
-            val = atual_p.get(k) or ""
-            valores[k] = alvo.text_area(rot, val, height=90) if tipo == "area" else alvo.text_input(rot, val)
-        b1, b2 = st.columns([1, 5])
-        salvar_p = b1.form_submit_button("💾 Salvar persona", type="primary")
-        excluir_p = b2.form_submit_button("🗑️ Excluir persona", disabled=not atual_p)
-    if salvar_p:
-        if not valores["nome"].strip():
-            st.error("Informe o nome da persona.")
-        else:
-            cols_p = list(valores)
-            if atual_p:
-                conn.execute(f"UPDATE personas SET {', '.join(c + '=?' for c in cols_p)} WHERE id=?",
-                             [valores[c] for c in cols_p] + [atual_p["id"]])
-            else:
-                conn.execute(f"INSERT INTO personas ({', '.join(cols_p)}) VALUES ({', '.join('?' * len(cols_p))})",
-                             [valores[c] for c in cols_p])
-            conn.commit()
-            st.rerun()
-    if excluir_p and atual_p:
-        conn.execute("DELETE FROM personas WHERE id=?", (atual_p["id"],))
-        conn.commit()
+# ------------------------------------------------------------------------------
+# MENU LATERAL
+# ------------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown("### 📊 PNBOX Acadêmico")
+    if st.button("🏠 Painel do plano", key="nav_inicio", width="stretch",
+                 type="primary" if ss.pagina == "inicio" else "secondary"):
+        ir("inicio")
         st.rerun()
 
+    nomes = [p.stem for p in projetos]
+    atual = Path(ss.db).stem
+    escolha = st.selectbox("📁 Projeto ativo", nomes, index=nomes.index(atual) if atual in nomes else 0)
+    if escolha != atual:
+        trocar_projeto(PASTA / f"{escolha}.pnbox")
+        st.rerun()
+
+    with st.expander("➕ Novo projeto"):
+        novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")
+        tipo = st.radio("Começar a partir de", ["Em branco (do zero)", "Modelo FitBox (alimentação saudável)",
+                                                "Modelo Café Mucuri (cafeteria e padaria)", "Cópia do projeto atual"])
+        if st.button("Criar projeto", type="primary", width="stretch"):
+            if not novo_nome.strip():
+                st.error("Informe um nome.")
+            else:
+                destino = caminho_livre(novo_nome)
+                if tipo.startswith("Em branco"):
+                    criar_projeto_em_branco(destino, novo_nome.strip())
+                elif tipo.startswith("Modelo FitBox"):
+                    criar_projeto_modelo(destino)
+                elif tipo.startswith("Modelo Café"):
+                    criar_projeto_cafe(destino)
+                else:
+                    conn.commit()
+                    shutil.copy(ss.db, destino)
+                c = conectar(destino)
+                salvar_unica(c, "projeto", {"nome_negocio": novo_nome.strip()})
+                c.close()
+                trocar_projeto(destino)
+                st.rerun()
+
+    with st.expander("📂 Abrir arquivo .pnbox"):
+        arq = st.file_uploader("Selecione um arquivo .pnbox", type=["pnbox"], key=f"up_{ss.gen}")
+        if arq is not None and st.button("Abrir este arquivo", width="stretch"):
+            dados_arq = arq.getvalue()
+            if not dados_arq.startswith(b"SQLite format 3"):
+                st.error("Arquivo inválido: não é um projeto .pnbox.")
+            else:
+                destino = caminho_livre(Path(arq.name).stem)
+                destino.write_bytes(dados_arq)
+                conectar(destino).close()      # atualiza a estrutura, se for de versão antiga
+                trocar_projeto(destino)
+                st.rerun()
+
+    with st.expander("🗑️ Excluir projeto atual"):
+        confirma = st.checkbox(f"Confirmo a exclusão de “{atual}”")
+        if st.button("Excluir", disabled=not confirma, width="stretch"):
+            conn.close()
+            Path(ss.db).unlink(missing_ok=True)
+            ss.pop("db")
+            st.rerun()
+
+    st.divider()
+    tema_escuro = st.toggle("🌙 Tema escuro", value=ss.tema == "escuro", key="tg_tema")
+    if tema_escuro != (ss.tema == "escuro"):
+        ss.tema = "escuro" if tema_escuro else "claro"
+        st.rerun()
+
+    with st.expander("🧭 Ir direto para...", expanded=False):
+        for g in GRUPOS:
+            st.caption(g)
+            for p in [x for x in PAGINAS if x[1] == g]:
+                if st.button(f"{p[2]} {p[3]}", key=f"nav_{p[0]}", width="stretch",
+                             type="primary" if ss.pagina == p[0] else "tertiary"):
+                    ir(p[0])
+                    st.rerun()
+
+    st.divider()
+    if NAVEGADOR:
+        st.info("**Versão on-line:** seus projetos ficam guardados **neste navegador, neste computador**. "
+                "Para levar a outro computador ou entregar ao professor, baixe o **.pnbox** em "
+                "📤 Relatório e exportação.")
+    elif MODO_WEB:
+        st.warning("**Versão on-line:** o projeto fica só nesta aba. Ao terminar, baixe o **.pnbox** em "
+                   "📤 Relatório e exportação.")
+    else:
+        st.caption(f"Projetos salvos em:\n`{PASTA}`")
+    if not MODO_WEB and st.button("⏻ Encerrar o programa", width="stretch"):
+        st.success("Programa encerrado. Pode fechar esta aba.")
+        threading.Timer(1.0, lambda: os._exit(0)).start()
+        st.stop()
+    st.caption(f"Versão {VERSAO_PROGRAMA}")
+
+
+# ------------------------------------------------------------------------------
+# CABEÇALHO DAS FERRAMENTAS
+# ------------------------------------------------------------------------------
+def cabecalho(p: str):
+    _, grupo, icone, titulo, descricao = PAG[p]
+    c1, c2 = st.columns([1, 5])
+    if c1.button("← Voltar ao plano", key="voltar_" + p, width="stretch"):
+        ir("inicio")
+        st.rerun()
+    c2.caption(f"{grupo}  ›  {titulo}")
+    st.title(f"{icone} {titulo}")
+    st.markdown(f"<div class='pn-card-info'>ℹ️ {descricao}</div>", unsafe_allow_html=True)
+    if ss.alerta and ss.alerta[0] == p:
+        st.warning(f"**O que ajustar aqui:** {ss.alerta[1]}")
+        if st.button("Entendi, ocultar aviso", key="ok_alerta"):
+            ss.alerta = None
+            st.rerun()
+    st.write("")
+
+
+def proxima(p: str):
+    """Botões de navegação para a ferramenta anterior e a próxima."""
+    chaves = [x[0] for x in PAGINAS if x[0] not in ("professor", "config")]
+    if p not in chaves:
+        return
+    i = chaves.index(p)
+    st.divider()
+    c1, _, c3 = st.columns([1.3, 3, 1.3])
+    if i > 0 and c1.button(f"← {PAG[chaves[i - 1]][3]}", key="ant_" + p, width="stretch"):
+        ir(chaves[i - 1])
+        st.rerun()
+    if i < len(chaves) - 1 and c3.button(f"{PAG[chaves[i + 1]][3]} →", key="prox_" + p, width="stretch", type="primary"):
+        ir(chaves[i + 1])
+        st.rerun()
+
+# ##############################################################################
+# PARTE: pnbox_ui_paginas1.py
+# ##############################################################################
 # ==============================================================================
-# ABA 4 - JORNADA DO CLIENTE
+# PNBOX ACADÊMICO - INTERFACE: PAINEL E FERRAMENTAS DE ESTRATÉGIA E MERCADO
 # ==============================================================================
-with abas[3]:
-    st.subheader("Jornada do cliente (antes, durante e depois da compra)")
-    nomes_pers = d["personas"]["nome"].tolist() or ["(cadastre uma persona)"]
-    editor("jornada_cliente", {
-        "persona_nome": S("Persona", options=nomes_pers, required=True),
-        "macro_fase": S("Fase", options=["Antes", "Durante", "Depois"], required=True),
-        "etapa": S("Etapa", options=ETAPAS, required=True),
-        "acoes_cliente": T("Ações do cliente", width="medium"), "pensamentos": T("Pensamentos"),
-        "pontos_contato": T("Pontos de contato"),
-        "estado_emocional": S("Emoção", options=["Entusiasmado", "Satisfeito", "Neutro", "Insatisfeito", "Frustrado"]),
-        "oportunidades": T("Oportunidades de melhoria", width="medium")}, "persona_nome")
-    emo = {"Entusiasmado": 2, "Satisfeito": 1, "Neutro": 0, "Insatisfeito": -1, "Frustrado": -2}
-    jc = d["jornada_cliente"]
-    if not jc.empty:
-        st.markdown("**Curva emocional da jornada**")
-        graf = jc.assign(Emoção=jc["estado_emocional"].map(emo)).pivot_table(
-            index="etapa", columns="persona_nome", values="Emoção", aggfunc="mean")
-        graf = graf.reindex([e for e in ETAPAS if e in graf.index])
-        st.line_chart(graf)
+
+# ------------------------------------------------------------------------------
+# Registros editados um a um (personas, propostas): salvamento automático por id
+# ------------------------------------------------------------------------------
+def ler_com_id(tabela):
+    cols = [c for c, _ in SCHEMA[tabela]]
+    return pd.read_sql(f"SELECT id, {', '.join(cols)} FROM {tabela} ORDER BY id", conn)
+
+
+def auto_registro(tabela, rid, atual: dict, novos: dict):
+    mudou = {k: v for k, v in novos.items() if str(atual.get(k) if atual.get(k) is not None else "") != str(v)}
+    if mudou:
+        conn.execute(f"UPDATE {tabela} SET {', '.join(k + '=?' for k in mudou)} WHERE id=?",
+                     list(mudou.values()) + [rid])
+        conn.commit()
+        d[tabela] = ler(conn, tabela)
+        marcar_salvo()
+        invalidar()
+
+
+def novo_registro(tabela, valores: dict):
+    cols = list(valores)
+    cur = conn.execute(f"INSERT INTO {tabela} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                       [valores[c] for c in cols])
+    conn.commit()
+    return cur.lastrowid
+
+
+def apagar_registro(tabela, rid):
+    conn.execute(f"DELETE FROM {tabela} WHERE id=?", (rid,))
+    conn.commit()
+
+
+def salvo_txt():
+    st.caption(f"💾 Salvo automaticamente{' às ' + ss.ultimo_salvo if ss.ultimo_salvo else ''}")
+
 
 # ==============================================================================
-# ABA 5 - CONCORRÊNCIA
+# PAINEL DO PLANO (tela inicial)
 # ==============================================================================
-with abas[4]:
-    st.subheader("Concorrentes")
-    conc = editor("concorrentes", {"nome": T("Nome do concorrente", required=True),
-                                   "observacoes": T("Observações", width="large")}, "nome",
-                  rotulo="💾 Salvar concorrentes")
-    empresas = ["Nossa Empresa"] + [n for n in conc["nome"] if str(n).strip()]
+def pg_inicio():
+    if not ss.get("bemvindo_ok"):
+        with st.container(border=True):
+            st.markdown(f"""
+### 👋 Bem-vindo ao PNBOX Acadêmico
+Este programa ajuda você a construir um **plano de negócio completo**, do cliente aos números, e a descobrir
+se a ideia é **viável**. Como usar:
+
+1. **Clique nos cartões** abaixo, de cima para baixo. Cada cartão é uma ferramenta, com explicação de como preencher.
+2. **Tudo é salvo automaticamente** enquanto você digita. Não existe botão "Salvar".
+3. O selo do cartão mostra o andamento: ✅ concluído · ◐ em andamento · ○ não iniciado.
+4. Os **resultados financeiros** (DRE, indicadores, gráficos) são calculados sozinhos a partir do que você preencher.
+5. No final, vá em **📤 Relatório e exportação** para baixar o PDF, o pitch, o Word e o arquivo **.pnbox** do projeto.
+
+{"Você está na **versão on-line**: os dados ficam neste navegador. Para entregar ou levar a outro computador, baixe o arquivo .pnbox." if MODO_WEB else ""}
+""")
+            if st.button("Entendi, começar", type="primary"):
+                ss.bemvindo_ok = True
+                st.rerun()
+
+    st.title(f"📊 {proj['nome_negocio'] or 'Meu plano de negócio'}")
+    linha = " · ".join(x for x in [proj["cidade_uf"], proj["turma"], proj["autores"]] if x)
+    if linha:
+        st.caption(linha)
+
+    comp = completude()
+    try:
+        res = R()
+        chk = CHK()
+        sem = semaforo(res)
+        rx = raio_x(res, chk, comp, sem)
+    except Exception as e:
+        res, chk, sem, rx = None, None, [], None
+        st.info(f"Os resultados financeiros aparecem quando houver produtos, custos e investimentos. ({e})")
+
+    c1, c2, c3, c4 = st.columns([2.2, 1, 1, 1])
+    with c1:
+        st.markdown(f"**Plano {int(comp * 100)}% preenchido**")
+        st.progress(comp)
+    if rx:
+        c2.metric("Raio-X do plano", f"{rx['nota']}/100", help="Preenchimento (30) + checagens OK (30) + saúde financeira (40)")
+        c3.metric("Investimento total", brl(res["investimento_total"]).split(",")[0],
+                  help=brl(res["investimento_total"]))
+        c4.metric("Lucro no Ano 1", brl(res["anos"][1]["resultado"]).split(",")[0],
+                  help=brl(res["anos"][1]["resultado"]))
+        verdes = sum(1 for s in sem if s["Status"] == "🟢")
+        if res["anos"][1]["rec_bruta"] <= 0:
+            st.caption("Saúde financeira: aparece quando houver produtos com preço e quantidade cadastrados.")
+        else:
+            st.caption(f"Saúde financeira: {' '.join(s['Status'] for s in sem)}  ({verdes} de {len(sem)} indicadores no verde)")
+
+    if chk is not None:
+        pend = chk[chk["Situação"] != "OK"]
+        if not pend.empty:
+            with st.expander(f"⚠️ {len(pend)} ponto(s) para corrigir — clique para ver e ir direto ao ajuste", expanded=False):
+                for i, r in pend.iterrows():
+                    a, b = st.columns([4, 1.3])
+                    a.markdown(f"**{r['Teste']}** — {r['Valor apurado']}  \n<small>{r['Como corrigir'] or r['Observação']}</small>",
+                               unsafe_allow_html=True)
+                    if r["destino"] and b.button("Ir para o ajuste →", key=f"ini_chk_{i}", width="stretch"):
+                        ir(r["destino"], f"{r['Teste']}: {r['Valor apurado']}. {r['Como corrigir'] or r['Observação']}")
+                        st.rerun()
+
+    for g in GRUPOS:
+        itens = [p for p in PAGINAS if p[1] == g]
+        st.markdown(f"<div class='pn-grupo'>{g}</div>", unsafe_allow_html=True)
+        for i in range(0, len(itens), 4):
+            cols = st.columns(4)
+            for col, p in zip(cols, itens[i:i + 4]):
+                selo = situacao(p[0])
+                rotulo = f"{p[2]}\n\n{p[3]}" + (f"\n\n{selo}" if selo else "")
+                with col:
+                    if st.button(rotulo, key=f"card_{p[0]}", width="stretch", help=p[4]):
+                        ir(p[0])
+                        st.rerun()
+
+
+# ==============================================================================
+# IDENTIFICAÇÃO
+# ==============================================================================
+def pg_projeto():
+    cabecalho("projeto")
+    t1, t2, t3 = st.tabs(["🏢 Negócio", "👥 Grupo e entrega", "📈 Premissas financeiras"])
+    v = {}
+    with t1:
+        c1, c2, c3 = st.columns(3)
+        v["nome_negocio"] = c1.text_input("Nome do negócio", proj["nome_negocio"], key=wk("nome"), max_chars=60)
+        objs = ["Criar um novo negócio", "Expandir um negócio existente", "Captar recursos", "Outro"]
+        v["objetivo"] = c2.selectbox("Objetivo do plano", objs,
+                                     index=objs.index(proj["objetivo"]) if proj["objetivo"] in objs else 0, key=wk("obj"))
+        v["periodo_anos"] = c3.number_input("Período de planejamento (anos)", 1, 3, int(proj["periodo_anos"] or 3), key=wk("per"))
+        regs = ["Simples Nacional", "MEI", "Lucro Presumido", "Lucro Real"]
+        v["enquadramento"] = c1.selectbox("Enquadramento tributário", regs, key=wk("enq"),
+                                          index=regs.index(proj["enquadramento"]) if proj["enquadramento"] in regs else 0)
+        portes = ["MEI", "Microempresa (ME)", "Pequena Empresa (EPP)", "Médio/Grande Porte"]
+        v["porte"] = c2.selectbox("Porte", portes, key=wk("porte"),
+                                  index=portes.index(proj["porte"]) if proj["porte"] in portes else 1)
+        atuais = [x.strip() for x in proj["setor_atuacao"].split(";") if x.strip()]
+        v["setor_atuacao"] = "; ".join(c3.multiselect("Setores de atuação", opcoes("setor", atuais), atuais, key=wk("setor"),
+                                                      accept_new_options=True))
+        v["cidade_uf"] = c1.text_input("Cidade / UF", proj["cidade_uf"], key=wk("cid"))
+        v["contatos"] = c2.text_input("Contatos (site, redes, e-mail)", proj["contatos"], key=wk("cont"))
+    with t2:
+        st.caption("Estes dados aparecem na capa do relatório e no modo professor.")
+        c1, c2 = st.columns(2)
+        v["autores"] = c1.text_area("Integrantes do grupo (um por linha ou separados por ;)", proj["autores"], key=wk("aut"))
+        v["turma"] = c2.text_input("Curso / disciplina / turma", proj["turma"], key=wk("turma"))
+        v["professor"] = c2.text_input("Professor(a)", proj["professor"], key=wk("prof"))
+        v["data_entrega"] = c2.text_input("Data de entrega", proj["data_entrega"], key=wk("data"), placeholder="dd/mm/aaaa")
+    with t3:
+        st.caption("Premissas usadas em todas as projeções. Passe o mouse no ícone ? para ver a explicação de cada uma.")
+        p1, p2, p3 = st.columns(3)
+        v["aliquota_imposto_pct"] = p1.number_input("Impostos sobre vendas (%)", 0.0, 40.0, proj["aliquota_imposto_pct"], 0.1, key=wk("aliq"),
+                                                    help="Alíquota efetiva do Simples Nacional ou soma de PIS/COFINS/ISS/ICMS.")
+        v["crescimento_mensal_ano1_pct"] = p2.number_input("Crescimento mensal das vendas no Ano 1 (%)", -10.0, 30.0,
+                                                           proj["crescimento_mensal_ano1_pct"], 0.5, key=wk("gm"))
+        v["crescimento_anual_pct"] = p3.number_input("Crescimento anual nos Anos 2 e 3 (%)", -50.0, 200.0,
+                                                     proj["crescimento_anual_pct"], 1.0, key=wk("ga"))
+        v["inflacao_custos_anual_pct"] = p1.number_input("Inflação dos custos fixos (% ao ano)", 0.0, 50.0,
+                                                         proj["inflacao_custos_anual_pct"], 0.5, key=wk("inf"))
+        v["tma_anual_pct"] = p2.number_input("TMA - taxa mínima de atratividade (% ao ano)", 0.0, 60.0, proj["tma_anual_pct"], 0.5,
+                                             key=wk("tma"), help="Retorno mínimo que os sócios exigem (ex.: rendimento de uma aplicação segura + prêmio de risco).")
+        v["pme_dias"] = p3.number_input("Prazo médio de estoques (dias)", 0.0, 365.0, proj["pme_dias"], 1.0, key=wk("pme"))
+        v["reserva_caixa_extra"] = p1.number_input("Reserva financeira de segurança (R$)", 0.0, 1e8, proj["reserva_caixa_extra"], 1000.0, key=wk("res"))
+        v["recuperar_giro"] = int(p2.checkbox("No VPL, recuperar o capital de giro no último ano", bool(proj["recuperar_giro"]), key=wk("rg")))
+    auto_unica("projeto", v)
+    salvo_txt()
+
+    st.subheader("👥 Sócios")
+    editor("socios", {"nome": T("Nome", required=True), "funcao": T("Função"), "contato": T("Contato"),
+                      "perfil": T("Minicurrículo / atribuições", width="large"),
+                      "capital_integralizado": moeda("Capital investido (R$)")}, "nome")
+    st.caption(f"Capital próprio total: **{brl(d['socios']['capital_integralizado'].sum())}**")
+    proxima("projeto")
+
+
+# ==============================================================================
+# CLIENTE E MERCADO
+# ==============================================================================
+def pg_segmentos():
+    cabecalho("segmentos")
+    t1, t2 = st.tabs(["🎯 Segmentos de clientes", "🏆 Priorização"])
+    with t1:
+        st.caption("Escreva até 4 a 6 grupos de clientes possíveis e dê notas de 1 a 10 para cada pergunta.")
+        sg = editor("segmentos", {
+            "nome": T("Segmento (máx. 40 caracteres)", required=True, max_chars=40),
+            "descricao": T("Descrição do perfil", width="large"),
+            "nota_tamanho": nota("É grande o suficiente?"), "nota_lucro": nota("Tem potencial de lucro?"),
+            "nota_longevidade": nota("Não tende a desaparecer?"), "nota_concorrencia": nota("Tem poucos concorrentes?"),
+            "nota_aderencia": nota("Seus produtos atendem esse segmento?")}, "nome")
+    with t2:
+        sg = d["segmentos"]
+        if sg.empty:
+            st.info("Cadastre os segmentos na primeira aba.")
+        else:
+            rk = sg.assign(Média=sg.iloc[:, 2:7].mean(axis=1)).sort_values("Média", ascending=False).reset_index(drop=True)
+            for i, r in rk.iterrows():
+                with st.container(border=True):
+                    a, b = st.columns([5, 1])
+                    a.markdown(f"### {i + 1}º  {r['nome']}\n{r['descricao']}")
+                    b.metric("Média", num_br(r["Média"], 1))
+            st.altair_chart(alt.Chart(rk).mark_bar(color="#2f6fd0").encode(
+                x=alt.X("Média:Q", scale=alt.Scale(domain=[0, 10])), y=alt.Y("nome:N", sort="-x", title=None)),
+                width="stretch")
+    proxima("segmentos")
+
+
+CAMPOS_PERSONA = {
+    "Dados": [("nome", "Nome", "txt", 40), ("idade", "Idade (anos)", "int", 0), ("estado_civil", "Estado civil", "txt", 30),
+              ("escolaridade", "Escolaridade", "txt", 40), ("profissao", "Profissão", "txt", 60),
+              ("renda_mensal", "Renda mensal (R$)", "num", 0), ("cidade", "Cidade", "txt", 60),
+              ("descricao", "Sobre a persona (máx. 380 caracteres)", "area", 380)],
+    "Características": [("citacao", "Frase que representa a persona", "area", 250),
+                        ("habitos", "Hábitos e comportamentos", "area", 500),
+                        ("caracteristicas", "Características (#tags)", "txt", 200),
+                        ("fluencia_digital", "Fluência digital (computador, smartphone, apps, compras on-line)", "txt", 200),
+                        ("redes_sociais", "Redes sociais utilizadas", "txt", 150),
+                        ("quem_influencia", "Quem influencia as decisões", "txt", 200)],
+    "Rotina": [("rotina_manha", "Manhã", "area", 400), ("rotina_tarde", "Tarde", "area", 400), ("rotina_noite", "Noite", "area", 400)],
+    "Insights": [("ganhos", "Ganhos esperados", "area", 500), ("desafios", "Dores e desafios", "area", 500),
+                 ("duvidas_objecoes", "Dúvidas ou objeções", "area", 500),
+                 ("aborrecimentos", "Aborrecimentos que devem ser evitados", "area", 500),
+                 ("experiencia_ideal", "Experiência ideal e como o negócio ajuda", "area", 500)],
+}
+
+
+def pg_personas():
+    cabecalho("personas")
+    pers = ler_com_id("personas")
+    c1, c2 = st.columns([4, 1.2])
+    nomes = [f"{r['nome']}" for _, r in pers.iterrows()]
+    if c2.button("➕ Nova persona", type="primary", width="stretch"):
+        rid = novo_registro("personas", {"nome": f"Persona {len(pers) + 1}", "idade": 30})
+        ss[wk("persona_sel")] = rid
+        st.rerun()
+    if pers.empty:
+        st.info("Nenhuma persona cadastrada. Clique em **➕ Nova persona**.")
+        proxima("personas")
+        return
+    ids = pers["id"].tolist()
+    atual_id = ss.get(wk("persona_sel"), ids[0])
+    atual_id = atual_id if atual_id in ids else ids[0]
+    escolhido = c1.radio("Persona", ids, index=ids.index(atual_id), horizontal=True,
+                         format_func=lambda i: "🧑 " + str(pers.loc[pers["id"] == i, "nome"].iloc[0]))
+    ss[wk("persona_sel")] = escolhido
+    row = pers[pers["id"] == escolhido].iloc[0].to_dict()
+
+    st.markdown(f"<div style='text-align:center;font-size:4rem;line-height:1'>🧑</div>"
+                f"<h3 style='text-align:center;margin-top:0'>{row['nome']}</h3>", unsafe_allow_html=True)
+    novos = {}
+    abas_p = st.tabs(list(CAMPOS_PERSONA))
+    for aba, (grupo, campos) in zip(abas_p, CAMPOS_PERSONA.items()):
+        with aba:
+            cols = st.columns(3 if grupo == "Dados" else (3 if grupo == "Rotina" else 2))
+            for i, (k, rot, tipo, mx) in enumerate(campos):
+                alvo = cols[i % len(cols)] if tipo != "area" or grupo in ("Rotina", "Insights", "Características") else st
+                val = row.get(k)
+                chave_w = wk(f"pers_{escolhido}_{k}")
+                if tipo == "int":
+                    novos[k] = alvo.number_input(rot, 0, 120, int(val or 0), key=chave_w)
+                elif tipo == "num":
+                    novos[k] = alvo.number_input(rot, 0.0, 1e7, float(val or 0), 100.0, key=chave_w)
+                elif tipo == "area":
+                    novos[k] = alvo.text_area(rot, val or "", max_chars=mx, key=chave_w, height=110)
+                else:
+                    novos[k] = alvo.text_input(rot, val or "", max_chars=mx, key=chave_w)
+    auto_registro("personas", escolhido, row, novos)
+    a, b = st.columns([4, 1.2])
+    with a:
+        salvo_txt()
+    if b.button("🗑️ Excluir esta persona", width="stretch"):
+        apagar_registro("personas", escolhido)
+        ss.pop(wk("persona_sel"), None)
+        st.rerun()
+    proxima("personas")
+
+
+def pg_jornada():
+    cabecalho("jornada")
+    pers = d["personas"]["nome"].tolist()
+    if not pers:
+        st.info("Cadastre uma persona antes de montar a jornada.")
+        if st.button("Ir para Personas"):
+            ir("personas")
+            st.rerun()
+        return
+    persona = st.radio("Persona", pers, horizontal=True, format_func=lambda n: "🧑 " + n, key=wk("jor_pers"))
+    perguntas = {"Antes": "O que o cliente faz antes de entrar em contato com o seu produto ou serviço?",
+                 "Durante": "Como é a compra, a entrega e o uso?",
+                 "Depois": "O que acontece depois: avaliação, suporte e fidelização?"}
+    fases = st.tabs(list(ETAPAS_FASE))
+    for aba, fase in zip(fases, ETAPAS_FASE):
+        with aba:
+            st.markdown(f"**{perguntas[fase]}**")
+            jc = d["jornada_cliente"]
+            sub = jc[(jc["persona_nome"] == persona) & (jc["macro_fase"] == fase)]
+            for etapa in ETAPAS_FASE[fase]:
+                linhas = sub[sub["etapa"] == etapa]
+                st.markdown(f"<div style='background:rgba(47,111,208,.08);padding:6px 12px;border-radius:6px;"
+                            f"font-weight:600;margin-top:10px'>{etapa}</div>", unsafe_allow_html=True)
+                if linhas.empty:
+                    st.caption("— sem ações cadastradas nesta etapa —")
+                for _, r in linhas.iterrows():
+                    face = EMOCOES.get(r["estado_emocional"], "😐")
+                    st.markdown(
+                        f"<div class='pn-etapa'><span class='pn-face'>{face}</span> <b>{r['acoes_cliente']}</b><br>"
+                        f"<small>💭 {r['pensamentos'] or '-'} · 📍 {r['pontos_contato'] or '-'}<br>"
+                        f"💡 <i>Oportunidade:</i> {r['oportunidades'] or '-'}</small></div>", unsafe_allow_html=True)
+            with st.expander(f"✏️ Editar as ações da fase “{fase}”", expanded=sub.empty):
+                editor("jornada_cliente", {
+                    "etapa": S("Etapa", options=ETAPAS_FASE[fase], required=True),
+                    "acoes_cliente": T("Ação do cliente", width="medium", required=True),
+                    "pensamentos": T("O que pensa"), "pontos_contato": T("Pontos de contato"),
+                    "estado_emocional": S("Emoção", options=list(EMOCOES)),
+                    "oportunidades": T("Oportunidade de melhoria", width="medium")},
+                    "acoes_cliente", filtro={"persona_nome": persona, "macro_fase": fase})
+    jc = d["jornada_cliente"]
+    jp = jc[jc["persona_nome"] == persona]
+    if not jp.empty:
+        st.subheader("📉 Curva emocional da jornada")
+        emo = {"Entusiasmado": 2, "Satisfeito": 1, "Neutro": 0, "Insatisfeito": -1, "Frustrado": -2}
+        g = jp.assign(Emoção=jp["estado_emocional"].map(emo).fillna(0)).groupby("etapa", sort=False)["Emoção"].mean()
+        g = g.reindex([e for e in ETAPAS if e in g.index]).reset_index()
+        st.altair_chart(alt.Chart(g).mark_line(point=True, strokeWidth=3, color="#d6006e").encode(
+            x=alt.X("etapa:N", sort=ETAPAS, title=None, axis=alt.Axis(labelAngle=0, labelLimit=120)),
+            y=alt.Y("Emoção:Q", scale=alt.Scale(domain=[-2, 2]), title="😠  ←  emoção  →  🤩")).properties(height=260),
+            width="stretch")
+    proxima("jornada")
+
+
+def pg_mercado():
+    cabecalho("mercado")
+    st.markdown("""
+**Como estimar:** **TAM** é todo o mercado (todas as pessoas que poderiam comprar algo desse tipo na região).
+**SAM** é a parte que o seu negócio consegue alcançar (pelo segmento escolhido, raio de entrega, canais).
+**SOM** é a fatia que você realisticamente conquista (participação de mercado). Use dados do IBGE, Sebrae,
+prefeitura, associações e pesquisa de campo, e anote as fontes.""")
+    v = {}
+    c1, c2 = st.columns([3, 1])
+    v["tam_desc"] = c1.text_input("TAM - mercado total (quem é)", proj["tam_desc"], key=wk("tamd"))
+    v["tam_clientes"] = c2.number_input("Nº de clientes potenciais (TAM)", 0.0, 1e9, float(proj["tam_clientes"]), 100.0, key=wk("tamc"))
+    v["sam_desc"] = c1.text_input("SAM - mercado alcançável (quem é)", proj["sam_desc"], key=wk("samd"))
+    v["sam_clientes"] = c2.number_input("Nº de clientes alcançáveis (SAM)", 0.0, 1e9, float(proj["sam_clientes"]), 100.0, key=wk("samc"))
+    c3, c4 = st.columns(2)
+    v["som_pct"] = c3.number_input("SOM - participação que pretende conquistar do SAM (%)", 0.0, 100.0, float(proj["som_pct"]), 0.5, key=wk("som"))
+    v["gasto_anual_cliente"] = c4.number_input("Gasto médio anual de cada cliente com esse tipo de produto (R$)", 0.0, 1e7,
+                                               float(proj["gasto_anual_cliente"]), 50.0, key=wk("gasto"))
+    v["mercado_fontes"] = st.text_area("Fontes e premissas usadas", proj["mercado_fontes"], key=wk("mfont"))
+    auto_unica("projeto", v)
+    salvo_txt()
+    mk = mercado(proj, R())
+    if mk["preenchido"]:
+        df = pd.DataFrame({"Nível": ["TAM", "SAM", "SOM"], "Clientes": [mk["tam_c"], mk["sam_c"], mk["som_c"]],
+                           "Mercado (R$/ano)": [mk["tam"], mk["sam"], mk["som"]]})
+        a, b = st.columns([1.3, 1])
+        a.altair_chart(alt.Chart(df).mark_bar(color="#2f6fd0").encode(
+            y=alt.Y("Nível:N", sort=["TAM", "SAM", "SOM"], title=None), x=alt.X("Mercado (R$/ano):Q", title="R$ por ano"),
+            tooltip=["Nível", alt.Tooltip("Clientes:Q", format=",.0f"), alt.Tooltip("Mercado (R$/ano):Q", format=",.2f")]
+        ).properties(height=200), width="stretch")
+        b.metric("TAM", brl(mk["tam"]), f"{num_br(mk['tam_c'], 0)} clientes", delta_color="off")
+        b.metric("SAM", brl(mk["sam"]), f"{num_br(mk['sam_c'], 0)} clientes", delta_color="off")
+        b.metric("SOM", brl(mk["som"]), f"{num_br(mk['som_c'], 0)} clientes", delta_color="off")
+        st.subheader("A meta de vendas é realista?")
+        p = mk["pct_som"]
+        msg = (f"A receita prevista no Ano 1 ({brl(mk['receita_ano1'])}) corresponde a **{pct(p)} do SOM** "
+               f"e a **{pct(mk['pct_sam'])} do SAM**.")
+        if p > 1:
+            st.error("🔴 " + msg + " A meta passa do que o negócio consegue conquistar: reveja as quantidades vendidas "
+                     "(Produtos e materiais) ou a estimativa de mercado.")
+        elif p > 0.8:
+            st.warning("🟡 " + msg + " A meta é ambiciosa: depende de conquistar quase todo o mercado alcançável previsto.")
+        else:
+            st.success("🟢 " + msg + " A meta cabe no mercado estimado.")
+    else:
+        st.info("Preencha os quatro números para ver o tamanho do mercado e conferir a meta de vendas.")
+    proxima("mercado")
+
+
+# ==============================================================================
+# PROBLEMA E SOLUÇÃO
+# ==============================================================================
+def pg_proposta():
+    cabecalho("proposta")
+    props = ler_com_id("propostas")
+    pers = d["personas"]["nome"].tolist()
+    c1, c2 = st.columns([4, 1.3])
+    c1.caption("Uma proposta por persona: escolha os valores (etiquetas) e complete as frases.")
+    if c2.button("➕ Nova proposta", type="primary", width="stretch"):
+        novo_registro("propostas", {"persona_nome": pers[0] if pers else "", "valores": ""})
+        st.rerun()
+    if props.empty:
+        st.info("Nenhuma proposta cadastrada. Clique em **➕ Nova proposta**.")
+    for n, (_, r) in enumerate(props.iterrows(), start=1):
+        row = r.to_dict()
+        with st.expander(f"❤️ Proposta {n} — {row['persona_nome'] or 'sem persona'}:  {row['valores'][:90]}",
+                         expanded=len(props) == 1):
+            novos = {}
+            opc_p = pers + ([row["persona_nome"]] if row["persona_nome"] and row["persona_nome"] not in pers else [])
+            novos["persona_nome"] = st.selectbox("Persona", opc_p or [""], key=wk(f"pp_{row['id']}"),
+                                                 index=opc_p.index(row["persona_nome"]) if row["persona_nome"] in opc_p else 0)
+            atuais = [x.strip() for x in str(row["valores"]).split(";") if x.strip()]
+            novos["valores"] = "; ".join(st.multiselect("Valores entregues (escolha ou digite novos)", opcoes("valor_proposta", atuais),
+                                                        atuais, key=wk(f"pv_{row['id']}"), accept_new_options=True))
+            a, b = st.columns(2)
+            novos["que_desejam"] = a.text_area("Que desejam...", row["que_desejam"], key=wk(f"pq_{row['id']}"))
+            novos["por_meio"] = b.text_area("Por meio de...", row["por_meio"], key=wk(f"pm_{row['id']}"))
+            novos["diferentemente"] = a.text_area("Diferentemente de...", row["diferentemente"], key=wk(f"pd_{row['id']}"))
+            novos["oferecem"] = b.text_area("Os nossos produtos ou serviços oferecem...", row["oferecem"], key=wk(f"po_{row['id']}"))
+            auto_registro("propostas", row["id"], row, novos)
+            st.info(f"**{proj['nome_negocio']}** ajuda **{novos['persona_nome']}**, que deseja **{novos['que_desejam']}**, "
+                    f"por meio de **{novos['por_meio']}**. Diferentemente de **{novos['diferentemente']}**, "
+                    f"oferecemos **{novos['oferecem']}**.")
+            if st.button("🗑️ Excluir esta proposta", key=wk(f"pdel_{row['id']}")):
+                apagar_registro("propostas", row["id"])
+                st.rerun()
+    salvo_txt()
+    proxima("proposta")
+
+
+def pivo_concorrencia():
+    empresas = ["Nossa Empresa"] + [n for n in d["concorrentes"]["nome"] if str(n).strip()]
     notas = d["concorrencia_notas"]
     atributos = list(dict.fromkeys(notas["atributo"]))
     piv = pd.DataFrame({"Atributo": pd.Series(atributos, dtype=object)})
     for emp in empresas:
         mapa = notas[notas["empresa"] == emp].set_index("atributo")["nota"].to_dict()
         piv[emp] = pd.Series([mapa.get(a, None) for a in atributos], dtype=float)
-    st.subheader("Avaliação dos atributos (notas de 0 a 10)")
-    cfg = {"Atributo": T("Atributo avaliado", required=True)}
-    cfg.update({e: N(e, min_value=0, max_value=10, step=0.5) for e in empresas})
-    def _norm_piv(x):
+    return piv, empresas
+
+
+def pg_concorrencia():
+    cabecalho("concorrencia")
+    st.subheader("1. Concorrentes")
+    editor("concorrentes", {"nome": T("Nome do concorrente", required=True),
+                            "observacoes": T("Observações (onde fica, preço, pontos fortes)", width="large")}, "nome")
+    piv, empresas = pivo_concorrencia()
+    st.subheader("2. Notas por atributo (0 a 10)")
+
+    def _norm(x):
         x = x.copy()
         x["Atributo"] = x["Atributo"].astype(object).where(x["Atributo"].notna(), "")
         for e in empresas:
             x[e] = pd.to_numeric(x[e], errors="coerce") if e in x else float("nan")
         return x[["Atributo"] + empresas]
-    piv_ed, col_s = tabela_editavel(piv, cfg, "concorrencia_notas", "|".join(empresas), normalizar=_norm_piv)
-    piv_ed = piv_ed[piv_ed["Atributo"].astype(str).str.strip().ne("")]
-    if col_s.button("💾 Salvar notas", key="bt_notas", type="primary", width="stretch"):
-        longo = piv_ed.melt(id_vars="Atributo", var_name="empresa", value_name="nota").rename(columns={"Atributo": "atributo"})
-        gravar("concorrencia_notas", longo, "atributo", "|".join(empresas))
-    piv_num = piv_ed.copy()
+
+    def _salvar(x):
+        x = x[x["Atributo"].astype(str).str.strip() != ""]
+        longo = x.melt(id_vars="Atributo", var_name="empresa", value_name="nota").rename(columns={"Atributo": "atributo"})
+        salvar(conn, "concorrencia_notas", longo, "atributo")
+        d["concorrencia_notas"] = ler(conn, "concorrencia_notas")
+
+    cfg = {"Atributo": T("Atributo avaliado", required=True)}
+    cfg.update({e: N(e, min_value=0, max_value=10, step=0.5) for e in empresas})
+    pe = tabela_editavel(piv, cfg, "concorrencia_notas", "|".join(empresas), normalizar=_norm, salvar_fn=_salvar)
+    pe = pe[pe["Atributo"].astype(str).str.strip() != ""]
+    num = pe.copy()
     for e in empresas:
-        piv_num[e] = pd.to_numeric(piv_num[e], errors="coerce").fillna(0)
-    ss_piv = piv_num
-    if not piv_num.empty:
-        medias = piv_num[empresas].mean()
-        mc = st.columns(min(len(empresas), 6))
-        for i, e in enumerate(empresas[:6]):
-            mc[i].metric(f"Média - {e}", num_br(medias[e]))
-        st.bar_chart(piv_num.set_index("Atributo")[empresas])
+        num[e] = pd.to_numeric(num[e], errors="coerce").fillna(0)
+    if not num.empty:
+        st.subheader("3. Resultado")
+        medias = num[empresas].mean()
+        cols = st.columns(min(len(empresas), 5))
+        for i, e in enumerate(empresas[:5]):
+            cols[i].metric(e, num_br(medias[e], 1))
+        longo = num.melt(id_vars="Atributo", var_name="Empresa", value_name="Nota")
+        st.altair_chart(alt.Chart(longo).mark_line(point=True).encode(
+            x=alt.X("Atributo:N", title=None, axis=alt.Axis(labelAngle=-35, labelLimit=160)),
+            y=alt.Y("Nota:Q", scale=alt.Scale(domain=[0, 10])), color="Empresa:N").properties(height=340), width="stretch")
         if len(empresas) > 1:
-            outros = piv_num.set_index("Atributo")[empresas[1:]].max(axis=1)
-            nossa = piv_num.set_index("Atributo")["Nossa Empresa"]
-            st.success("**Forças frente à concorrência:** " + (", ".join(nossa.index[nossa > outros]) or "nenhuma"))
-            st.warning("**Fraquezas frente à concorrência:** " + (", ".join(nossa.index[nossa < outros]) or "nenhuma"))
+            idx = num.set_index("Atributo")
+            outros = idx[empresas[1:]].max(axis=1)
+            st.success("**Forças frente à concorrência:** " + (", ".join(idx.index[idx["Nossa Empresa"] > outros]) or "nenhuma"))
+            st.warning("**Fraquezas frente à concorrência:** " + (", ".join(idx.index[idx["Nossa Empresa"] < outros]) or "nenhuma"))
+            dest = idx["Nossa Empresa"] - outros
+            st.info(f"**Destaque do negócio:** {dest.idxmax()} (vantagem de {num_br(dest.max(), 1)} ponto(s) sobre o melhor concorrente).")
+    proxima("concorrencia")
+
 
 # ==============================================================================
-# ABA 6 - AMBIENTE E MATRIZ SWOT
+# ESTRATÉGIA
 # ==============================================================================
+def _fatores(ambiente, naturezas, dims, rot_acao):
+    editor("swot", {
+        "dimensao": S("Dimensão", options=dims),
+        "fator": T("Fator", required=True),
+        "natureza": S("Classificação", options=naturezas, required=True),
+        "impacto": S("Impacto", options=["Alto", "Baixo"], required=True),
+        "diagnostico": T("Diagnóstico (por que é assim no seu negócio)", width="medium"),
+        "plano_acao": T(rot_acao, width="medium"),
+        "priorizado": CK("⭐ Priorizar")}, "fator", filtro={"ambiente": ambiente})
+
+
+def pg_forcas():
+    cabecalho("forcas")
+    st.caption("Exemplos de fatores: qualificação da equipe, presença digital, controle de qualidade, controles financeiros, "
+               "localização, relação com fornecedores, reputação da marca.")
+    dims = opcoes("dimensao_interna", d["swot"].loc[d["swot"]["ambiente"] == "Interno", "dimensao"].tolist())
+    _fatores("Interno", ["Força", "Fraqueza"], dims, "Como potencializar (força) ou corrigir (fraqueza)")
+    proxima("forcas")
+
+
+def pg_oportunidades():
+    cabecalho("oportunidades")
+    st.caption("Exemplos: preocupação com saúde, novas tecnologias de pagamento, inflação, renda dos consumidores, "
+               "fiscalização, novos concorrentes, mudanças demográficas.")
+    dims = opcoes("dimensao_externa", d["swot"].loc[d["swot"]["ambiente"] == "Externo", "dimensao"].tolist())
+    _fatores("Externo", ["Oportunidade", "Ameaça"], dims, "Como aproveitar (oportunidade) ou neutralizar (ameaça)")
+    proxima("oportunidades")
+
+
 def html_swot(sw: pd.DataFrame) -> str:
     def lista(nat):
         itens = sw[sw["natureza"] == nat]
         if itens.empty:
             return "<i>nenhum fator</i>"
-        return "<br>".join(("⭐ " if int(r["priorizado"]) else "• ") + f"{r['fator']} <small>({r['impacto']})</small>"
+        return "<br>".join(("⭐ " if bool(r["priorizado"]) else "• ") + f"{r['fator']} <small>({r['impacto']})</small>"
                            for _, r in itens.iterrows())
-
-    cel = "padding:14px 16px;border-radius:2px;min-height:190px;font-size:14px;line-height:1.5;"
-    lat = "writing-mode:vertical-rl;transform:rotate(180deg);font-weight:700;letter-spacing:2px;" \
-          "display:flex;align-items:center;justify-content:center;"
+    cel = "padding:14px 16px;border-radius:4px;min-height:200px;font-size:14px;line-height:1.55;"
+    lat = ("writing-mode:vertical-rl;transform:rotate(180deg);font-weight:700;letter-spacing:2px;"
+           "display:flex;align-items:center;justify-content:center;")
     return f"""
     <div style="display:grid;grid-template-columns:44px 1fr 1fr;gap:6px;font-family:sans-serif;">
       <div></div>
@@ -2407,39 +4471,109 @@ def html_swot(sw: pd.DataFrame) -> str:
     </div>"""
 
 
-with abas[5]:
-    st.subheader("Fatores internos e externos")
-    sw = editor("swot", {
-        "ambiente": S("Ambiente", options=["Interno", "Externo"], required=True),
-        "dimensao": S("Dimensão", options=DIMENSOES),
-        "fator": T("Fator", required=True),
-        "natureza": S("Classificação", options=["Força", "Fraqueza", "Oportunidade", "Ameaça"], required=True),
-        "impacto": S("Impacto", options=["Alto", "Baixo"], required=True),
-        "diagnostico": T("Diagnóstico", width="medium"),
-        "plano_acao": T("Como potencializar / corrigir / aproveitar / neutralizar", width="medium"),
-        "priorizado": CK("Priorizado")}, "fator", rotulo="💾 Salvar fatores")
-    st.subheader("Matriz SWOT")
+def pg_swot():
+    cabecalho("swot")
+    sw = d["swot"]
+    c1, c2 = st.columns(2)
+    if c1.button("✏️ Editar forças e fraquezas", width="stretch"):
+        ir("forcas")
+        st.rerun()
+    if c2.button("✏️ Editar oportunidades e ameaças", width="stretch"):
+        ir("oportunidades")
+        st.rerun()
     st.markdown(html_swot(sw), unsafe_allow_html=True)
     st.caption("⭐ fator priorizado · entre parênteses, o impacto")
-
     diag = pontuacao_swot(sw)
     st.subheader("Matriz de estratégias")
     q = diag["quadrantes"]
     g1, g2 = st.columns(2)
     for col, k in zip([g1, g2, g1, g2], ["FO", "FrO", "FA", "FrA"]):
         nome_q, comb, _ = QUADRANTES[k]
-        destaque = "border:3px solid #26548c;" if k == diag["predominante"] else "border:1px solid #ccc;"
-        col.markdown(f"<div style='{destaque}padding:12px;border-radius:6px;margin-bottom:8px;text-align:center;'>"
+        destaque = "border:3px solid #2f6fd0;" if k == diag["predominante"] else "border:1px solid #ccc;"
+        col.markdown(f"<div style='{destaque}padding:12px;border-radius:8px;margin-bottom:8px;text-align:center;'>"
                      f"<div style='font-size:28px;font-weight:700;'>{q[k]}</div><b>{comb}</b><br>{nome_q}</div>",
                      unsafe_allow_html=True)
     if diag["predominante"]:
         nome_q, comb, txt = QUADRANTES[diag["predominante"]]
         st.success(f"**Situação do negócio: {nome_q}.** {txt}")
+    pri = sw[sw["priorizado"].astype(bool)]
+    if not pri.empty:
+        st.subheader("⭐ Ações estratégicas dos fatores priorizados")
+        verbo = {"Força": "Como potencializar", "Fraqueza": "Como corrigir", "Oportunidade": "Como aproveitar", "Ameaça": "Como neutralizar"}
+        for _, r in pri.iterrows():
+            st.markdown(f"**{r['natureza']} · {r['fator']}** ({r['impacto']} impacto)  \n{r['diagnostico']}  \n"
+                        f"➡️ *{verbo.get(r['natureza'], 'Ação')}:* {r['plano_acao']}")
     st.caption("Pontuação: impacto alto = 2 pontos; impacto baixo = 1 ponto.")
+    proxima("swot")
+
 
 # ==============================================================================
-# ABA 7 - CANAIS E FUNIL
+# MARKETING E OPERAÇÃO
 # ==============================================================================
+def pg_marketing():
+    cabecalho("marketing")
+    v = {}
+    c1, c2 = st.columns(2)
+    v["mkt_produto"] = c1.text_area("📦 Produto: o que será vendido, linhas, diferenciais, embalagem, marca",
+                                    proj["mkt_produto"], height=150, key=wk("m1"))
+    v["mkt_preco"] = c2.text_area("🏷️ Preço: estratégia (popular, intermediário, premium), comparação com concorrentes, descontos",
+                                  proj["mkt_preco"], height=150, key=wk("m2"))
+    v["mkt_praca"] = c1.text_area("📍 Praça: onde e como o cliente compra (loja, delivery, site, apps, revendedores)",
+                                  proj["mkt_praca"], height=150, key=wk("m3"))
+    v["mkt_promocao"] = c2.text_area("📣 Promoção: como o cliente vai conhecer o negócio (redes, anúncios, parcerias, eventos)",
+                                     proj["mkt_promocao"], height=150, key=wk("m4"))
+    auto_unica("projeto", v)
+    salvo_txt()
+    try:
+        cat = R()["cat"]
+        if not cat.empty:
+            st.subheader("Apoio para a decisão de preço")
+            a, b, c = st.columns(3)
+            a.metric("Ticket médio (Mês 1)", brl(div(cat["receita_mensal"].sum(), cat["qtd_mensal"].sum())))
+            b.metric("Margem média sobre o preço", pct(div(cat["margem_unit"].mul(cat["qtd_mensal"]).sum(), cat["receita_mensal"].sum())))
+            c.metric("Itens no catálogo", num_br(len(cat), 0))
+            if st.button("🏷️ Ver formação de preço por produto"):
+                ir("preco")
+                st.rerun()
+    except Exception:
+        pass
+    proxima("marketing")
+
+
+def pg_canais():
+    cabecalho("canais")
+    t1, t2 = st.tabs(["🛒 Canais de aquisição", "🔻 Funil de vendas"])
+    with t1:
+        st.caption("Dê notas de 0 a 10. Os três canais com maior média são os **canais de tração**.")
+        cn = editor("canais", {"canal": S("Canal", options=opcoes("canal", d["canais"]["canal"].tolist()), required=True),
+                               "atratividade": nota("Atratividade"), "alcance": nota("Alcance esperado"),
+                               "cliente": nota("Custo por cliente (10 = barato)"), "relacionamento": nota("Relacionamento"),
+                               "viabilidade": nota("Viabilidade")}, "canal")
+        if not cn.empty:
+            cn2 = cn.assign(Média=cn.iloc[:, 1:6].mean(axis=1)).sort_values("Média", ascending=False)
+            st.success("**Canais de tração:** " + ", ".join(cn2["canal"].head(3)))
+            st.altair_chart(alt.Chart(cn2).mark_bar(color="#2f6fd0").encode(
+                x=alt.X("Média:Q", scale=alt.Scale(domain=[0, 10])), y=alt.Y("canal:N", sort="-x", title=None)), width="stretch")
+    with t2:
+        fu = editor("funil_vendas", {
+            "etapa": S("Etapa", options=["Topo do Funil", "Meio do Funil", "Fundo do Funil"], required=True),
+            "acao": T("Ação de venda", width="large"), "orcamento": moeda("Orçamento (R$)"),
+            "alcancados": N("Pessoas alcançadas", min_value=0, format="%d"),
+            "convertidos": N("Pessoas que avançaram / compraram", min_value=0, format="%d")}, "etapa")
+        if not fu.empty:
+            st.dataframe(tabela_funil(fu), hide_index=True, width="stretch")
+            fundo = fu[fu["etapa"] == "Fundo do Funil"]["convertidos"].sum()
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Orçamento total", brl(fu["orcamento"].sum()))
+            m2.metric("Clientes conquistados", num_br(fundo, 0))
+            m3.metric("CAC - custo de aquisição por cliente", brl(div(fu["orcamento"].sum(), fundo)))
+            agg = fu.groupby("etapa", sort=False)[["alcancados", "convertidos"]].sum().reindex(
+                ["Topo do Funil", "Meio do Funil", "Fundo do Funil"]).dropna().reset_index()
+            st.altair_chart(alt.Chart(agg).mark_bar(color="#d6006e").encode(
+                y=alt.Y("etapa:N", sort=None, title=None), x=alt.X("alcancados:Q", title="Pessoas alcançadas")), width="stretch")
+    proxima("canais")
+
+
 def tabela_funil(fu: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
         "Etapa": fu["etapa"], "Ação": fu["acao"], "Orçamento": fu["orcamento"].map(brl),
@@ -2449,302 +4583,125 @@ def tabela_funil(fu: pd.DataFrame) -> pd.DataFrame:
         "Custo por conversão": [brl(div(o, c)) for o, c in zip(fu["orcamento"], fu["convertidos"])]})
 
 
-with abas[6]:
-    st.subheader("Avaliação dos canais de aquisição (notas de 0 a 10)")
-    cn = editor("canais", {"canal": T("Canal", required=True), "atratividade": nota("Atratividade"),
-                           "alcance": nota("Alcance esperado"), "cliente": nota("Custo por cliente"),
-                           "relacionamento": nota("Relacionamento"), "viabilidade": nota("Viabilidade")}, "canal")
-    if not cn.empty:
-        cn2 = cn.assign(Média=cn.iloc[:, 1:].mean(axis=1)).sort_values("Média", ascending=False)
-        st.success("**Canais de tração (3 maiores médias):** " + ", ".join(cn2["canal"].head(3)))
-    st.subheader("Funil de vendas")
-    fu = editor("funil_vendas", {
-        "etapa": S("Etapa", options=["Topo do Funil", "Meio do Funil", "Fundo do Funil"], required=True),
-        "acao": T("Ação de venda", width="large"), "orcamento": moeda("Orçamento (R$)"),
-        "alcancados": N("Pessoas alcançadas", min_value=0, format="%d"),
-        "convertidos": N("Pessoas que avançaram/compraram", min_value=0, format="%d")}, "etapa")
-    if not fu.empty:
-        st.dataframe(tabela_funil(fu), hide_index=True, width="stretch")
-        fundo = fu[fu["etapa"] == "Fundo do Funil"]["convertidos"].sum()
-        cac = div(fu["orcamento"].sum(), fundo)
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Orçamento total", brl(fu["orcamento"].sum()))
-        m2.metric("Clientes conquistados (fundo)", num_br(fundo, 0))
-        m3.metric("CAC - custo de aquisição de cliente", brl(cac))
+def dot_organograma() -> str:
+    def q(s):
+        return '"' + str(s).replace('"', "'") + '"'
+    linhas = ['digraph G {', 'rankdir=TB; node [shape=box, style="rounded,filled", fillcolor="#e8f0fb", fontname="Helvetica", fontsize=11];',
+              'edge [color="#7a8aa0"];', f'raiz [label={q(proj["nome_negocio"] or "Empresa")}, fillcolor="#2f6fd0", fontcolor="white"];']
+    for i, r in d["socios"].iterrows():
+        linhas.append(f's{i} [label={q(r["nome"] + chr(10) + (r["funcao"] or "Sócio"))}, fillcolor="#cfe0f7"];')
+        linhas.append(f'raiz -> s{i};')
+    pes = d["pessoal"]
+    for j, area in enumerate(dict.fromkeys(pes["area"].tolist())):
+        if not area:
+            continue
+        linhas.append(f'a{j} [label={q(area)}, fillcolor="#fde3ef"];')
+        linhas.append(f'raiz -> a{j};')
+        for k, r in pes[pes["area"] == area].iterrows():
+            linhas.append(f'c{k} [label={q(r["cargo"] + " (" + num_br(r["num_empregados"], 0) + ")")}];')
+            linhas.append(f'a{j} -> c{k};')
+    linhas.append("}")
+    return "\n".join(linhas)
 
+
+def pg_operacional():
+    cabecalho("operacional")
+    t1, t2, t3, t4 = st.tabs(["📍 Localização", "🏗️ Layout e processos", "⚙️ Capacidade x demanda", "🗂️ Organograma"])
+    v = {}
+    with t1:
+        c1, c2 = st.columns([3, 1])
+        v["loc_endereco"] = c1.text_input("Endereço / região", proj["loc_endereco"], key=wk("le"))
+        v["loc_area_m2"] = c2.number_input("Área (m²)", 0.0, 1e6, float(proj["loc_area_m2"]), 5.0, key=wk("la"))
+        v["loc_justificativa"] = st.text_area("Por que este ponto? (fluxo, acesso, concorrentes, custo, segurança)",
+                                              proj["loc_justificativa"], key=wk("lj"))
+        v["loc_fluxo"] = st.text_area("Fluxo de pessoas e horários de pico", proj["loc_fluxo"], key=wk("lf"))
+        v["op_horario"] = st.text_input("Horário de funcionamento", proj["op_horario"], key=wk("oh"))
+    with t2:
+        v["op_layout"] = st.text_area("Layout (arranjo físico): como os espaços serão organizados", proj["op_layout"], height=130, key=wk("ol"))
+        v["op_processos"] = st.text_area("Processos operacionais: passo a passo da compra à entrega (use →)",
+                                         proj["op_processos"], height=130, key=wk("op"))
+        etapas = [e.strip() for e in re.split(r"->|→|\n", proj["op_processos"] or "") if e.strip()]
+        if len(etapas) >= 2:
+            dot = "digraph P { rankdir=LR; node [shape=box, style=\"rounded,filled\", fillcolor=\"#e8f0fb\", fontname=Helvetica, fontsize=10];\n"
+            dot += " -> ".join(f'"{e[:40]}"' for e in etapas) + ";}"
+            st.graphviz_chart(dot, width="stretch")
+    with t3:
+        v["op_capacidade_txt"] = st.text_area("Como a capacidade foi estimada", proj["op_capacidade_txt"], key=wk("oc"))
+        alvos = ["Todos os produtos", "Fabricação Própria", "Serviço", "Revenda"] + d["catalogo"]["descricao"].tolist()
+        editor("capacidade", {"recurso": T("Recurso (equipe, máquina, espaço)", required=True, width="medium"),
+                              "produto_ou_grupo": S("Atende", options=alvos, required=True),
+                              "capacidade_mensal": N("Capacidade por mês (unidades)", min_value=0.0),
+                              "observacao": T("Observação", width="medium")}, "recurso")
+        cd = capacidade_demanda(d, R())
+        if not cd.empty:
+            show = cd.copy()
+            for c in ("Uso Mês 1", "Uso Mês 12"):
+                show[c] = show[c].map(lambda x: ("🔴 " if x > 1 else "🟡 " if x > 0.85 else "🟢 ") + pct(x))
+            st.dataframe(show, hide_index=True, width="stretch")
+            g = cd.melt(id_vars="Recurso", value_vars=["Uso Mês 1", "Uso Mês 12"], var_name="Momento", value_name="Uso")
+            st.altair_chart((alt.Chart(g).mark_bar().encode(x=alt.X("Uso:Q", axis=alt.Axis(format="%")), y=alt.Y("Recurso:N", title=None),
+                                                           color="Momento:N", yOffset="Momento:N")
+                             + alt.Chart(pd.DataFrame({"x": [1]})).mark_rule(color="red", strokeDash=[5, 3]).encode(x="x:Q")
+                             ).properties(height=60 * len(cd) + 40), width="stretch")
+            st.caption("Linha vermelha = 100% da capacidade. Acima dela, a operação não dá conta da demanda prevista.")
+    with t4:
+        st.caption("Gerado a partir dos sócios (aba Informações) e da mão de obra (aba Custos), agrupada por área.")
+        try:
+            st.graphviz_chart(dot_organograma(), width="stretch")
+        except Exception as e:
+            st.info(f"Não foi possível desenhar o organograma: {e}")
+    auto_unica("projeto", v)
+    salvo_txt()
+    proxima("operacional")
+
+
+def pg_fornecedores():
+    cabecalho("fornecedores")
+    fo = editor("fornecedores", {"nome": T("Fornecedor", required=True), "itens": T("O que fornece", width="medium"),
+                                 "prazo_pagamento_dias": N("Prazo de pagamento (dias)", min_value=0, step=1),
+                                 "prazo_entrega_dias": N("Prazo de entrega (dias)", min_value=0, step=1),
+                                 "condicoes": T("Condições (pedido mínimo, frete, desconto)", width="medium"),
+                                 "critico": CK("Crítico?")}, "nome")
+    if not fo.empty:
+        a, b, c = st.columns(3)
+        a.metric("Fornecedores cadastrados", len(fo))
+        b.metric("Prazo médio de pagamento (fornecedores)", f"{num_br(fo['prazo_pagamento_dias'].mean(), 0)} dias")
+        c.metric("PMP usado no capital de giro", f"{num_br(R()['pmp'], 1)} dias")
+        crit = fo[fo["critico"].astype(bool)]
+        if not crit.empty:
+            st.warning("**Fornecedores críticos** (ter alternativa homologada): " + ", ".join(crit["nome"]))
+    proxima("fornecedores")
+
+# ##############################################################################
+# PARTE: pnbox_ui_paginas2.py
+# ##############################################################################
 # ==============================================================================
-# ABA 8 - INVESTIMENTOS, CAPITAL DE GIRO E FONTES
+# PNBOX ACADÊMICO - INTERFACE: FERRAMENTAS FINANCEIRAS
 # ==============================================================================
-with abas[7]:
-    st.subheader("Investimentos fixos (máquinas, equipamentos, móveis, veículos, instalações)")
-    invf = editor("inv_fixos", {
-        "descricao": T("Descrição", required=True, width="large"), "quantidade": N("Qtd.", min_value=0.0),
-        "valor_unitario": moeda("Valor unitário (R$)"),
-        "vida_util_anos": N("Vida útil (anos)", min_value=0, max_value=50, step=1,
-                            help="0 = não deprecia (ex.: terrenos)"),
-        "valor_residual_pct": N("Valor residual (%)", min_value=0.0, max_value=100.0)}, "descricao")
-    tot_fixo = float((invf["quantidade"] * invf["valor_unitario"]).sum())
-    dep = sum((q * vu * (1 - r / 100) / vu_) if vu_ > 0 else 0 for q, vu, vu_, r in
-              zip(invf["quantidade"], invf["valor_unitario"], invf["vida_util_anos"], invf["valor_residual_pct"]))
-    a, b = st.columns(2)
-    a.metric("Total dos investimentos fixos", brl(tot_fixo))
-    b.metric("Depreciação mensal", brl(dep / 12))
-
-    st.subheader("Investimentos pré-operacionais")
-    ip = editor("inv_pre", {"descricao": T("Descrição", required=True, width="large"),
-                            "valor": moeda("Valor (R$)")}, "descricao")
-    st.metric("Total pré-operacional", brl(ip["valor"].sum()))
-    st.info("O **estoque inicial** é calculado automaticamente na aba **9. Produtos e Materiais**, a partir da "
-            "quantidade inicial de cada material e de cada mercadoria de revenda.")
-
-    st.subheader("Capital de giro: prazos médios")
-    editor("capital_giro_prazos", {
-        "tipo": S("Tipo", options=["Recebimento", "Pagamento"], required=True),
-        "prazo_dias": N("Prazo (dias)", min_value=0, max_value=360, step=1),
-        "percentual": N("% das vendas/compras", min_value=0.0, max_value=100.0)}, "tipo")
-    st.caption("Recebimento: como os clientes pagam (0 dias = à vista). Pagamento: como a empresa paga os fornecedores. "
-               "Em cada tipo, os percentuais devem somar 100%.")
-
-    st.subheader("Fontes de recursos de terceiros (empréstimos e financiamentos)")
-    editor("emprestimos", {"descricao": T("Descrição", required=True, width="large"),
-                           "valor": moeda("Valor (R$)"), "taxa_anual_pct": N("Juros (% a.a.)", min_value=0.0),
-                           "prazo_meses": N("Prazo (meses)", min_value=1, step=1)}, "descricao")
-    st.caption("Parcelas calculadas pela Tabela Price. O capital próprio vem da aba **1. Projeto** (sócios).")
-
-# ==============================================================================
-# ABA 9 - PRODUTOS, MATERIAIS E FICHA TÉCNICA
-# ==============================================================================
-with abas[8]:
-    st.subheader("① Cadastro de materiais e insumos")
-    st.caption("Matérias-primas, embalagens e insumos usados na fabricação e nos serviços. "
-               "A quantidade inicial forma o estoque inicial.")
-    mat = editor("materiais", {"nome": T("Material / insumo", required=True, width="large"),
-                               "categoria": S("Categoria", options=CATEG_MATERIAIS, required=True),
-                               "unidade": S("Unidade", options=UNIDADES, required=True),
-                               "valor_unitario": moeda("Valor por unidade (R$)"),
-                               "qtd_estoque_inicial": N("Qtd. no estoque inicial", min_value=0.0)}, "nome",
-                 rotulo="💾 Salvar materiais")
-
-    st.subheader("② Produtos e serviços")
-    st.caption("**Revenda:** informe o valor de aquisição. **Fabricação própria e serviços:** monte a ficha "
-               "técnica abaixo (se não houver ficha, vale o custo informado).")
-    cat = editor("catalogo", {
-        "categoria": S("Categoria", options=CATEGORIAS, required=True),
-        "descricao": T("Produto / serviço", required=True, width="large"),
-        "preco_venda": moeda("Preço de venda (R$)"),
-        "custo_aquisicao": moeda("Valor de aquisição / custo informado (R$)"),
-        "qtd_mensal": N("Qtd. vendida no Mês 1", min_value=0, step=1),
-        "qtd_estoque_inicial": N("Estoque inicial (só revenda)", min_value=0, step=1)}, "descricao",
-        rotulo="💾 Salvar produtos e serviços")
-
-    st.subheader("③ Ficha técnica")
-    fabricaveis = cat[cat["categoria"] != "Revenda"]["descricao"].tolist()
-    if not fabricaveis:
-        st.info("Cadastre produtos de fabricação própria ou serviços para montar a ficha técnica.")
-    elif mat.empty:
-        st.info("Cadastre os materiais (item ①) para montar a ficha técnica.")
-    else:
-        prod = st.selectbox("Produto / serviço", fabricaveis, key=f"{PID}_ft_prod")
-        ft_all = d["ficha_tecnica"]
-        ft = ft_all[ft_all["produto"] == prod][["material", "quantidade"]].reset_index(drop=True)
-        def _norm_ft(x):
-            x = x[["material", "quantidade"]].copy()
-            x["quantidade"] = pd.to_numeric(x["quantidade"], errors="coerce").fillna(0.0)
-            return x
-        ft_ed, col_ft = tabela_editavel(ft, {"material": S("Material", options=mat["nome"].tolist(), required=True),
-                                             "quantidade": N("Quantidade (na unidade do material)", min_value=0.0, format="%.3f")},
-                                        "ficha_tecnica", prod, normalizar=_norm_ft)
-        ft_ed = ft_ed.dropna(subset=["material"])
-        ft_ed = ft_ed[ft_ed["material"].astype(str).str.strip() != ""]
-        ft_ed["quantidade"] = pd.to_numeric(ft_ed["quantidade"], errors="coerce").fillna(0)
-        precos = dict(zip(mat["nome"], mat["valor_unitario"]))
-        unid = dict(zip(mat["nome"], mat["unidade"]))
-        calc = ft_ed.assign(Unidade=ft_ed["material"].map(unid),
-                            **{"Valor unit.": ft_ed["material"].map(precos).fillna(0)})
-        calc["Custo"] = calc["quantidade"] * calc["Valor unit."]
-        custo_p = float(calc["Custo"].sum())
-        preco_p = float(cat.loc[cat["descricao"] == prod, "preco_venda"].iloc[0])
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Custo unitário", brl(custo_p))
-        k2.metric("Preço de venda", brl(preco_p))
-        k3.metric("Margem bruta", pct(div(preco_p - custo_p, preco_p)))
-        k4.metric("Markup", f"{num_br(div(preco_p, custo_p))}x" if custo_p else "n.a.")
-        if not calc.empty:
-            st.dataframe(calc.assign(**{"Valor unit.": calc["Valor unit."].map(brl), "Custo": calc["Custo"].map(brl)}),
-                         hide_index=True, width="stretch")
-        if col_ft.button("💾 Salvar ficha técnica", key="bt_ft", type="primary", width="stretch"):
-            nova = pd.concat([ft_all[ft_all["produto"] != prod], ft_ed.assign(produto=prod)], ignore_index=True)
-            gravar("ficha_tecnica", nova, "material", prod)
-        d["ficha_tecnica"] = pd.concat([ft_all[ft_all["produto"] != prod], ft_ed.assign(produto=prod)], ignore_index=True)
-        d["ficha_tecnica"] = limpar(d["ficha_tecnica"], "ficha_tecnica")
-
-    st.subheader("④ Resumo de custos e margens")
-    cu = custos_unitarios(cat, mat, d["ficha_tecnica"])
-    if not cu.empty:
-        st.dataframe(pd.DataFrame({
-            "Categoria": cu["categoria"], "Produto / serviço": cu["descricao"], "Preço": cu["preco_venda"].map(brl),
-            "Custo unit.": cu["custo_unit"].map(brl), "Origem do custo": cu["origem_custo"],
-            "Margem": cu["margem_pct"].map(pct), "Markup": cu["markup"].map(lambda v: f"{num_br(v)}x" if v == v else "n.a."),
-            "Qtd./mês": cu["qtd_mensal"].map(lambda v: num_br(v, 0)), "Receita/mês": cu["receita_mensal"].map(brl),
-            "Custo/mês": cu["custo_mensal"].map(brl)}), hide_index=True, width="stretch")
-        r1, r2, r3 = st.columns(3)
-        r1.metric("Receita do Mês 1", brl(cu["receita_mensal"].sum()))
-        r2.metric("Custo direto do Mês 1", brl(cu["custo_mensal"].sum()))
-        est = float((mat["qtd_estoque_inicial"] * mat["valor_unitario"]).sum() +
-                    (cu.loc[cu["categoria"] == "Revenda", "qtd_estoque_inicial"] * cu.loc[cu["categoria"] == "Revenda", "custo_unit"]).sum())
-        r3.metric("Estoque inicial (materiais + revenda)", brl(est))
-
-# ==============================================================================
-# ABA 10 - CUSTOS
-# ==============================================================================
-with abas[9]:
-    st.subheader("Custos de comercialização (% sobre a receita)")
-    st.caption(f"Impostos sobre vendas ({proj['enquadramento']}): **{num_br(proj['aliquota_imposto_pct'])}%** "
-               "(altere na aba 1).")
-    cv = editor("custos_variaveis", {"descricao": T("Descrição", required=True, width="large"),
-                                     "percentual": N("% sobre a receita", min_value=0.0, max_value=100.0)}, "descricao")
-    st.metric("Total de custos variáveis (impostos + comercialização)",
-              f"{num_br(proj['aliquota_imposto_pct'] + cv['percentual'].sum())}%")
-
-    st.subheader("Mão de obra")
-    pe = editor("pessoal", {"cargo": T("Cargo", required=True, width="large"),
-                            "num_empregados": N("Nº de empregados", min_value=0, step=1),
-                            "salario_mensal": moeda("Salário (R$)"), "encargos_pct": N("Encargos (%)", min_value=0.0),
-                            "beneficios_unit": moeda("Benefícios por empregado (R$)")}, "cargo")
-    tot_pe = float((pe["num_empregados"] * pe["salario_mensal"] * (1 + pe["encargos_pct"] / 100) +
-                    pe["num_empregados"] * pe["beneficios_unit"]).sum())
-    st.metric("Custo mensal com pessoal", brl(tot_pe))
-    st.caption("Referência: no Simples Nacional (anexos I a III), encargos de cerca de 30% a 40% (FGTS, férias, 13º e INSS do 13º); "
-               "fora do Simples, em geral acima de 60%. Confirme com o contador.")
-
-    st.subheader("Custos fixos operacionais mensais")
-    cf = editor("custos_fixos", {"descricao": T("Descrição", required=True, width="large"),
-                                 "valor_mensal": moeda("Valor mensal (R$)")}, "descricao")
-    st.metric("Custos fixos (sem pessoal e depreciação)", brl(cf["valor_mensal"].sum()))
-
-# ==============================================================================
-# MOTOR FINANCEIRO (usa os dados atuais, inclusive edições ainda não salvas)
-# ==============================================================================
-res = executar_motor(proj, d)
-df_dre = tabela_dre(res)
-df_ind = tabela_indicadores(res)
-df_cen = cenarios(res, proj)
-df_chk = tabela_checagens(res, d)
-A1 = res["anos"][1]
-
-# ==============================================================================
-# ABA 11 - RESULTADOS E INDICADORES
-# ==============================================================================
-with abas[10]:
-    n_ver = int((df_chk["Situação"] == "VERIFICAR").sum())
-    if n_ver:
-        st.warning(f"⚠️ {n_ver} checagem(ns) pedem atenção. Veja a seção **Checagens** no fim desta aba.")
-    st.subheader("Resumo financeiro (Ano 1)")
-    rs = res["resumo"]
-    k = st.columns(4)
-    k[0].metric("Investimento total", brl(res["investimento_total"]))
-    k[1].metric("Receita anual", brl(rs["receita_anual"]))
-    k[2].metric("Resultado operacional", brl(rs["resultado_operacional"]))
-    k[3].metric("Lucratividade", pct(rs["lucratividade"]))
-    k = st.columns(4)
-    k[0].metric("Rentabilidade", pct(rs["rentabilidade"]))
-    k[1].metric("Payback simples", f"{num_br(rs['payback_meses'], 1)} meses" if rs["payback_meses"] == rs["payback_meses"] else "não recupera")
-    k[2].metric(f"VPL (TMA {num_br(proj['tma_anual_pct'], 1)}%)", brl(res["vpl"]))
-    k[3].metric("TIR", pct(res["tir"]) if res["tir"] is not None else "n.a.")
-    k = st.columns(4)
-    k[0].metric("PE contábil (anual)", brl(A1["pe_contabil"]))
-    k[1].metric("PE financeiro (anual)", brl(A1["pe_financeiro"]))
-    k[2].metric("PE econômico (anual)", brl(A1["pe_economico"]))
-    k[3].metric("Payback descontado", f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else "> 36 meses")
-
-    st.subheader("Investimento total e fontes")
-    it = res["investimento_total"]
-    c1, c2 = st.columns(2)
-    c1.dataframe(pd.DataFrame({
-        "Aplicação": ["Investimentos fixos", "Pré-operacionais", "Estoque inicial", "Capital de giro", "Total"],
-        "Valor": [brl(x) for x in (res["inv_fixo"], res["inv_pre"], res["inv_estoque"], res["capital_giro"], it)],
-        "%": [pct(div(x, it)) for x in (res["inv_fixo"], res["inv_pre"], res["inv_estoque"], res["capital_giro"], it)]}),
-        hide_index=True, width="stretch")
-    c2.dataframe(pd.DataFrame({
-        "Fonte": ["Capital próprio (sócios)", "Capital de terceiros (empréstimos)", "Total", "Diferença (fontes − aplicações)"],
-        "Valor": [brl(res["capital_proprio"]), brl(res["capital_terceiros"]), brl(res["fontes"]), brl(res["fontes"] - it)]}),
-        hide_index=True, width="stretch")
-    st.caption(f"Capital de giro: ciclo financeiro de {num_br(res['ciclo_fin'], 1)} dias (PME {num_br(res['pme'], 0)} + "
-               f"PMR {num_br(res['pmr'], 1)} − PMP {num_br(res['pmp'], 1)}); NCG {brl(res['ncg'])} + reserva {brl(res['reserva'])}.")
-
-    st.subheader("Projeção mensal do Ano 1")
-    mm = res["meses"]
-    st.line_chart(mm.set_index("Mês")[["Receita", "Custos variáveis", "Custos fixos", "Resultado operacional"]])
-    with st.expander("Ver tabela mensal"):
-        st.dataframe(mm.assign(**{c: mm[c].map(brl) for c in mm.columns[1:]}), hide_index=True, width="stretch")
-
-    st.subheader("DRE projetada (Anos 1 a 3)")
-    st.dataframe(df_dre, hide_index=True, width="stretch", height=560)
-    st.bar_chart(pd.DataFrame({"Receita": [res["anos"][a]["rec_bruta"] for a in (1, 2, 3)],
-                               "EBITDA": [res["anos"][a]["ebitda"] for a in (1, 2, 3)],
-                               "Resultado líquido": [res["anos"][a]["resultado"] for a in (1, 2, 3)]},
-                              index=["Ano 1", "Ano 2", "Ano 3"]), stack=False)
-
-    st.subheader("Matriz de indicadores (5 blocos)")
-    blocos = ["Todos"] + list(df_ind["Bloco"].unique())
-    bsel = st.selectbox("Bloco", blocos)
-    st.dataframe(df_ind if bsel == "Todos" else df_ind[df_ind["Bloco"] == bsel], hide_index=True, width="stretch")
-
-    st.subheader("Simulador de cenários")
-    with st.form("f_cen"):
-        c = st.columns(4)
-        vc = {"cen_otim_receita_pct": c[0].number_input("Otimista: receita maior em (%)", 0.0, 100.0, proj["cen_otim_receita_pct"]),
-              "cen_otim_custo_pct": c[1].number_input("Otimista: custos menores em (%)", 0.0, 100.0, proj["cen_otim_custo_pct"]),
-              "cen_pess_receita_pct": c[2].number_input("Pessimista: receita menor em (%)", 0.0, 100.0, proj["cen_pess_receita_pct"]),
-              "cen_pess_custo_pct": c[3].number_input("Pessimista: custos maiores em (%)", 0.0, 100.0, proj["cen_pess_custo_pct"])}
-        if st.form_submit_button("Atualizar cenários"):
-            salvar_unica(conn, "projeto", vc)
-            st.rerun()
-    st.dataframe(df_cen, hide_index=True, width="stretch")
-
-    st.subheader("Checagens de consistência")
-    st.dataframe(df_chk.style.map(lambda v: "color:#b00020;font-weight:700" if v == "VERIFICAR" else
-                                  ("color:#137333;font-weight:700" if v == "OK" else ""), subset=["Situação"]),
-                 hide_index=True, width="stretch")
-    with st.expander("Notas metodológicas"):
-        st.markdown(
-            "- **Custos variáveis**: custo direto dos itens (ficha técnica ou valor de aquisição) + impostos sobre vendas "
-            "+ custos de comercialização (%).\n"
-            "- **Custos fixos totais**: pessoal + custos fixos operacionais + depreciação (linear, com valor residual).\n"
-            "- **Fluxo do projeto** para VPL/TIR: Ano 0 = investimento total; Anos 1 a 3 = EBITDA "
-            "(no Simples, os tributos já estão na alíquota sobre vendas). Opcionalmente recupera o capital de giro no Ano 3.\n"
-            "- **Payback simples e rentabilidade** seguem o PNBOX: investimento ÷ resultado operacional mensal do Ano 1.\n"
-            "- **Juros** calculados pela Tabela Price, mês a mês.\n"
-            "- **Balanço simplificado**: o caixa é obtido por diferença (Ativo = Passivo + PL); "
-            "os lucros ficam retidos (sem distribuição).")
-
-# ==============================================================================
-# ABA 12 - GRÁFICOS
-# ==============================================================================
-comp = composicoes(res, d)
-
 
 def tabela_comp(df):
     return df.assign(Valor=df["Valor"].map(brl), **{"%": df["%"].map(pct)})
 
 
-def rosca(df, titulo, chave_g):
+def rosca(df, titulo, chave_g, tabela=True):
     st.markdown(f"**{titulo}**")
     if df.empty:
         st.info("Sem dados para este gráfico.")
         return
     base = alt.Chart(df).encode(
         theta=alt.Theta("Valor:Q", stack=True),
-        color=alt.Color("Item:N", sort=list(df["Item"]), legend=alt.Legend(title=None, orient="bottom", columns=2, labelLimit=260)),
+        color=alt.Color("Item:N", sort=list(df["Item"]),
+                        legend=alt.Legend(title=None, orient="bottom", columns=2, labelLimit=260)),
         tooltip=["Item", alt.Tooltip("Valor:Q", format=",.2f"), alt.Tooltip("%:Q", format=".1%")])
     arco = base.mark_arc(innerRadius=55, outerRadius=105)
-    rot = base.transform_filter(alt.datum["%"] >= 0.04).mark_text(radius=125, fontSize=12).encode(
+    rot = base.transform_filter(alt.datum["%"] >= 0.04).mark_text(radius=127, fontSize=12).encode(
         text=alt.Text("%:Q", format=".1%"))
     st.altair_chart((arco + rot).properties(height=360), width="stretch", key=chave_g)
-    st.dataframe(tabela_comp(df), hide_index=True, width="stretch")
+    if tabela:
+        st.dataframe(tabela_comp(df), hide_index=True, width="stretch")
 
 
-def barras(df, titulo, chave_g, rotulo_pct=True):
+def barras(df, titulo, chave_g, cor="#2f6fd0"):
     st.markdown(f"**{titulo}**")
     if df.empty:
         st.info("Sem dados para este gráfico.")
@@ -2752,13 +4709,412 @@ def barras(df, titulo, chave_g, rotulo_pct=True):
     base = alt.Chart(df).encode(y=alt.Y("Item:N", sort="-x", title=None, axis=alt.Axis(labelLimit=260)),
                                 x=alt.X("Valor:Q", title="R$"),
                                 tooltip=["Item", alt.Tooltip("Valor:Q", format=",.2f"), alt.Tooltip("%:Q", format=".1%")])
-    txt = base.mark_text(align="left", dx=3).encode(text=alt.Text("%:Q", format=".1%")) if rotulo_pct else None
-    graf = base.mark_bar(color="#26548c")
-    st.altair_chart((graf + txt if txt is not None else graf).properties(height=28 * len(df) + 40),
-                    width="stretch", key=chave_g)
+    st.altair_chart((base.mark_bar(color=cor) + base.mark_text(align="left", dx=3).encode(text=alt.Text("%:Q", format=".1%")))
+                    .properties(height=28 * len(df) + 40), width="stretch", key=chave_g)
 
 
-with abas[11]:
+# ==============================================================================
+# INVESTIMENTOS E FONTES
+# ==============================================================================
+def pg_investimentos():
+    cabecalho("investimentos")
+    t1, t2, t3, t4 = st.tabs(["🏗️ Investimentos fixos", "📋 Pré-operacionais", "🔄 Capital de giro", "🏦 Fontes de recursos"])
+    with t1:
+        st.caption("Máquinas, equipamentos, móveis, veículos, instalações. Vida útil 0 = não deprecia (ex.: terreno).")
+        invf = editor("inv_fixos", {
+            "descricao": T("Descrição", required=True, width="large"), "quantidade": N("Qtd.", min_value=0.0),
+            "valor_unitario": moeda("Valor unitário (R$)"),
+            "vida_util_anos": N("Vida útil (anos)", min_value=0, max_value=50, step=1),
+            "valor_residual_pct": N("Valor residual (%)", min_value=0.0, max_value=100.0)}, "descricao")
+        r = R()
+        a, b = st.columns(2)
+        a.metric("Total dos investimentos fixos", brl(r["inv_fixo"]))
+        b.metric("Depreciação mensal", brl(r["dep_m"]))
+    with t2:
+        st.caption("Gastos antes de abrir: reformas, legalização, marca, projeto, treinamento, marketing de inauguração.")
+        editor("inv_pre", {"descricao": T("Descrição", required=True, width="large"), "valor": moeda("Valor (R$)")}, "descricao")
+        st.metric("Total pré-operacional", brl(R()["inv_pre"]))
+    with t3:
+        st.caption("Recebimento: como os clientes pagam (0 dias = à vista). Pagamento: como a empresa paga os fornecedores. "
+                   "Em cada tipo, os percentuais devem somar 100%.")
+        editor("capital_giro_prazos", {
+            "tipo": S("Tipo", options=["Recebimento", "Pagamento"], required=True),
+            "prazo_dias": N("Prazo (dias)", min_value=0, max_value=360, step=1),
+            "percentual": N("% das vendas / compras", min_value=0.0, max_value=100.0)}, "tipo")
+        r = R()
+        c = st.columns(4)
+        c[0].metric("PMR (recebimento)", f"{num_br(r['pmr'], 1)} dias")
+        c[1].metric("PMP (pagamento)", f"{num_br(r['pmp'], 1)} dias")
+        c[2].metric("PME (estoques)", f"{num_br(r['pme'], 0)} dias")
+        c[3].metric("Ciclo financeiro", f"{num_br(r['ciclo_fin'], 1)} dias")
+        c = st.columns(3)
+        c[0].metric("Necessidade de capital de giro", brl(r["ncg"]))
+        c[1].metric("Reserva de segurança", brl(r["reserva"]), help="Altere em Informações e sócios → Premissas.")
+        c[2].metric("Capital de giro total", brl(r["capital_giro"]))
+        st.metric("Estoque inicial (calculado em Produtos e materiais)", brl(r["inv_estoque"]))
+    with t4:
+        st.caption("O capital próprio vem dos sócios (Informações e sócios). Aqui você cadastra empréstimos e financiamentos.")
+        editor("emprestimos", {"descricao": T("Descrição (banco, linha de crédito)", required=True, width="large"),
+                               "valor": moeda("Valor (R$)"), "taxa_anual_pct": N("Juros (% ao ano)", min_value=0.0),
+                               "prazo_meses": N("Prazo (meses)", min_value=1, step=1)}, "descricao")
+        r = R()
+        it = r["investimento_total"]
+        a, b = st.columns(2)
+        a.dataframe(pd.DataFrame({
+            "Aplicação": ["Investimentos fixos", "Pré-operacionais", "Estoque inicial", "Capital de giro", "Total"],
+            "Valor": [brl(x) for x in (r["inv_fixo"], r["inv_pre"], r["inv_estoque"], r["capital_giro"], it)],
+            "%": [pct(div(x, it)) for x in (r["inv_fixo"], r["inv_pre"], r["inv_estoque"], r["capital_giro"], it)]}),
+            hide_index=True, width="stretch")
+        b.dataframe(pd.DataFrame({
+            "Fonte": ["Capital próprio (sócios)", "Capital de terceiros", "Total das fontes"],
+            "Valor": [brl(r["capital_proprio"]), brl(r["capital_terceiros"]), brl(r["fontes"])]}), hide_index=True, width="stretch")
+        dif = r["fontes"] - it
+        if abs(dif) <= 1:
+            st.success("🟢 As fontes de recursos cobrem exatamente o investimento total.")
+        else:
+            falta = "faltam" if dif < 0 else "sobram"
+            st.error(f"🔴 Diferença de **{brl(dif)}**: {falta} {brl(abs(dif))} para fechar o investimento total de {brl(it)}.")
+            st.markdown("**Como corrigir:** aumente/reduza o capital dos sócios ou o valor dos empréstimos.")
+            if st.button("Ajustar o capital dos sócios →"):
+                ir("projeto", f"Ajuste o capital dos sócios em {brl(-dif)} no total para igualar o investimento de {brl(it)}.")
+                st.rerun()
+    proxima("investimentos")
+
+
+# ==============================================================================
+# PRODUTOS, MATERIAIS E FICHA TÉCNICA
+# ==============================================================================
+def pg_produtos():
+    cabecalho("produtos")
+    t1, t2, t3, t4 = st.tabs(["① Materiais e insumos", "② Produtos e serviços", "③ Ficha técnica", "④ Resumo de custos"])
+    with t1:
+        st.caption("Matérias-primas, embalagens e insumos. A quantidade inicial forma o estoque inicial. "
+                   "Falta uma unidade ou categoria? Acrescente em ⚙️ Configurações e listas, ou digite direto.")
+        mat = editor("materiais", {
+            "nome": T("Material / insumo", required=True, width="large"),
+            "categoria": S("Categoria", options=opcoes("categoria_material", d["materiais"]["categoria"].tolist()), required=True),
+            "unidade": S("Unidade", options=opcoes("unidade", d["materiais"]["unidade"].tolist()), required=True),
+            "valor_unitario": moeda("Valor por unidade (R$)"),
+            "qtd_estoque_inicial": N("Qtd. no estoque inicial", min_value=0.0)}, "nome")
+        _nova_lista_rapida(["unidade", "categoria_material"], "mat")
+    with t2:
+        st.caption("**Revenda:** informe o valor de aquisição. **Fabricação própria e serviços:** monte a ficha técnica "
+                   "(aba ③); se não houver ficha, vale o custo informado.")
+        editor("catalogo", {
+            "categoria": S("Categoria", options=CATEGORIAS, required=True),
+            "descricao": T("Produto / serviço", required=True, width="large"),
+            "preco_venda": moeda("Preço de venda (R$)"),
+            "custo_aquisicao": moeda("Valor de aquisição / custo informado (R$)"),
+            "qtd_mensal": N("Qtd. vendida no Mês 1", min_value=0, step=1),
+            "qtd_estoque_inicial": N("Estoque inicial (só revenda)", min_value=0, step=1)}, "descricao")
+    with t3:
+        cat, mat = d["catalogo"], d["materiais"]
+        fabricaveis = cat[cat["categoria"] != "Revenda"]["descricao"].tolist()
+        if not fabricaveis:
+            st.info("Cadastre produtos de fabricação própria ou serviços na aba ②.")
+        elif mat.empty:
+            st.info("Cadastre os materiais na aba ①.")
+        else:
+            prod = st.selectbox("Produto / serviço", fabricaveis, key=wk("ft_prod"))
+            ft_all = d["ficha_tecnica"]
+            ft = ft_all[ft_all["produto"] == prod][["material", "quantidade"]].reset_index(drop=True)
+
+            def _norm(x):
+                x = x[["material", "quantidade"]].copy()
+                x["material"] = x["material"].astype(object).where(x["material"].notna(), "")
+                x["quantidade"] = pd.to_numeric(x["quantidade"], errors="coerce").fillna(0.0)
+                return x
+
+            def _salvar(x):
+                x = x[x["material"].astype(str).str.strip() != ""]
+                novo = pd.concat([d["ficha_tecnica"][d["ficha_tecnica"]["produto"] != prod], x.assign(produto=prod)],
+                                 ignore_index=True)
+                salvar(conn, "ficha_tecnica", novo, "material")
+                d["ficha_tecnica"] = ler(conn, "ficha_tecnica")
+
+            ft_ed = tabela_editavel(ft, {"material": S("Material", options=mat["nome"].tolist(), required=True),
+                                         "quantidade": N("Quantidade (na unidade do material)", min_value=0.0, format="%.3f")},
+                                    "ficha_tecnica", prod, normalizar=_norm, salvar_fn=_salvar)
+            ft_ed = ft_ed[ft_ed["material"].astype(str).str.strip() != ""]
+            precos = dict(zip(mat["nome"], mat["valor_unitario"]))
+            unid = dict(zip(mat["nome"], mat["unidade"]))
+            catm = dict(zip(mat["nome"], mat["categoria"]))
+            calc = ft_ed.assign(Unidade=ft_ed["material"].map(unid), Categoria=ft_ed["material"].map(catm),
+                                **{"Valor unit.": ft_ed["material"].map(precos).fillna(0)})
+            calc["Custo"] = calc["quantidade"] * calc["Valor unit."]
+            custo_p = float(calc["Custo"].sum())
+            preco_p = float(cat.loc[cat["descricao"] == prod, "preco_venda"].iloc[0])
+            k = st.columns(4)
+            k[0].metric("Custo unitário", brl(custo_p))
+            k[1].metric("Preço de venda", brl(preco_p))
+            k[2].metric("Margem bruta", pct(div(preco_p - custo_p, preco_p)))
+            k[3].metric("Markup", f"{num_br(div(preco_p, custo_p))}x" if custo_p else "n.a.")
+            if not calc.empty:
+                st.dataframe(calc.assign(**{"Valor unit.": calc["Valor unit."].map(brl), "Custo": calc["Custo"].map(brl)}),
+                             hide_index=True, width="stretch")
+                por_cat = calc.groupby("Categoria")["Custo"].sum()
+                st.caption("Composição do custo: " + " · ".join(f"{c}: {pct(div(v, custo_p))}" for c, v in por_cat.items()))
+    with t4:
+        cu = R()["cat"]
+        if not cu.empty:
+            st.dataframe(pd.DataFrame({
+                "Categoria": cu["categoria"], "Produto / serviço": cu["descricao"], "Preço": cu["preco_venda"].map(brl),
+                "Custo unit.": cu["custo_unit"].map(brl), "Origem do custo": cu["origem_custo"],
+                "Margem": cu["margem_pct"].map(pct), "Markup": cu["markup"].map(lambda v: f"{num_br(v)}x" if v == v else "n.a."),
+                "Qtd./mês": cu["qtd_mensal"].map(lambda v: num_br(v, 0)), "Receita/mês": cu["receita_mensal"].map(brl),
+                "Custo/mês": cu["custo_mensal"].map(brl)}), hide_index=True, width="stretch")
+            r = R()
+            a, b, c = st.columns(3)
+            a.metric("Receita do Mês 1", brl(r["receita_m1"]))
+            b.metric("Custo direto do Mês 1", brl(r["cdir_m1"]))
+            c.metric("Estoque inicial (materiais + revenda)", brl(r["inv_estoque"]))
+    proxima("produtos")
+
+
+def _nova_lista_rapida(tipos, sufixo):
+    with st.expander("➕ Acrescentar uma opção às listas (unidade, categoria...)"):
+        a, b, c = st.columns([1.5, 2, 1])
+        tipo = a.selectbox("Lista", tipos, format_func=lambda t: NOMES_LISTAS[t], key=wk(f"lt_{sufixo}"))
+        valor = b.text_input("Nova opção", key=wk(f"lv_{sufixo}"))
+        if c.button("Acrescentar", key=wk(f"lb_{sufixo}"), width="stretch") and valor.strip():
+            novo_registro("listas", {"tipo": tipo, "valor": valor.strip()})
+            d["listas"] = ler(conn, "listas")
+            for k in list(ss.snap):
+                if k.startswith(f"{PID}_materiais") or k.startswith(f"{PID}_catalogo"):
+                    ss.snap.pop(k)
+            st.toast(f"“{valor}” acrescentado.")
+            st.rerun()
+
+
+# ==============================================================================
+# CUSTOS E DESPESAS
+# ==============================================================================
+def pg_custos():
+    cabecalho("custos")
+    with st.expander("📚 Entenda a classificação dos custos", expanded=False):
+        st.markdown("""
+| Tipo | O que é | Exemplos | Onde entra |
+|---|---|---|---|
+| **Custo direto (variável)** | Vai direto no produto e varia com a quantidade | matéria-prima, embalagem, mercadoria de revenda | Ficha técnica / valor de aquisição |
+| **Mão de obra direta (MOD)** | Pessoas que produzem ou prestam o serviço | cozinheiros, auxiliares de produção | Mão de obra com área "Produção / operação" |
+| **Custo indireto de produção (CIF)** | Gasto da produção que não dá para medir por unidade | energia da cozinha, manutenção de máquinas, aluguel da área produtiva | Custos fixos classificados como "Custo indireto" |
+| **Despesa** | Gasto para administrar e vender, fora da produção | pró-labore, contador, marketing, tarifas bancárias | Custos fixos "Despesa administrativa / comercial / financeira" |
+| **Despesa variável de venda** | Proporcional à receita | impostos, comissões, taxas de cartão | Custos de comercialização (%) |
+| **Investimento** | Compra de bens duráveis; entra no resultado só pela depreciação | máquinas, móveis, reforma | Investimentos e fontes |
+
+No **custeio por absorção**, o produto recebe o custo direto **mais** uma parte (rateio) da MOD, dos CIF e da depreciação.
+No **custeio variável**, o produto recebe só o custo direto; MOD, CIF e despesas ficam como custos do período.""")
+    t1, t2, t3 = st.tabs(["% Custos de comercialização", "👷 Mão de obra", "🏢 Custos fixos"])
+    with t1:
+        st.caption(f"Impostos sobre vendas ({proj['enquadramento']}): **{num_br(proj['aliquota_imposto_pct'])}%** (altere em Informações e sócios).")
+        cv = editor("custos_variaveis", {"descricao": T("Descrição", required=True, width="large"),
+                                         "percentual": N("% sobre a receita", min_value=0.0, max_value=100.0)}, "descricao")
+        st.metric("Total de custos variáveis de venda (impostos + comercialização)",
+                  f"{num_br(proj['aliquota_imposto_pct'] + cv['percentual'].sum())}%")
+    with t2:
+        pe = editor("pessoal", {"cargo": T("Cargo", required=True, width="medium"),
+                                "area": S("Área", options=opcoes("area_pessoal", d["pessoal"]["area"].tolist()), required=True,
+                                          help="Produção / operação = mão de obra direta (entra no custo do produto por absorção)."),
+                                "num_empregados": N("Nº", min_value=0, step=1), "salario_mensal": moeda("Salário (R$)"),
+                                "encargos_pct": N("Encargos (%)", min_value=0.0), "beneficios_unit": moeda("Benefícios por pessoa (R$)"),
+                                "atribuicoes": T("Atribuições", width="medium")}, "cargo")
+        r = R()
+        c = st.columns(4)
+        c[0].metric("Total com pessoal / mês", brl(r["pessoal_m"]))
+        c[1].metric("Mão de obra direta (produção)", brl(r["mod_m"]))
+        c[2].metric("Administrativo", brl(r["pessoal_adm_m"]))
+        c[3].metric("Comercial / vendas", brl(r["pessoal_com_m"]))
+        st.caption("Referência: no Simples Nacional (anexos I a III), encargos de cerca de 30% a 40% (FGTS, férias, 13º, "
+                   "INSS sobre 13º); fora do Simples, em geral acima de 60%. Confirme com o contador.")
+    with t3:
+        editor("custos_fixos", {"descricao": T("Descrição", required=True, width="large"),
+                                "classificacao": S("Classificação", options=opcoes("classe_custo_fixo", d["custos_fixos"]["classificacao"].tolist()),
+                                                   required=True),
+                                "valor_mensal": moeda("Valor mensal (R$)")}, "descricao")
+        r = R()
+        c = st.columns(4)
+        c[0].metric("Custos indiretos de produção", brl(r["cif_m"]))
+        c[1].metric("Despesas administrativas", brl(r["desp_adm_m"]))
+        c[2].metric("Despesas comerciais", brl(r["desp_com_m"]))
+        c[3].metric("Despesas financeiras", brl(r["desp_fin_m"]))
+    r = R()
+    st.subheader("Estrutura de custos mensal (Mês 1)")
+    est = pd.DataFrame({"Item": ["Custos diretos (materiais e mercadorias)", "Impostos e despesas variáveis de venda",
+                                 "Mão de obra direta (produção)", "Custos indiretos de produção", "Depreciação",
+                                 "Pessoal administrativo e comercial", "Despesas administrativas, comerciais e financeiras"],
+                        "Valor": [r["cdir_m1"], r["receita_m1"] * (r["aliq"] + r["var_pct"]), r["mod_m"], r["cif_m"], r["dep_m"],
+                                  r["pessoal_adm_m"] + r["pessoal_com_m"], r["desp_adm_m"] + r["desp_com_m"] + r["desp_fin_m"]]})
+    est = est[est["Valor"] > 0]
+    est["%"] = est["Valor"] / est["Valor"].sum()
+    c1, c2 = st.columns(2)
+    with c1:
+        rosca(est, "Para onde vai o dinheiro no mês", "g_estcustos", tabela=False)
+    with c2:
+        st.dataframe(tabela_comp(est), hide_index=True, width="stretch")
+        st.metric("Custos que vão no produto (absorção): MOD + CIF + depreciação", brl(r["overhead_m"]))
+    proxima("custos")
+
+
+# ==============================================================================
+# FORMAÇÃO DE PREÇO
+# ==============================================================================
+def pg_preco():
+    cabecalho("preco")
+    v = {}
+    c1, c2 = st.columns(2)
+    v["margem_desejada_pct"] = c1.number_input("Margem de lucro desejada sobre o preço (%)", 0.0, 80.0,
+                                               float(proj["margem_desejada_pct"]), 1.0, key=wk("mdes"))
+    crits = ["Custo direto", "Receita", "Quantidade"]
+    v["rateio_criterio"] = c2.selectbox("Critério de rateio dos custos indiretos (absorção)", crits, key=wk("rat"),
+                                        index=crits.index(proj["rateio_criterio"]) if proj["rateio_criterio"] in crits else 0)
+    auto_unica("projeto", v)
+    r = R()
+    st.markdown(f"""
+**Markup divisor:** preço = custo ÷ [1 − (impostos + despesas variáveis + despesas fixas + margem desejada)]
+
+= custo ÷ [1 − ({pct(r['aliq'])} + {pct(r['var_pct'])} + {pct(r['df_pct'])} + {pct(r['margem_desejada'])})]
+= custo × **{num_br(r['markup_mult'], 3)}**
+
+*Despesas fixas* = (custos fixos + pessoal + depreciação) ÷ receita do Mês 1 = {pct(r['df_pct'])}.""")
+    if r["divisor_markup"] <= 0:
+        st.error("A soma dos percentuais passou de 100%: não existe preço que cubra tudo. Reduza custos fixos ou a margem desejada.")
+    cat = r["cat"]
+    if cat.empty:
+        st.info("Cadastre produtos em Produtos e materiais.")
+        proxima("preco")
+        return
+    tab = pd.DataFrame({
+        "Produto / serviço": cat["descricao"], "Categoria": cat["categoria"],
+        "Custo direto (variável)": cat["custo_unit"].map(brl), "Custo por absorção": cat["custo_absorcao_unit"].map(brl),
+        "Preço praticado": cat["preco_venda"].map(brl), "Preço sugerido (markup)": cat["preco_sugerido"].map(brl),
+        "Diferença": cat["dif_preco_pct"].map(lambda v: ("🔻 " if v < -0.05 else "🔺 " if v > 0.05 else "✔️ ") + pct(v) if v == v else "n.a."),
+        "Margem (variável)": cat["margem_pct"].map(pct), "Margem (absorção)": cat["margem_absorcao_pct"].map(pct),
+        "PE (unid./mês)": cat["pe_unidades_mes"].map(lambda v: num_br(v, 0)), "Venda prevista (unid./mês)": cat["qtd_mensal"].map(lambda v: num_br(v, 0))})
+    st.dataframe(tab, hide_index=True, width="stretch", height=480)
+    st.caption("🔻 preço abaixo do sugerido (pode não cobrir todos os custos com a margem desejada) · 🔺 acima do sugerido "
+               "(confira se o mercado aceita) · PE = quantidade mínima por mês para o negócio empatar, mantido o mix atual de vendas.")
+    abaixo = cat[cat["dif_preco_pct"] < -0.05]
+    if not abaixo.empty:
+        st.warning(f"**{len(abaixo)} item(ns) com preço mais de 5% abaixo do sugerido:** " + ", ".join(abaixo["descricao"].head(8)))
+    prej = cat[cat["margem_absorcao_pct"] < 0]
+    if not prej.empty:
+        st.error("**Itens que dão prejuízo no custeio por absorção:** " + ", ".join(prej["descricao"]))
+    proxima("preco")
+
+
+# ==============================================================================
+# DRE, FLUXO DE CAIXA E INDICADORES
+# ==============================================================================
+def pg_dre():
+    cabecalho("dre")
+    r = R()
+    st.subheader("Projeção mensal do Ano 1")
+    mm = r["meses"]
+    st.line_chart(mm.set_index("Mês")[["Receita", "Custos variáveis", "Custos fixos", "Resultado operacional"]])
+    with st.expander("Ver tabela mensal"):
+        st.dataframe(mm.assign(**{c: mm[c].map(brl) for c in mm.columns[1:]}), hide_index=True, width="stretch")
+    st.subheader("Demonstração do resultado (Anos 1 a 3)")
+    st.dataframe(tabela_dre(r), hide_index=True, width="stretch", height=560)
+    st.bar_chart(pd.DataFrame({"Receita": [r["anos"][a]["rec_bruta"] for a in (1, 2, 3)],
+                               "EBITDA": [r["anos"][a]["ebitda"] for a in (1, 2, 3)],
+                               "Resultado líquido": [r["anos"][a]["resultado"] for a in (1, 2, 3)]},
+                              index=["Ano 1", "Ano 2", "Ano 3"]), stack=False)
+    proxima("dre")
+
+
+def pg_fluxo():
+    cabecalho("fluxo")
+    r = R()
+    fm = r["fluxo_mensal"]
+    if fm.empty:
+        st.info("Sem dados.")
+        return
+    minimo = fm["Saldo final"].min()
+    mes = fm.loc[fm["Saldo final"].idxmin(), "Mês"]
+    c = st.columns(3)
+    c[0].metric("Saldo inicial (após investimentos)", brl(fm["Saldo inicial"].iloc[0]))
+    c[1].metric("Menor saldo do ano", brl(minimo), mes, delta_color="off")
+    c[2].metric("Saldo no fim do Ano 1", brl(fm["Saldo final"].iloc[-1]))
+    if minimo < 0:
+        st.error(f"🔴 O caixa fica negativo em {mes}. Aumente a reserva/capital de giro, alongue prazos ou reduza custos.")
+    g = fm[["Mês", "Recebimentos"]].assign(Pagamentos=fm[["Fornecedores", "Impostos e desp. variáveis", "Pessoal e custos fixos",
+                                                          "Parcelas de empréstimos"]].sum(axis=1))
+    longo = g.melt(id_vars="Mês", var_name="Tipo", value_name="R$")
+    barras_ = alt.Chart(longo).mark_bar(opacity=.8).encode(x=alt.X("Mês:N", sort=list(fm["Mês"]), title=None), y="R$:Q",
+                                                            color=alt.Color("Tipo:N", scale=alt.Scale(range=["#2f6fd0", "#d6006e"])),
+                                                            xOffset="Tipo:N")
+    linha = alt.Chart(fm).mark_line(point=True, color="#27ae60", strokeWidth=3).encode(
+        x=alt.X("Mês:N", sort=list(fm["Mês"])), y=alt.Y("Saldo final:Q", title="R$"))
+    st.altair_chart((barras_ + linha).properties(height=380), width="stretch")
+    st.caption("Barras: recebimentos (azul) e pagamentos (rosa) do mês. Linha verde: saldo acumulado em caixa.")
+    st.dataframe(fm.assign(**{c: fm[c].map(brl) for c in fm.columns[1:]}), hide_index=True, width="stretch")
+    proxima("fluxo")
+
+
+def pg_indicadores():
+    cabecalho("indicadores")
+    r = R()
+    sem = semaforo(r)
+    st.subheader("🚦 Saúde do negócio")
+    for i in range(0, len(sem), 3):
+        cols = st.columns(3)
+        for col, s_ in zip(cols, sem[i:i + 3]):
+            with col.container(border=True):
+                st.markdown(f"### {s_['Status']} {s_['Valor']}")
+                st.markdown(f"**{s_['Indicador']}**")
+                st.caption(s_["Leitura"])
+                with st.popover("🔎 Como foi calculado"):
+                    st.write(s_["Como foi calculado"])
+    st.subheader("Resumo financeiro (Ano 1, padrão PNBOX)")
+    rs, a1 = r["resumo"], r["anos"][1]
+    k = st.columns(4)
+    k[0].metric("Investimento total", brl(r["investimento_total"]))
+    k[1].metric("Receita anual", brl(rs["receita_anual"]))
+    k[2].metric("Resultado operacional", brl(rs["resultado_operacional"]))
+    k[3].metric("Lucratividade", pct(rs["lucratividade"]))
+    k = st.columns(4)
+    k[0].metric("Rentabilidade", pct(rs["rentabilidade"]))
+    k[1].metric("Payback simples", f"{num_br(rs['payback_meses'], 1)} meses" if rs["payback_meses"] == rs["payback_meses"] else "não recupera")
+    k[2].metric(f"VPL (TMA {num_br(proj['tma_anual_pct'], 1)}%)", brl(r["vpl"]))
+    k[3].metric("TIR", pct(r["tir"]) if r["tir"] is not None else "n.a.")
+    k = st.columns(4)
+    k[0].metric("PE contábil (anual)", brl(a1["pe_contabil"]))
+    k[1].metric("PE financeiro (anual)", brl(a1["pe_financeiro"]))
+    k[2].metric("PE econômico (anual)", brl(a1["pe_economico"]))
+    k[3].metric("Payback descontado", f"{num_br(r['payback_desc'], 1)} meses" if r["payback_desc"] == r["payback_desc"] else "> 36 meses")
+
+    st.subheader("Matriz de indicadores (5 blocos)")
+    ind = tabela_indicadores(r)
+    bsel = st.selectbox("Bloco", ["Todos"] + list(ind["Bloco"].unique()), key=wk("bloco"))
+    st.dataframe(ind if bsel == "Todos" else ind[ind["Bloco"] == bsel], hide_index=True, width="stretch")
+
+    st.subheader("✔️ Checagens de consistência")
+    chk = CHK()
+    for i, c_ in chk.iterrows():
+        ok = c_["Situação"] == "OK"
+        a, b, c = st.columns([3.2, 2.2, 1.4])
+        a.markdown(f"{'🟢' if ok else '🔴'} **{c_['Teste']}**  \n<small>{c_['Observação']}</small>", unsafe_allow_html=True)
+        b.markdown(f"{c_['Valor apurado']}" + ("" if ok else f"  \n<small>📍 {c_['Onde corrigir']}</small>"), unsafe_allow_html=True)
+        if not ok and c_["destino"]:
+            if c.button("VERIFICAR → ir ao ajuste", key=f"chk_{i}", type="primary", width="stretch"):
+                ir(c_["destino"], f"{c_['Teste']}: {c_['Valor apurado']}. {c_['Como corrigir'] or c_['Observação']}")
+                st.rerun()
+        elif ok:
+            c.markdown("✅ OK")
+    with st.expander("Notas metodológicas"):
+        st.markdown(
+            "- **Custos variáveis**: custo direto dos itens (ficha técnica ou valor de aquisição) + impostos + custos de comercialização.\n"
+            "- **Custos fixos totais**: pessoal + custos fixos + depreciação (linear, com valor residual).\n"
+            "- **Fluxo do projeto** (VPL/TIR): Ano 0 = investimento total; Anos 1 a 3 = EBITDA (no Simples, os tributos já estão "
+            "na alíquota sobre vendas). Opcionalmente recupera o capital de giro no Ano 3.\n"
+            "- **Payback simples e rentabilidade** seguem o PNBOX: investimento ÷ resultado operacional mensal do Ano 1.\n"
+            "- **Juros** pela Tabela Price, mês a mês. **Balanço simplificado**: caixa por diferença (Ativo = Passivo + PL), lucros retidos.")
+    proxima("indicadores")
+
+
+def pg_graficos():
+    cabecalho("graficos")
+    comp = composicoes(R(), d)
     st.subheader("Investimento inicial")
     g1, g2 = st.columns(2)
     with g1:
@@ -2766,94 +5122,663 @@ with abas[11]:
     with g2:
         rosca(comp["fontes"], "Fontes de recursos", "g_fontes")
     barras(comp["inv_fixos"], "Maiores itens do ativo imobilizado", "g_fixos")
-
     st.subheader("Materiais e custos diretos")
     g1, g2 = st.columns(2)
     with g1:
         rosca(comp["estoque"], "Estoque inicial por categoria", "g_est")
     with g2:
-        rosca(comp["custo_direto"], "Custo direto mensal por categoria (matéria-prima, embalagem...)", "g_cd")
-    st.caption("O custo direto por categoria usa as fichas técnicas. Produtos sem ficha aparecem como "
-               "“Custo informado”. Classifique cada material na aba 9 (coluna Categoria).")
-
+        rosca(comp["custo_direto"], "Custo direto mensal por categoria", "g_cd")
     st.subheader("Receitas")
     g1, g2 = st.columns(2)
     with g1:
         rosca(comp["receita_categoria"], "Receita por categoria", "g_rc")
     with g2:
-        barras(comp["top_produtos"], "10 produtos/serviços com maior receita mensal", "g_top")
-
+        barras(comp["top_produtos"], "10 itens com maior receita mensal", "g_top")
     st.subheader("Para onde vai cada R$ 1,00 de receita (Ano 1)")
     barras(comp["estrutura_receita"], "Custos, despesas e lucro em % da receita bruta", "g_estr")
-
     st.subheader("Ponto de equilíbrio contábil (Ano 1)")
     eq = comp["equilibrio"].melt(id_vars="Receita", var_name="Série", value_name="R$")
     pe, rec = comp["pe_ponto"]
-    linhas = alt.Chart(eq).mark_line(strokeWidth=3).encode(
-        x=alt.X("Receita:Q", title="Receita anual (R$)"), y=alt.Y("R$:Q", title="R$"),
-        color=alt.Color("Série:N", legend=alt.Legend(orient="bottom", title=None)))
+    linhas = alt.Chart(eq).mark_line(strokeWidth=3).encode(x=alt.X("Receita:Q", title="Receita anual (R$)"), y="R$:Q",
+                                                            color=alt.Color("Série:N", legend=alt.Legend(orient="bottom", title=None)))
     marcas = alt.Chart(pd.DataFrame({"x": [pe, rec], "rot": ["Ponto de equilíbrio", "Receita projetada"]})).mark_rule(
         strokeDash=[6, 4]).encode(x="x:Q", tooltip=["rot", alt.Tooltip("x:Q", format=",.2f")])
     st.altair_chart((linhas + marcas).properties(height=380), width="stretch", key="g_pe")
-    st.caption(f"PE contábil: {brl(pe)} por ano · receita projetada: {brl(rec)} · "
-               f"margem de segurança: {pct(div(rec - pe, rec))}")
-
+    st.caption(f"PE contábil: {brl(pe)} por ano · receita projetada: {brl(rec)} · margem de segurança: {pct(div(rec - pe, rec))}")
     st.subheader("Recuperação do investimento (payback)")
     fa = comp["fluxo_acumulado"]
     st.bar_chart(fa.set_index("Ano")[["Acumulado", "Acumulado descontado (TMA)"]], stack=False)
-    st.dataframe(fa.assign(**{c: fa[c].map(brl) for c in fa.columns[1:]}), hide_index=True, width="stretch")
+    proxima("graficos")
 
-    st.subheader("Cenários")
-    def _num(v):
-        try:
-            return float(str(v).replace("R$", "").replace(".", "").replace(",", ".").strip())
-        except ValueError:
-            return 0.0
-    cen_res = pd.DataFrame({"Cenário": list(df_cen.columns[1:]),
-                            "Resultado operacional": [_num(v) for v in df_cen.iloc[4, 1:]]})
-    st.altair_chart(alt.Chart(cen_res).mark_bar().encode(
-        x=alt.X("Cenário:N", sort=None, title=None, axis=alt.Axis(labelAngle=0, labelLimit=300)),
-        y=alt.Y("Resultado operacional:Q"),
-        color=alt.condition(alt.datum["Resultado operacional"] > 0, alt.value("#26548c"), alt.value("#d6006e"))
-    ).properties(height=320), width="stretch", key="g_cen")
 
 # ==============================================================================
-# ABA 13 - RELATÓRIO E EXPORTAÇÃO
+# SIMULADOR, EXPERIMENTOS, RISCOS, CRONOGRAMA, ORÇADO X REALIZADO
 # ==============================================================================
-with abas[12]:
-    st.subheader("Exportar o plano")
-    st.write("O **relatório em PDF** segue a ordem do PNBOX: informações do plano, segmentos, proposta de valor, "
-             "personas, jornada, concorrência, matriz SWOT, canais e funil, investimentos, produtos e fichas técnicas, "
-             "custos, DRE, indicadores, cenários e checagens.")
-    extras = {"comp": comp, "dre": df_dre, "indicadores": df_ind, "cenarios": df_cen, "checagens": df_chk,
-              "swot_diag": pontuacao_swot(d["swot"]), "funil": tabela_funil(d["funil_vendas"]),
-              "concorrencia_pivot": ss_piv if "ss_piv" in globals() else pd.DataFrame()}
-    c1, c2, c3 = st.columns(3)
-    if c1.button("📄 Gerar relatório em PDF", type="primary", width="stretch"):
-        with st.spinner("Gerando o PDF..."):
-            ss[f"pdf_{PID}"] = gerar_pdf(proj, d, res, extras)
-    if ss.get(f"pdf_{PID}"):
-        c1.download_button("⬇️ Baixar PDF", ss[f"pdf_{PID}"], f"Plano_de_Negocio_{PID}.pdf",
-                           "application/pdf", width="stretch")
+def pg_simulador():
+    cabecalho("simulador")
+    r = R()
+    t1, t2, t3 = st.tabs(["🎚️ E se...?", "🌪️ Sensibilidade", "📊 Cenários"])
+    with t1:
+        st.caption("Mova as barras e veja o resultado do Ano 1 mudar na hora (nada é gravado no projeto).")
+        c = st.columns(5)
+        vp = c[0].slider("Preço de venda", -30, 30, 0, 1, format="%d%%", key=wk("s1"))
+        vv = c[1].slider("Volume de vendas", -50, 50, 0, 1, format="%d%%", key=wk("s2"))
+        vm = c[2].slider("Custo de materiais", -30, 30, 0, 1, format="%d%%", key=wk("s3"))
+        vs = c[3].slider("Salários e encargos", -30, 30, 0, 1, format="%d%%", key=wk("s4"))
+        vf = c[4].slider("Demais custos fixos", -30, 30, 0, 1, format="%d%%", key=wk("s5"))
+        base, sim = simular(r), simular(r, vp / 100, vv / 100, vm / 100, vs / 100, vf / 100)
+        k = st.columns(4)
+        k[0].metric("Receita (Ano 1)", brl(sim["receita"]), brl(sim["receita"] - base["receita"]))
+        k[1].metric("Margem de contribuição", brl(sim["mc"]), brl(sim["mc"] - base["mc"]))
+        k[2].metric("Resultado líquido", brl(sim["resultado"]), brl(sim["resultado"] - base["resultado"]))
+        k[3].metric("Lucratividade", pct(sim["lucratividade"]),
+                    f"{num_br((sim['lucratividade'] - base['lucratividade']) * 100)} p.p." if sim["lucratividade"] == sim["lucratividade"] else None)
+        if sim["resultado"] < 0:
+            st.error("🔴 Nesse cenário o negócio tem prejuízo no Ano 1.")
+    with t2:
+        sens = sensibilidade(r)
+        st.caption("Efeito de variar cada item em 10% (para mais e para menos) no resultado do Ano 1. "
+                   "As barras mais longas mostram onde o negócio é mais sensível.")
+        longo = sens.melt(id_vars="Variável", value_vars=["+10%", "-10%"], var_name="Variação", value_name="Efeito no resultado")
+        st.altair_chart(alt.Chart(longo).mark_bar().encode(
+            y=alt.Y("Variável:N", sort=list(sens["Variável"]), title=None), x=alt.X("Efeito no resultado:Q", title="R$"),
+            color=alt.Color("Variação:N", scale=alt.Scale(range=["#27ae60", "#d6006e"]))).properties(height=260), width="stretch")
+        st.info(f"O item que mais mexe no lucro é **{sens.iloc[0]['Variável']}**: 10% de variação muda o resultado em "
+                f"{brl(sens.iloc[0]['Impacto absoluto'])}.")
+    with t3:
+        v = {}
+        c = st.columns(4)
+        v["cen_otim_receita_pct"] = c[0].number_input("Otimista: receita maior em (%)", 0.0, 100.0, proj["cen_otim_receita_pct"], key=wk("c1"))
+        v["cen_otim_custo_pct"] = c[1].number_input("Otimista: custos menores em (%)", 0.0, 100.0, proj["cen_otim_custo_pct"], key=wk("c2"))
+        v["cen_pess_receita_pct"] = c[2].number_input("Pessimista: receita menor em (%)", 0.0, 100.0, proj["cen_pess_receita_pct"], key=wk("c3"))
+        v["cen_pess_custo_pct"] = c[3].number_input("Pessimista: custos maiores em (%)", 0.0, 100.0, proj["cen_pess_custo_pct"], key=wk("c4"))
+        auto_unica("projeto", v)
+        st.dataframe(cenarios(R(), proj), hide_index=True, width="stretch")
+    proxima("simulador")
 
+
+def pg_experimentos():
+    cabecalho("experimentos")
+    st.caption("Antes de investir, teste as hipóteses mais arriscadas. Ex.: “Pessoas pagariam R$ 29,90 por uma marmita com macros?” "
+               "→ teste: pré-venda para 30 pessoas → métrica: % que compra → sucesso: acima de 40%.")
+    ex = editor("experimentos", {"hipotese": T("Hipótese (o que acreditamos)", required=True, width="medium"),
+                                 "experimento": T("Experimento (como testar)", width="medium"), "metrica": T("Métrica"),
+                                 "criterio_sucesso": T("Critério de sucesso"), "resultado": T("Resultado obtido", width="medium"),
+                                 "status": S("Situação", options=["A testar", "Em teste", "Validada", "Invalidada", "Pivotar"])}, "hipotese")
+    if not ex.empty:
+        cont = ex["status"].replace("", "A testar").value_counts()
+        st.caption(" · ".join(f"{k}: {v}" for k, v in cont.items()))
+    proxima("experimentos")
+
+
+def pg_riscos():
+    cabecalho("riscos")
+    rk = editor("riscos", {"risco": T("Risco", required=True, width="medium"),
+                           "probabilidade": N("Probabilidade (1 a 5)", min_value=1, max_value=5, step=1),
+                           "impacto": N("Impacto (1 a 5)", min_value=1, max_value=5, step=1),
+                           "mitigacao": T("Plano de contingência / mitigação", width="large"), "responsavel": T("Responsável")}, "risco")
+    if not rk.empty:
+        g = rk.assign(Nível=rk["probabilidade"] * rk["impacto"])
+        fundo = pd.DataFrame([{"p": p, "i": i, "n": p * i} for p in range(1, 6) for i in range(1, 6)])
+        mapa = alt.Chart(fundo).mark_rect(opacity=.55).encode(
+            x=alt.X("p:O", title="Probabilidade"), y=alt.Y("i:O", sort="descending", title="Impacto"),
+            color=alt.Color("n:Q", scale=alt.Scale(domain=[1, 8, 25], range=["#27ae60", "#f1c40f", "#e74c3c"]), legend=None))
+        pts = alt.Chart(g).mark_text(fontSize=12, fontWeight="bold").encode(
+            x="probabilidade:O", y=alt.Y("impacto:O", sort="descending"), text="risco:N")
+        st.altair_chart((mapa + pts).properties(height=360), width="stretch")
+        alto = g[g["Nível"] >= 12]
+        if not alto.empty:
+            st.warning("**Riscos críticos (nível ≥ 12):** " + ", ".join(alto["risco"]))
+    proxima("riscos")
+
+
+def pg_cronograma():
+    cabecalho("cronograma")
+    cr = editor("cronograma", {"atividade": T("Atividade", required=True, width="medium"),
+                               "mes_inicio": N("Mês de início (1 = primeiro mês)", min_value=1, step=1),
+                               "duracao_meses": N("Duração (meses)", min_value=0.25, step=0.25),
+                               "responsavel": T("Responsável"), "custo": moeda("Custo previsto (R$)")}, "atividade")
+    if not cr.empty:
+        g = cr.assign(fim=cr["mes_inicio"] + cr["duracao_meses"])
+        st.altair_chart(alt.Chart(g).mark_bar(cornerRadius=4, color="#2f6fd0").encode(
+            x=alt.X("mes_inicio:Q", title="Mês"), x2="fim:Q", y=alt.Y("atividade:N", sort=None, title=None),
+            tooltip=["atividade", "responsavel", "mes_inicio", "duracao_meses"]).properties(height=34 * len(g) + 40), width="stretch")
+        st.metric("Custo total previsto no cronograma", brl(cr["custo"].sum()))
+    proxima("cronograma")
+
+
+def pg_realizado():
+    cabecalho("realizado")
+    st.caption("Depois que o negócio abrir, lance mês a mês o que aconteceu de verdade. O programa compara com o planejado.")
+    rz = editor("realizado", {"mes": N("Mês (1 a 12)", min_value=1, max_value=12, step=1, required=True),
+                              "receita_real": moeda("Receita real (R$)"), "custos_variaveis_real": moeda("Custos variáveis reais (R$)"),
+                              "custos_fixos_real": moeda("Custos fixos reais (R$)")}, "mes")
+    rz = rz[rz["mes"] > 0]
+    if not rz.empty:
+        mm = R()["meses"].reset_index(drop=True)
+        linhas = []
+        for _, x in rz.sort_values("mes").iterrows():
+            m = int(x["mes"]) - 1
+            if 0 <= m < len(mm):
+                prev = mm.iloc[m]
+                res_real = x["receita_real"] - x["custos_variaveis_real"] - x["custos_fixos_real"]
+                linhas.append({"Mês": f"Mês {m + 1}", "Receita prevista": prev["Receita"], "Receita real": x["receita_real"],
+                               "Desvio receita": div(x["receita_real"] - prev["Receita"], prev["Receita"]),
+                               "Resultado previsto": prev["Resultado operacional"], "Resultado real": res_real})
+        cmp_ = pd.DataFrame(linhas)
+        if not cmp_.empty:
+            st.dataframe(cmp_.assign(**{c: cmp_[c].map(brl) for c in ["Receita prevista", "Receita real", "Resultado previsto", "Resultado real"]},
+                                     **{"Desvio receita": cmp_["Desvio receita"].map(lambda v: ("🔴 " if v < -0.1 else "🟡 " if v < 0 else "🟢 ") + pct(v))}),
+                         hide_index=True, width="stretch")
+            longo = cmp_.melt(id_vars="Mês", value_vars=["Receita prevista", "Receita real"], var_name="Série", value_name="R$")
+            st.altair_chart(alt.Chart(longo).mark_line(point=True, strokeWidth=3).encode(
+                x=alt.X("Mês:N", sort=None), y="R$:Q", color="Série:N").properties(height=320), width="stretch")
+    proxima("realizado")
+
+# ##############################################################################
+# PARTE: pnbox_ui_paginas3.py
+# ##############################################################################
+# ==============================================================================
+# PNBOX ACADÊMICO - INTERFACE: CONCLUSÃO, ENTREGA, PROFESSOR E CONFIGURAÇÕES
+# ==============================================================================
+
+
+# ------------------------------------------------------------------------------
+# PONTOS DE RESTAURAÇÃO (versões salvas dentro do próprio projeto)
+# ------------------------------------------------------------------------------
+def foto_projeto() -> str:
+    dados = {}
+    for t in SCHEMA:
+        if t == "versoes":
+            continue
+        dados[t] = ler(conn, t).to_dict("records")
+    return json.dumps(dados, ensure_ascii=False, default=str)
+
+
+def salvar_versao(nome: str, automatica=False):
+    conn.execute("INSERT INTO versoes (nome, data, dados) VALUES (?,?,?)",
+                 (("[auto] " if automatica else "") + nome, datetime.now().strftime("%d/%m/%Y %H:%M"), foto_projeto()))
+    if automatica:   # guarda só as 5 cópias automáticas mais recentes
+        ids = [r[0] for r in conn.execute("SELECT id FROM versoes WHERE nome LIKE '[auto]%' ORDER BY id DESC").fetchall()]
+        for i in ids[5:]:
+            conn.execute("DELETE FROM versoes WHERE id=?", (i,))
+    conn.commit()
+
+
+def restaurar_versao(vid: int):
+    linha = conn.execute("SELECT dados FROM versoes WHERE id=?", (vid,)).fetchone()
+    if not linha:
+        return
+    salvar_versao("Antes de restaurar", automatica=True)
+    dados = json.loads(linha[0])
+    for t, regs in dados.items():
+        if t not in SCHEMA:
+            continue
+        cols = colunas_de(t)
+        if t in ("projeto", "proposta_valor"):
+            if regs:
+                salvar_unica(conn, t, {c: regs[0][c] for c in cols if c in regs[0]})
+            continue
+        conn.execute(f"DELETE FROM {t}")
+        for r in regs:
+            cc = [c for c in cols if c in r]
+            if cc:
+                conn.execute(f"INSERT INTO {t} ({', '.join(cc)}) VALUES ({', '.join('?' * len(cc))})", [r[c] for c in cc])
+    conn.commit()
+    for k in ("buf", "snap", "hash"):
+        ss[k] = {}
+    ss.gen += 1
+    invalidar()
+
+
+def copia_automatica():
+    """Cria um ponto de restauração a cada 10 minutos de uso."""
+    agora = time.time()
+    ultimo = ss.get("ultima_copia_auto", {}).get(ss.db)
+    if ultimo is None:
+        ss.setdefault("ultima_copia_auto", {})[ss.db] = agora
+    elif agora - ultimo >= 600:
+        salvar_versao("Cópia automática (10 min)", automatica=True)
+        ss.ultima_copia_auto[ss.db] = agora
+
+
+# ------------------------------------------------------------------------------
+# ANÁLISE COM IA
+# ------------------------------------------------------------------------------
+def pg_ia():
+    cabecalho("ia")
+    res = R()
+    st.markdown("""
+<div class="pn-card-info">
+<b>Como funciona:</b> o programa monta um texto com todos os números do seu plano e as instruções para a IA.
+Você copia e cola em qualquer assistente gratuito (ChatGPT, Gemini, Copilot, Claude, DeepSeek...).
+Nenhum dado sai do seu computador sem que você mesmo cole. <b>A IA comenta; quem decide é o grupo.</b>
+Confira os números que ela citar com os do programa.
+</div>""", unsafe_allow_html=True)
+    st.write("")
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        escolha = st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
+                                 default=["indicadores", "concorrencia", "custos", "graficos"], key=wk("ia_tarefas"))
+    with c2:
+        publico = st.selectbox("Quem está pedindo", ["estudante de Administração", "estudante de Ciências Contábeis",
+                                                      "estudante de Economia", "empreendedor iniciante", "professor"],
+                               key=wk("ia_publico"))
+    piv, _ = pivo_concorrencia()
+    texto = gerar_prompt_ia(proj, d, res, escolha, publico, piv)
+    st.caption(f"{len(texto):,} caracteres · cerca de {len(texto) // 4:,} palavras-token".replace(",", "."))
+    t1, t2 = st.tabs(["📋 Copiar (botão no canto da caixa)", "✏️ Ver e editar antes de copiar"])
+    with t1:
+        st.code(texto, language="markdown", wrap_lines=True, height=420)
+    with t2:
+        editado = st.text_area("Texto", texto, height=420, label_visibility="collapsed", key=wk("ia_edit"))
+        texto = editado
+    st.download_button("⬇️ Baixar como arquivo .txt", texto.encode("utf-8"), f"prompt_IA_{PID}.txt", "text/plain",
+                       width="stretch", type="primary")
+    with st.expander("💡 Dicas para tirar mais proveito da IA"):
+        st.markdown("""
+- Se a IA disser que o texto é longo demais, cole em duas partes e escreva "aguarde a segunda parte".
+- Peça depois: *"Agora explique como se eu nunca tivesse estudado finanças"* ou *"Resuma em 5 tópicos para o slide"*.
+- Assistentes que executam código (ChatGPT com análise de dados, Gemini, Claude) conseguem desenhar os gráficos.
+- Nunca copie a resposta da IA direto para o trabalho: use como ponto de partida e cite que a usou.
+""")
+    proxima("ia")
+
+
+# ------------------------------------------------------------------------------
+# SUMÁRIO EXECUTIVO E CONCLUSÃO
+# ------------------------------------------------------------------------------
+def pg_sumario():
+    cabecalho("sumario")
+    res = R()
+    st.info("O sumário executivo é a primeira coisa que o leitor vê, mas a última que se escreve. "
+            "Use o rascunho automático como ponto de partida e reescreva com as palavras do grupo.")
+    if st.button("✨ Gerar rascunho automático a partir dos dados", type="primary"):
+        novo = gerar_sumario(proj, d, res)
+        salvar_unica(conn, "projeto", {"sumario_executivo": novo})
+        ss.pop(wk("sumario_txt"), None)
+        marcar_salvo()
+        st.rerun()
+    txt = st.text_area("Sumário executivo", proj["sumario_executivo"], height=360, key=wk("sumario_txt"),
+                       placeholder="Clique no botão acima para gerar um rascunho, ou escreva aqui.")
+    st.caption(f"{len(txt.split())} palavras. Recomenda-se entre 250 e 500.")
+    st.divider()
+    st.subheader("Conclusão e parecer do grupo")
+    st.caption("O negócio é viável? Em que condições? O que precisa ser validado antes de investir? "
+               "Use os indicadores e o semáforo para justificar.")
+    conc = st.text_area("Conclusão", proj["conclusao"], height=240, key=wk("conclusao_txt"), label_visibility="collapsed")
+    auto_unica("projeto", {"sumario_executivo": txt, "conclusao": conc})
+    salvo_txt()
+    proxima("sumario")
+
+
+# ------------------------------------------------------------------------------
+# MODO APRESENTAÇÃO
+# ------------------------------------------------------------------------------
+def pg_apresentacao():
+    cabecalho("apresentacao")
+    res = R()
+    a1 = res["anos"][1]
+    sem = semaforo(res)
+    mk = mercado(proj, res)
+    slides = ["capa", "mercado", "proposta", "numeros", "semaforo", "investimento", "dre", "caixa", "fim"]
+    ss.setdefault("slide", 0)
+    ss.slide = min(ss.slide, len(slides) - 1)
+    n1, n2, n3 = st.columns([1, 3, 1])
+    if n1.button("◀ Anterior", width="stretch", disabled=ss.slide == 0):
+        ss.slide -= 1
+        st.rerun()
+    n2.progress((ss.slide + 1) / len(slides), text=f"Slide {ss.slide + 1} de {len(slides)}")
+    if n3.button("Próximo ▶", width="stretch", disabled=ss.slide == len(slides) - 1, type="primary"):
+        ss.slide += 1
+        st.rerun()
+    s = slides[ss.slide]
+    st.markdown('<div class="pn-slide">', unsafe_allow_html=True)
+    if s == "capa":
+        st.markdown(f"<h1 style='text-align:center;font-size:3.4rem;margin-top:2rem'>{proj['nome_negocio']}</h1>", unsafe_allow_html=True)
+        props = d["propostas"]
+        if not props.empty:
+            st.markdown(f"<h3 style='text-align:center;font-weight:400'>{props['oferecem'].iloc[0]}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align:center'>{proj['cidade_uf']} · {str(proj['autores']).replace(chr(10), ', ')}</p>",
+                    unsafe_allow_html=True)
+    elif s == "mercado":
+        st.header("🌍 O mercado")
+        if mk["preenchido"]:
+            c = st.columns(3)
+            c[0].metric("TAM (mercado total)", brl(mk["tam"]), f"{num_br(mk['tam_c'], 0)} clientes", delta_color="off")
+            c[1].metric("SAM (alcançável)", brl(mk["sam"]), f"{num_br(mk['sam_c'], 0)} clientes", delta_color="off")
+            c[2].metric("SOM (nossa meta)", brl(mk["som"]), f"{num_br(mk['som_c'], 0)} clientes", delta_color="off")
+            st.markdown(f"### A receita do Ano 1 representa **{pct(mk['pct_som'])}** do SOM.")
+        else:
+            st.info("Preencha a ferramenta Tamanho do mercado.")
+    elif s == "proposta":
+        st.header("💎 Proposta de valor")
+        for _, p_ in d["propostas"].iterrows():
+            st.markdown(f"#### Para **{p_['persona_nome']}**, que deseja {p_['que_desejam']}")
+            st.markdown(f"Oferecemos **{p_['oferecem']}**, por meio de {p_['por_meio']}, diferente de {p_['diferentemente']}.")
+    elif s == "numeros":
+        st.header("💰 Os números do primeiro ano")
+        c = st.columns(4)
+        c[0].metric("Investimento total", brl(res["investimento_total"]))
+        c[1].metric("Receita bruta", brl(a1["rec_bruta"]))
+        c[2].metric("Lucro líquido", brl(a1["resultado"]))
+        c[3].metric("Lucratividade", pct(div(a1["resultado"], a1["rec_bruta"])))
+        c = st.columns(4)
+        c[0].metric("VPL (3 anos)", brl(res["vpl"]))
+        c[1].metric("TIR", pct(res["tir"]) if res["tir"] is not None else "n.a.")
+        c[2].metric("Payback descontado", f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else "> 36 meses")
+        c[3].metric("Ponto de equilíbrio", brl(a1["pe_contabil"]))
+    elif s == "semaforo":
+        st.header("🚦 Saúde do negócio")
+        for i in range(0, len(sem), 3):
+            cols = st.columns(3)
+            for c, it in zip(cols, sem[i:i + 3]):
+                with c.container(border=True):
+                    st.markdown(f"<div style='font-size:2.2rem'>{it['Status']}</div><b>{it['Indicador']}</b><br>"
+                                f"<span style='font-size:1.6rem'>{it['Valor']}</span><br><small>{it['Leitura']}</small>",
+                                unsafe_allow_html=True)
+    elif s == "investimento":
+        st.header("🏗️ Investimento e fontes")
+        comp = composicoes(res, d)
+        c1, c2 = st.columns(2)
+        with c1:
+            rosca(comp["investimento"], "Composição do investimento", "ap_inv", tabela=False)
+        with c2:
+            fontes = pd.DataFrame({"Item": ["Capital próprio", "Capital de terceiros"],
+                                   "Valor": [res["capital_proprio"], res["capital_terceiros"]]})
+            fontes["%"] = fontes["Valor"] / max(fontes["Valor"].sum(), 1)
+            rosca(fontes, "Fontes de recursos", "ap_fontes", tabela=False)
+    elif s == "dre":
+        st.header("📈 Receita e resultado em 3 anos")
+        anos = pd.DataFrame([{"Ano": f"Ano {k}", "Receita": v["rec_bruta"], "Resultado": v["resultado"]} for k, v in res["anos"].items()])
+        longo = anos.melt("Ano", var_name="Série", value_name="R$")
+        st.altair_chart(alt.Chart(longo).mark_bar().encode(x=alt.X("Ano:N", title=None), xOffset="Série:N", y="R$:Q",
+                                                           color=alt.Color("Série:N", scale=alt.Scale(range=["#2f6fd0", "#18a058"])))
+                        .properties(height=420), width="stretch")
+    elif s == "caixa":
+        st.header("🏦 Saldo de caixa mês a mês (Ano 1)")
+        fm = res["fluxo_mensal"]
+        if not fm.empty:
+            st.altair_chart(alt.Chart(fm.assign(n=range(1, len(fm) + 1))).mark_area(
+                line={"color": "#2f6fd0"}, color="#2f6fd033").encode(x=alt.X("n:Q", title="Mês"), y=alt.Y("Saldo final:Q", title="R$"))
+                .properties(height=420), width="stretch")
+    else:
+        st.markdown("<h1 style='text-align:center;font-size:3.4rem;margin-top:3rem'>Obrigado! 🙌</h1>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align:center;font-weight:400'>Perguntas?</h3>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.caption("Dica: aperte F11 para tela cheia e recolha o menu lateral (>> no topo) durante a apresentação.")
+
+
+# ------------------------------------------------------------------------------
+# RELATÓRIO E EXPORTAÇÃO
+# ------------------------------------------------------------------------------
+def planilha_excel(res) -> bytes:
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
         pd.DataFrame([proj]).T.reset_index().set_axis(["Campo", "Valor"], axis=1).to_excel(w, sheet_name="Projeto", index=False)
         for t, df_t in d.items():
-            if isinstance(df_t, pd.DataFrame):
+            if isinstance(df_t, pd.DataFrame) and t != "versoes":
                 df_t.to_excel(w, sheet_name=t[:31], index=False)
-        res["cat"].to_excel(w, sheet_name="Custos_produtos", index=False)
+        res["cat"].to_excel(w, sheet_name="Custos_e_precos", index=False)
         res["inv"].to_excel(w, sheet_name="Depreciacao", index=False)
         res["meses"].to_excel(w, sheet_name="Projecao_mensal", index=False)
-        df_dre.to_excel(w, sheet_name="DRE", index=False)
-        df_ind.to_excel(w, sheet_name="Indicadores", index=False)
-        df_cen.to_excel(w, sheet_name="Cenarios", index=False)
-        df_chk.to_excel(w, sheet_name="Checagens", index=False)
-    c2.download_button("📊 Baixar planilha (Excel)", buf.getvalue(), f"Planilha_{PID}.xlsx",
-                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
-    conn.commit()
-    c3.download_button("🗄️ Baixar arquivo do projeto (.pnbox)", Path(ss.db).read_bytes(), f"{PID}.pnbox",
-                       "application/octet-stream", width="stretch")
-    st.caption("O arquivo .pnbox guarda todo o projeto e pode ser reaberto no menu lateral (📂 Abrir arquivo .pnbox).")
+        res["fluxo_mensal"].to_excel(w, sheet_name="Fluxo_caixa_mensal", index=False)
+        tabela_dre(res).to_excel(w, sheet_name="DRE", index=False)
+        tabela_indicadores(res).to_excel(w, sheet_name="Indicadores", index=False)
+        pd.DataFrame(semaforo(res)).to_excel(w, sheet_name="Semaforo", index=False)
+        cenarios(res, proj).to_excel(w, sheet_name="Cenarios", index=False)
+        CHK().drop(columns=["destino"], errors="ignore").to_excel(w, sheet_name="Checagens", index=False)
+    return buf.getvalue()
 
-conn.close()
+
+def pg_relatorio():
+    cabecalho("relatorio")
+    res = R()
+    chk = CHK()
+    pend = chk[chk["Situação"] != "OK"]
+    comp = completude()
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Plano preenchido", pct(comp, 0))
+    c2.metric("Checagens com problema", len(pend))
+    c3.metric("Páginas estimadas do PDF", "25 a 35")
+    if not pend.empty:
+        with st.expander(f"⚠️ {len(pend)} ponto(s) para revisar antes de entregar", expanded=True):
+            for i, r in pend.iterrows():
+                a, b = st.columns([4, 1])
+                a.markdown(f"**{r['Teste']}**: {r['Valor apurado']}. {r['Como corrigir']}")
+                if b.button("Ir corrigir →", key=f"rel_chk_{i}", width="stretch"):
+                    ir(r["destino"], f"{r['Teste']}: {r['Valor apurado']}. {r['Como corrigir']}")
+                    st.rerun()
+
+    st.subheader("📦 Baixar")
+    piv, _ = pivo_concorrencia()
+    piv_i = piv
+    k = st.columns(3)
+    with k[0].container(border=True):
+        st.markdown("#### 📄 Relatório completo (PDF)")
+        st.caption("Todas as ferramentas, tabelas, gráficos e checagens, na ordem do PNBOX.")
+        if st.button("Gerar PDF", type="primary", width="stretch", key="b_pdf"):
+            with st.spinner("Montando o relatório... (pode levar alguns segundos)"):
+                extras = {"comp": composicoes(res, d), "dre": tabela_dre(res), "indicadores": tabela_indicadores(res),
+                          "cenarios": cenarios(res, proj), "checagens": tabela_checagens(res, d),
+                          "swot_diag": pontuacao_swot(d["swot"]), "funil": tabela_funil(d["funil_vendas"]),
+                          "concorrencia_pivot": piv_i}
+                ss[f"pdf_{PID}"] = gerar_pdf(proj, d, res, extras)
+        if ss.get(f"pdf_{PID}"):
+            st.download_button("⬇️ Baixar PDF", ss[f"pdf_{PID}"], f"Plano_{Path(ss.db).stem}.pdf", "application/pdf", width="stretch")
+    with k[1].container(border=True):
+        st.markdown("#### 🎤 Pitch deck (PDF 16:9)")
+        st.caption("12 slides prontos para a apresentação oral.")
+        if st.button("Gerar pitch", width="stretch", key="b_pitch"):
+            with st.spinner("Montando os slides..."):
+                ss[f"pitch_{PID}"] = gerar_pitch(proj, d, res)
+        if ss.get(f"pitch_{PID}"):
+            st.download_button("⬇️ Baixar pitch", ss[f"pitch_{PID}"], f"Pitch_{Path(ss.db).stem}.pdf", "application/pdf", width="stretch")
+    with k[2].container(border=True):
+        st.markdown("#### 📝 Documento editável (Word)")
+        st.caption("Para o grupo revisar o texto e formatar nas normas da ABNT.")
+        if st.button("Gerar Word", width="stretch", key="b_docx"):
+            with st.spinner("Montando o documento..."):
+                ss[f"docx_{PID}"] = gerar_docx(proj, d, res, piv_i) or b""
+        if ss.get(f"docx_{PID}") is not None and f"docx_{PID}" in ss:
+            if ss[f"docx_{PID}"]:
+                st.download_button("⬇️ Baixar .docx", ss[f"docx_{PID}"], f"Plano_{Path(ss.db).stem}.docx",
+                                   "application/vnd.openxmlformats-officedocument.wordprocessingml.document", width="stretch")
+            else:
+                st.warning("A biblioteca python-docx não está instalada neste computador.")
+    k = st.columns(2)
+    with k[0].container(border=True):
+        st.markdown("#### 📊 Planilha (Excel)")
+        st.caption("Todos os dados e cálculos, uma aba por tabela.")
+        st.download_button("⬇️ Baixar planilha", planilha_excel(res), f"Planilha_{Path(ss.db).stem}.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+    with k[1].container(border=True):
+        st.markdown("#### 🗄️ Arquivo do projeto (.pnbox)")
+        st.caption("Guarde no pen drive ou na nuvem. É o que o professor recebe para avaliar.")
+        conn.commit()
+        st.download_button("⬇️ Baixar .pnbox", Path(ss.db).read_bytes(), f"{Path(ss.db).stem}.pnbox",
+                           "application/octet-stream", width="stretch", type="primary")
+    st.divider()
+    st.subheader("🕑 Pontos de restauração")
+    st.caption("Salve uma versão antes de grandes mudanças. O programa também cria uma cópia automática a cada 10 minutos "
+               "(as 5 mais recentes ficam guardadas).")
+    a, b = st.columns([3, 1])
+    nome_v = a.text_input("Nome da versão", placeholder="Ex.: Antes de mudar os preços", label_visibility="collapsed")
+    if b.button("💾 Salvar versão", width="stretch"):
+        salvar_versao(nome_v.strip() or "Versão manual")
+        st.toast("Versão salva.")
+        st.rerun()
+    vs = pd.read_sql("SELECT id, nome, data FROM versoes ORDER BY id DESC", conn)
+    if vs.empty:
+        st.caption("Nenhuma versão salva ainda.")
+    for _, v in vs.iterrows():
+        a, b, c = st.columns([4, 1, 1])
+        a.markdown(f"**{v['nome']}** · {v['data']}")
+        if b.button("Restaurar", key=f"rest_{v['id']}", width="stretch"):
+            restaurar_versao(int(v["id"]))
+            st.toast("Versão restaurada. Uma cópia do estado anterior foi guardada.")
+            st.rerun()
+        if c.button("Apagar", key=f"apv_{v['id']}", width="stretch"):
+            conn.execute("DELETE FROM versoes WHERE id=?", (int(v["id"]),))
+            conn.commit()
+            st.rerun()
+
+
+# ------------------------------------------------------------------------------
+# MODO PROFESSOR
+# ------------------------------------------------------------------------------
+def pg_professor():
+    cabecalho("professor")
+    st.markdown("""
+<div class="pn-card-info">
+Envie os arquivos <b>.pnbox</b> dos grupos. O programa recalcula tudo, confere as checagens, mede o preenchimento e
+sugere uma nota pela rubrica. A nota sugerida é só um apoio: a banca registra a nota final.
+Os arquivos não são guardados; ficam só na memória desta sessão.
+</div>""", unsafe_allow_html=True)
+    st.write("")
+    with st.expander("📐 Rubrica de avaliação (critérios e pesos)", expanded=False):
+        ss.setdefault("rubrica", pd.DataFrame(RUBRICA_PADRAO, columns=["Critério", "Peso"]))
+        rub = st.data_editor(ss.rubrica, num_rows="fixed", hide_index=True, width="stretch", key="ed_rubrica",
+                             column_config={"Critério": T(disabled=True, width="large"), "Peso": N(min_value=0, max_value=100, step=1)})
+        st.caption(f"Total: {num_br(rub['Peso'].sum(), 0)} pontos. Os critérios são calculados automaticamente; ajuste apenas os pesos.")
+        rubrica = list(zip(rub["Critério"], rub["Peso"]))
+    disc, profn = st.columns(2)
+    disciplina = disc.text_input("Disciplina", key="prof_disc")
+    professor = profn.text_input("Professor(a)", key="prof_nome")
+    arqs = st.file_uploader("Arquivos .pnbox dos grupos", type=["pnbox"], accept_multiple_files=True, key="prof_up")
+    if not arqs:
+        st.info("Nenhum arquivo enviado ainda.")
+        return
+    avs = []
+    with st.spinner("Avaliando os projetos..."):
+        tmp = Path(tempfile.mkdtemp())
+        for a in arqs:
+            dados = a.getvalue()
+            if not dados.startswith(b"SQLite format 3"):
+                st.warning(f"{a.name}: arquivo inválido, ignorado.")
+                continue
+            cam = tmp / a.name
+            cam.write_bytes(dados)
+            try:
+                p_, d_ = carregar_projeto_arquivo(cam)
+                av = avaliar(p_, d_, rubrica)
+                av["Arquivo"] = a.name
+                avs.append(av)
+            except Exception as e:      # arquivo corrompido ou muito incompleto
+                st.warning(f"{a.name}: não foi possível avaliar ({e}).")
+    if not avs:
+        return
+    tab = pd.DataFrame([{k: v for k, v in av.items() if k not in ("res", "notas")} for av in avs])
+    st.subheader("📋 Painel da turma")
+    mostrar = tab[["Arquivo", "Projeto", "Integrantes", "Preenchimento", "Checagens OK", "Raio-X", "Investimento",
+                   "Lucro Ano 1", "VPL", "TIR", "Nota sugerida"]]
+    st.dataframe(mostrar, hide_index=True, width="stretch", column_config={
+        "Preenchimento": st.column_config.ProgressColumn("Preenchido", format="percent", min_value=0, max_value=1),
+        "Checagens OK": st.column_config.ProgressColumn("Checagens OK", format="percent", min_value=0, max_value=1),
+        "Investimento": N(format="R$ %.0f"), "Lucro Ano 1": N(format="R$ %.0f"), "VPL": N(format="R$ %.0f"),
+        "TIR": N(format="percent"), "Nota sugerida": N(format="%.1f")})
+    c = st.columns(3)
+    c[0].metric("Projetos", len(tab))
+    c[1].metric("Nota média sugerida", num_br(tab["Nota sugerida"].mean(), 1))
+    c[2].metric("Projetos com VPL positivo", f"{int((tab['VPL'] > 0).sum())} de {len(tab)}")
+
+    st.subheader("✍️ Notas da banca")
+    st.caption("A tabela vem com as notas sugeridas. Altere o que quiser; as fichas em PDF usam estas notas.")
+    base = pd.DataFrame([[av["Projeto"]] + av["notas"] for av in avs], columns=["Projeto"] + [c_ for c_, _ in rubrica])
+    ed = st.data_editor(base, hide_index=True, width="stretch", key="ed_notas_banca",
+                        column_config={"Projeto": T(disabled=True)} |
+                        {c_: N(c_[:28] + "…" if len(c_) > 28 else c_, min_value=0, max_value=float(p), step=0.5)
+                         for c_, p in rubrica})
+    ed["Total"] = ed[[c_ for c_, _ in rubrica]].sum(axis=1)
+    st.dataframe(ed[["Projeto", "Total"]], hide_index=True)
+    for av, (_, linha) in zip(avs, ed.iterrows()):
+        av["notas_finais"] = [float(linha[c_]) for c_, _ in rubrica]
+
+    st.subheader("🔍 Detalhes por grupo")
+    for av in avs:
+        with st.expander(f"{av['Projeto']} · nota sugerida {num_br(av['Nota sugerida'], 1)}"):
+            st.write(f"**Integrantes:** {av['Integrantes'] or '-'}")
+            st.write(f"**Pendências:** {av['Pendências'] or 'nenhuma'}")
+            st.dataframe(pd.DataFrame({"Critério": [c_ for c_, _ in rubrica], "Peso": [p for _, p in rubrica],
+                                       "Sugerida": av["notas"]}), hide_index=True, width="stretch")
+
+    st.subheader("📦 Exportar")
+    a, b = st.columns(2)
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as w:
+        tab.to_excel(w, sheet_name="Turma", index=False)
+        ed.to_excel(w, sheet_name="Notas_banca", index=False)
+    a.download_button("📊 Planilha da turma (Excel)", buf.getvalue(), "avaliacao_turma.xlsx",
+                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+    if b.button("📄 Gerar fichas de avaliação (PDF)", width="stretch", type="primary"):
+        ss.fichas = ficha_avaliacao_pdf(avs, rubrica, professor, disciplina)
+    if ss.get("fichas"):
+        b.download_button("⬇️ Baixar fichas", ss.fichas, "fichas_avaliacao.pdf", "application/pdf", width="stretch")
+
+
+# ------------------------------------------------------------------------------
+# CONFIGURAÇÕES
+# ------------------------------------------------------------------------------
+def pg_config():
+    cabecalho("config")
+    t1, t2, t3 = st.tabs(["📚 Listas personalizadas", "💾 Onde ficam meus projetos", "🧹 Limpar este computador"])
+    with t1:
+        st.caption("As opções padrão continuam disponíveis. Aqui você acrescenta categorias, unidades, áreas e "
+                   "classificações próprias do seu negócio; elas aparecem nas listas de escolha das ferramentas.")
+        tipo = st.selectbox("Lista", list(NOMES_LISTAS), format_func=lambda k: NOMES_LISTAS[k], key="cfg_lista")
+        st.markdown("**Padrão:** " + ", ".join(LISTAS_PADRAO.get(tipo, [])))
+        editor("listas", {"valor": T("Novo item", required=True)}, "valor", filtro={"tipo": tipo})
+    with t2:
+        if NAVEGADOR:
+            st.markdown("""
+Você está usando a **versão on-line**. Os projetos ficam guardados **no armazenamento deste navegador, neste computador**.
+
+- Atualizações do programa **não apagam** seus projetos: o arquivo do programa é trocado, mas a pasta de projetos do navegador continua.
+- Eles **somem** se você limpar os dados de navegação do site, usar janela anônima ou trocar de navegador/computador.
+- Por segurança, **baixe o .pnbox** (página Relatório e exportação) ao fim de cada sessão de trabalho.
+""")
+        elif MODO_WEB:
+            st.warning("Nesta versão on-line temporária os projetos duram só enquanto a página estiver aberta. Baixe o .pnbox.")
+        else:
+            st.markdown(f"Os projetos ficam nesta pasta do computador:\n\n`{PASTA}`\n\n"
+                        "Atualizar ou reinstalar o programa não apaga essa pasta.")
+        st.write(f"Versão do programa: **{VERSAO_PROGRAMA}** · projetos encontrados: **{len(listar_projetos())}**")
+    with t3:
+        st.warning("Use em computadores de laboratório compartilhados, ao terminar. Todos os projetos guardados "
+                   "**neste computador/navegador** serão apagados. Baixe antes o .pnbox do que quiser guardar.")
+        ok = st.checkbox("Entendi e já baixei o que precisava", key="cfg_limpar_ok")
+        if st.button("🧹 Apagar todos os projetos deste computador", disabled=not ok, type="primary"):
+            conn.close()
+            for p_ in listar_projetos():
+                try:
+                    p_.unlink()
+                except OSError:
+                    pass
+            for k in ("db", "buf", "snap", "hash", "ultima_copia_auto"):
+                ss.pop(k, None)
+            ss.bemvindo_ok = False
+            st.success("Pronto. Um projeto novo será criado ao recarregar.")
+            st.rerun()
+
+
+# ==============================================================================
+# ROTEADOR
+# ==============================================================================
+ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "segmentos": pg_segmentos, "personas": pg_personas,
+         "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
+         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing,
+         "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
+         "investimentos": pg_investimentos, "produtos": pg_produtos, "custos": pg_custos, "preco": pg_preco,
+         "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,
+         "simulador": pg_simulador, "experimentos": pg_experimentos, "riscos": pg_riscos, "cronograma": pg_cronograma,
+         "realizado": pg_realizado, "ia": pg_ia, "sumario": pg_sumario, "apresentacao": pg_apresentacao,
+         "relatorio": pg_relatorio, "professor": pg_professor, "config": pg_config}
+try:
+    ROTAS.get(ss.pagina, pg_inicio)()
+    copia_automatica()
+finally:
+    try:
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass

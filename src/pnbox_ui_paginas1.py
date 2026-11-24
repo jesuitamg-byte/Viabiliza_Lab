@@ -82,10 +82,15 @@ se a ideia é **viável**. Como usar:
         st.progress(comp)
     if rx:
         c2.metric("Raio-X do plano", f"{rx['nota']}/100", help="Preenchimento (30) + checagens OK (30) + saúde financeira (40)")
-        c3.metric("Investimento total", brl(res["investimento_total"]))
-        c4.metric("Lucro no Ano 1", brl(res["anos"][1]["resultado"]))
+        c3.metric("Investimento total", brl(res["investimento_total"]).split(",")[0],
+                  help=brl(res["investimento_total"]))
+        c4.metric("Lucro no Ano 1", brl(res["anos"][1]["resultado"]).split(",")[0],
+                  help=brl(res["anos"][1]["resultado"]))
         verdes = sum(1 for s in sem if s["Status"] == "🟢")
-        st.caption(f"Saúde financeira: {' '.join(s['Status'] for s in sem)}  ({verdes} de {len(sem)} indicadores no verde)")
+        if res["anos"][1]["rec_bruta"] <= 0:
+            st.caption("Saúde financeira: aparece quando houver produtos com preço e quantidade cadastrados.")
+        else:
+            st.caption(f"Saúde financeira: {' '.join(s['Status'] for s in sem)}  ({verdes} de {len(sem)} indicadores no verde)")
 
     if chk is not None:
         pend = chk[chk["Situação"] != "OK"]
