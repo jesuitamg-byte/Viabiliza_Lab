@@ -8,6 +8,7 @@ Requer fpdf2 >= 2.7 (pip install -U fpdf2).
 """
 
 import io
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -74,6 +75,8 @@ class Relatorio(FPDF):
 
     # --- blocos de conteúdo -------------------------------------------------
     def secao(self, texto, nova_pagina=False):
+        self.n_secao = getattr(self, "n_secao", 0) + 1
+        texto = f"{self.n_secao}. {texto}"
         if nova_pagina:
             self.add_page()
         elif self.get_y() > 245:
@@ -325,9 +328,25 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.cell(0, 6, pdf.t(f"{rot}: {proj[k]}"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.cell(0, 6, pdf.t(f"Período de planejamento: {int(proj['periodo_anos'])} ano(s)"), align="C",
              new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    autores = [a.strip() for a in re.split(r"[;\n]", proj.get("autores") or "") if a.strip()]
+    if autores or proj.get("turma") or proj.get("professor"):
+        pdf.ln(12)
+        pdf.fonte("B", 10)
+        pdf.cell(0, 6, pdf.t("Elaborado por"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.fonte("", 10)
+        for a in autores:
+            pdf.cell(0, 5.5, pdf.t(a), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        for rot, k in [("Turma", "turma"), ("Professor(a)", "professor"), ("Entrega", "data_entrega")]:
+            if proj.get(k):
+                pdf.cell(0, 5.5, pdf.t(f"{rot}: {proj[k]}"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    if str(proj.get("sumario_executivo") or "").strip():
+        pdf.secao("SUMÁRIO EXECUTIVO", nova_pagina=True)
+        for par in str(proj["sumario_executivo"]).split("\n"):
+            pdf.paragrafo(par, "", 10)
 
     # ---------------- 1. SÓCIOS ----------------
-    pdf.secao("1. INFORMAÇÕES DO PLANO E QUADRO SOCIETÁRIO", nova_pagina=True)
+    pdf.secao("INFORMAÇÕES DO PLANO E QUADRO SOCIETÁRIO", nova_pagina=True)
     s = d["socios"]
     pdf.tabela(pd.DataFrame({
         "Sócio": s["nome"], "Função": s["funcao"], "Minicurrículo": s["perfil"],
@@ -335,7 +354,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         alinhar=("LEFT", "LEFT", "LEFT", "RIGHT"))
 
     # ---------------- 2. SEGMENTOS ----------------
-    pdf.secao("2. SEGMENTAÇÃO DE MERCADO")
+    pdf.secao("SEGMENTAÇÃO DE MERCADO")
     sg = d["segmentos"].copy()
     notas = ["nota_tamanho", "nota_lucro", "nota_longevidade", "nota_concorrencia", "nota_aderencia"]
     sg["media"] = sg[notas].mean(axis=1)
@@ -349,17 +368,37 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         larguras=(40, 70, 11, 11, 11, 11, 11, 15), alinhar=("LEFT", "LEFT") + ("CENTER",) * 6)
     pdf.paragrafo("Notas de 1 a 10: tamanho do segmento, potencial de lucro, longevidade, pouca concorrência "
                   "e aderência da oferta às demandas do segmento.", "I", 7.5)
+    mk = mercado(proj, res)
+    if mk["preenchido"]:
+        pdf.subtitulo("Tamanho do mercado (TAM, SAM e SOM)")
+        pdf.tabela(pd.DataFrame({
+            "Nível": ["TAM - mercado total", "SAM - mercado alcançável", "SOM - mercado conquistável"],
+            "Descrição": [proj.get("tam_desc", ""), proj.get("sam_desc", ""), f"{num_br(proj.get('som_pct', 0), 1)}% do SAM"],
+            "Clientes": [num_br(mk["tam_c"], 0), num_br(mk["sam_c"], 0), num_br(mk["som_c"], 0)],
+            "R$ por ano": [brl(mk["tam"]), brl(mk["sam"]), brl(mk["som"])]}),
+            larguras=(42, 78, 25, 35), alinhar=("LEFT", "LEFT", "RIGHT", "RIGHT"))
+        pdf.paragrafo(f"A receita prevista no Ano 1 ({brl(mk['receita_ano1'])}) corresponde a {pct(mk['pct_som'])} do SOM "
+                      f"e a {pct(mk['pct_sam'])} do SAM. Fontes: {proj.get('mercado_fontes', '')}", "I", 8)
 
     # ---------------- 3. PROPOSTA DE VALOR ----------------
-    pdf.secao("3. PROPOSTA DE VALOR")
+    pdf.secao("PROPOSTA DE VALOR")
+    props = d.get("propostas")
+    if props is not None and not props.empty:
+        for _, pr in props.iterrows():
+            pdf.subtitulo(f"Persona: {pr['persona_nome']}")
+            if pr["valores"]:
+                pdf.campo("Valores entregues", pr["valores"])
+            pdf.paragrafo(f"{proj['nome_negocio']} ajuda {pr['persona_nome']}, que deseja {pr['que_desejam']}, por meio de "
+                          f"{pr['por_meio']}. Diferentemente de {pr['diferentemente']}, oferecemos {pr['oferecem']}.", "", 10)
     pv = d["proposta_valor"]
-    pdf.paragrafo(f"Nossa empresa ({proj['nome_negocio']}) ajuda {pv['segmento_alvo']} que desejam "
-                  f"{pv['beneficios_desejados']} por meio de {pv['meios_entrega']}. Diferentemente de "
-                  f"{pv['diferencial_competitivo']}, os nossos produtos ou serviços oferecem "
-                  f"{pv['entrega_produtos_servicos']}", "", 10)
+    if (props is None or props.empty) and pv.get("segmento_alvo"):
+        pdf.paragrafo(f"Nossa empresa ({proj['nome_negocio']}) ajuda {pv['segmento_alvo']} que desejam "
+                      f"{pv['beneficios_desejados']} por meio de {pv['meios_entrega']}. Diferentemente de "
+                      f"{pv['diferencial_competitivo']}, os nossos produtos ou serviços oferecem "
+                      f"{pv['entrega_produtos_servicos']}", "", 10)
 
     # ---------------- 4. PERSONAS ----------------
-    pdf.secao("4. PERSONAS", nova_pagina=True)
+    pdf.secao("PERSONAS", nova_pagina=True)
     for _, p in d["personas"].iterrows():
         pdf.subtitulo(f"{p['nome']}, {int(p['idade'])} anos - {p['profissao']}")
         pdf.campo("Estado civil", p["estado_civil"])
@@ -383,7 +422,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.tabela(rf, alinhar=("LEFT",) * 3)
 
     # ---------------- 5. JORNADA ----------------
-    pdf.secao("5. JORNADA DO CLIENTE")
+    pdf.secao("JORNADA DO CLIENTE")
     j = d["jornada_cliente"]
     for persona, grupo in j.groupby("persona_nome", sort=False):
         pdf.subtitulo(f"Persona: {persona}")
@@ -394,7 +433,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                    larguras=(14, 22, 34, 26, 28, 20, 36), alinhar=("LEFT",) * 7, tam=7)
 
     # ---------------- 6. CONCORRÊNCIA ----------------
-    pdf.secao("6. ANÁLISE DA CONCORRÊNCIA", nova_pagina=True)
+    pdf.secao("ANÁLISE DA CONCORRÊNCIA", nova_pagina=True)
     piv = extras["concorrencia_pivot"]
     if not piv.empty:
         tab = piv.copy()
@@ -416,7 +455,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.paragrafo("(sem registros)", "I", 8)
 
     # ---------------- 7. AMBIENTE E SWOT ----------------
-    pdf.secao("7. ANÁLISE DE AMBIENTE E MATRIZ SWOT", nova_pagina=True)
+    pdf.secao("ANÁLISE DE AMBIENTE E MATRIZ SWOT", nova_pagina=True)
     sw = d["swot"]
     pdf.matriz_swot(sw)
     diag = extras["swot_diag"]
@@ -435,7 +474,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                larguras=(16, 20, 30, 24, 45, 45), alinhar=("LEFT",) * 6, tam=7)
 
     # ---------------- 8. CANAIS E FUNIL ----------------
-    pdf.secao("8. CANAIS DE AQUISIÇÃO E FUNIL DE VENDAS", nova_pagina=True)
+    pdf.secao("CANAIS DE AQUISIÇÃO E FUNIL DE VENDAS", nova_pagina=True)
     cn = d["canais"].copy()
     if not cn.empty:
         cn["media"] = cn[["atratividade", "alcance", "cliente", "relacionamento", "viabilidade"]].mean(axis=1)
@@ -454,7 +493,49 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                larguras=(22, 50, 22, 20, 20, 22, 24), tam=7.5)
 
     # ---------------- 9. INVESTIMENTOS ----------------
-    pdf.secao("9. INVESTIMENTOS, CAPITAL DE GIRO E FONTES DE RECURSOS", nova_pagina=True)
+    # ---------------- MARKETING E OPERAÇÃO ----------------
+    if any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
+        pdf.secao("PLANO DE MARKETING (4Ps)")
+        for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
+            if proj.get(k):
+                pdf.subtitulo(rot)
+                pdf.paragrafo(proj[k])
+    pdf.secao("PLANO OPERACIONAL", nova_pagina=True)
+    for rot, k in [("Localização", "loc_endereco"), ("Justificativa do ponto", "loc_justificativa"),
+                   ("Fluxo de pessoas", "loc_fluxo"), ("Horário de funcionamento", "op_horario")]:
+        pdf.campo(rot, proj.get(k, ""))
+    if proj.get("loc_area_m2"):
+        pdf.campo("Área", f"{num_br(proj['loc_area_m2'], 0)} m²")
+    if proj.get("op_layout"):
+        pdf.subtitulo("Layout")
+        pdf.paragrafo(proj["op_layout"])
+    if proj.get("op_processos"):
+        pdf.subtitulo("Processos operacionais")
+        pdf.paragrafo(proj["op_processos"])
+    cd = capacidade_demanda(d, res)
+    if not cd.empty:
+        pdf.subtitulo("Capacidade produtiva x demanda prevista")
+        pdf.tabela(pd.DataFrame({"Recurso": cd["Recurso"], "Atende": cd["Atende"],
+                                 "Capacidade/mês": cd["Capacidade/mês"].map(lambda v: num_br(v, 0)),
+                                 "Demanda Mês 1": cd["Demanda Mês 1"].map(lambda v: num_br(v, 0)),
+                                 "Demanda Mês 12": cd["Demanda Mês 12"].map(lambda v: num_br(v, 0)),
+                                 "Uso Mês 12": cd["Uso Mês 12"].map(pct)}), larguras=(48, 42, 24, 22, 22, 22), tam=7.5)
+    pes = d["pessoal"]
+    if not pes.empty:
+        pdf.subtitulo("Necessidade de pessoal por área")
+        pdf.tabela(pd.DataFrame({"Área": pes["area"], "Cargo": pes["cargo"], "Nº": pes["num_empregados"].map(lambda v: num_br(v, 0)),
+                                 "Atribuições": pes["atribuicoes"]}), larguras=(38, 52, 10, 80),
+                   alinhar=("LEFT", "LEFT", "CENTER", "LEFT"), tam=7.5)
+    fo = d.get("fornecedores")
+    if fo is not None and not fo.empty:
+        pdf.subtitulo("Fornecedores")
+        pdf.tabela(pd.DataFrame({"Fornecedor": fo["nome"], "Itens": fo["itens"],
+                                 "Pagamento": fo["prazo_pagamento_dias"].map(lambda v: f"{num_br(v, 0)} dias"),
+                                 "Entrega": fo["prazo_entrega_dias"].map(lambda v: f"{num_br(v, 0)} dias"),
+                                 "Condições": fo["condicoes"], "Crítico": fo["critico"].map(lambda v: "Sim" if v else "Não")}),
+                   larguras=(36, 46, 20, 18, 46, 14), alinhar=("LEFT", "LEFT", "RIGHT", "RIGHT", "LEFT", "CENTER"), tam=7.5)
+
+    pdf.secao("INVESTIMENTOS, CAPITAL DE GIRO E FONTES DE RECURSOS", nova_pagina=True)
     inv = res["inv"]
     pdf.subtitulo("Investimentos fixos e depreciação")
     tinv = pd.DataFrame({"Descrição": inv["descricao"], "Qtd.": inv["quantidade"].map(lambda v: num_br(v, 0)),
@@ -507,7 +588,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     pdf.tabela(tf, larguras=(65, 60, 35, 20), alinhar=("LEFT", "LEFT", "RIGHT", "RIGHT"), destaque_total=True)
 
     # ---------------- 10. PRODUTOS ----------------
-    pdf.secao("10. PRODUTOS, SERVIÇOS E CUSTOS UNITÁRIOS", nova_pagina=True)
+    pdf.secao("PRODUTOS, SERVIÇOS E CUSTOS UNITÁRIOS", nova_pagina=True)
     c = res["cat"]
     for categoria in ("Fabricação Própria", "Revenda", "Serviço"):
         sub = c[c["categoria"] == categoria]
@@ -541,7 +622,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.tabela(tf, larguras=(70, 20, 18, 26, 26, 20), destaque_total=True, tam=7.5)
 
     # ---------------- 11. CUSTOS ----------------
-    pdf.secao("11. CUSTOS DE COMERCIALIZAÇÃO, PESSOAL E CUSTOS FIXOS", nova_pagina=True)
+    pdf.secao("CUSTOS DE COMERCIALIZAÇÃO, PESSOAL E CUSTOS FIXOS", nova_pagina=True)
     a1 = res["anos"][1]
     pdf.subtitulo("Custos variáveis de comercialização (% sobre a receita)")
     cv = d["custos_variaveis"]
@@ -571,7 +652,31 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     pdf.tabela(tcf, larguras=(130, 50), destaque_total=True)
 
     # ---------------- 12. PROJEÇÕES E DRE ----------------
-    pdf.secao("12. PROJEÇÃO DE RESULTADOS E DRE", nova_pagina=True)
+    pdf.subtitulo("Classificação dos custos e despesas (mensal)")
+    pdf.tabela(pd.DataFrame({
+        "Classificação": ["Custos diretos (materiais e mercadorias) - Mês 1", "Mão de obra direta (produção)",
+                          "Custos indiretos de produção", "Depreciação", "Pessoal administrativo e comercial",
+                          "Despesas administrativas", "Despesas comerciais", "Despesas financeiras"],
+        "Valor mensal": [brl(v) for v in (res["cdir_m1"], res["mod_m"], res["cif_m"], res["dep_m"],
+                                          res["pessoal_adm_m"] + res["pessoal_com_m"], res["desp_adm_m"],
+                                          res["desp_com_m"], res["desp_fin_m"])],
+        "Vai para o produto (absorção)?": ["Sim (direto)", "Sim (rateio)", "Sim (rateio)", "Sim (rateio)",
+                                           "Não (despesa do período)", "Não", "Não", "Não"]}),
+        larguras=(90, 40, 50), alinhar=("LEFT", "RIGHT", "LEFT"))
+    pdf.paragrafo(f"Critério de rateio dos custos indiretos: {res['criterio_rateio']}.", "I", 8)
+
+    pdf.secao("FORMAÇÃO DE PREÇO E PONTO DE EQUILÍBRIO POR PRODUTO", nova_pagina=True)
+    pdf.paragrafo(f"Markup divisor = 1 / [1 - (impostos {pct(res['aliq'])} + despesas variáveis {pct(res['var_pct'])} "
+                  f"+ despesas fixas {pct(res['df_pct'])} + margem desejada {pct(res['margem_desejada'])})] = "
+                  f"{num_br(res['markup_mult'], 3)}. Preço sugerido = custo direto x markup.", "", 9)
+    cp = res["cat"]
+    pdf.tabela(pd.DataFrame({"Produto/serviço": cp["descricao"], "Custo variável": cp["custo_unit"].map(brl),
+                             "Custo absorção": cp["custo_absorcao_unit"].map(brl), "Preço": cp["preco_venda"].map(brl),
+                             "Sugerido": cp["preco_sugerido"].map(brl), "Margem abs.": cp["margem_absorcao_pct"].map(pct),
+                             "PE un./mês": cp["pe_unidades_mes"].map(lambda v: num_br(v, 0))}),
+               larguras=(56, 21, 21, 20, 20, 21, 21), tam=7)
+
+    pdf.secao("PROJEÇÃO DE RESULTADOS E DRE", nova_pagina=True)
     pdf.paragrafo(f"Premissas: crescimento de {num_br(proj['crescimento_mensal_ano1_pct'])}% ao mês no Ano 1 e "
                   f"{num_br(proj['crescimento_anual_pct'])}% ao ano a partir do Ano 2; custos fixos corrigidos em "
                   f"{num_br(proj['inflacao_custos_anual_pct'])}% ao ano; TMA de {num_br(proj['tma_anual_pct'])}% ao ano.", "I", 8)
@@ -584,7 +689,24 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     pdf.tabela(extras["dre"], larguras=(70, 30, 30, 30, 20), tam=7.5)
 
     # ---------------- 13. INDICADORES ----------------
-    pdf.secao("13. INDICADORES DE VIABILIDADE", nova_pagina=True)
+    pdf.secao("FLUXO DE CAIXA MENSAL (ANO 1)", nova_pagina=True)
+    fm = res["fluxo_mensal"]
+    if not fm.empty:
+        tf_ = fm.copy()
+        for col in tf_.columns[1:]:
+            tf_[col] = tf_[col].map(brl)
+        tf_ = tf_.rename(columns={"Impostos e desp. variáveis": "Impostos/var.", "Pessoal e custos fixos": "Pessoal/fixos",
+                                  "Parcelas de empréstimos": "Empréstimos"})
+        pdf.tabela(tf_, larguras=(14, 25, 25, 23, 22, 24, 22, 25), tam=6.5)
+        pdf.paragrafo(f"Menor saldo de caixa: {brl(fm['Saldo final'].min())} ({fm.loc[fm['Saldo final'].idxmin(), 'Mês']}).", "B", 9)
+
+    pdf.secao("INDICADORES DE VIABILIDADE", nova_pagina=True)
+    sem = semaforo(res)
+    pdf.subtitulo("Semáforo da saúde do negócio")
+    pdf.tabela(pd.DataFrame({"Situação": [{"🟢": "Bom", "🟡": "Atenção", "🔴": "Crítico"}.get(s_["Status"], "") for s_ in sem],
+                             "Indicador": [s_["Indicador"] for s_ in sem], "Valor": [s_["Valor"] for s_ in sem],
+                             "Leitura": [s_["Leitura"] for s_ in sem]}), larguras=(18, 45, 27, 90),
+               alinhar=("CENTER", "LEFT", "RIGHT", "LEFT"), tam=7.5)
     rs = res["resumo"]
     pdf.subtitulo("Resumo financeiro (Ano 1, padrão PNBOX)")
     pdf.tabela(pd.DataFrame({
@@ -622,7 +744,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     # ---------------- 14. GRÁFICOS ----------------
     imgs = graficos_png(extras["comp"]) if extras.get("comp") else []
     if imgs:
-        pdf.secao("14. GRÁFICOS", nova_pagina=True)
+        pdf.secao("GRÁFICOS", nova_pagina=True)
         roscas = imgs[:5]
         outros = imgs[5:]
         largura = (pdf.epw - 6) / 2
@@ -644,12 +766,40 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
             pdf.ln(4)
 
     # ---------------- 15. CENÁRIOS E CHECAGENS ----------------
-    pdf.secao("15. SIMULADOR DE CENÁRIOS E CHECAGENS", nova_pagina=True)
+    # ---------------- FERRAMENTAS COMPLEMENTARES ----------------
+    rk, cr, ex = d.get("riscos"), d.get("cronograma"), d.get("experimentos")
+    if any(x is not None and not x.empty for x in (rk, cr, ex)):
+        pdf.secao("RISCOS, CRONOGRAMA E VALIDAÇÃO", nova_pagina=True)
+        if rk is not None and not rk.empty:
+            pdf.subtitulo("Riscos e plano de contingência")
+            pdf.tabela(pd.DataFrame({"Risco": rk["risco"], "Prob.": rk["probabilidade"].map(lambda v: num_br(v, 0)),
+                                     "Impacto": rk["impacto"].map(lambda v: num_br(v, 0)),
+                                     "Nível": (rk["probabilidade"] * rk["impacto"]).map(lambda v: num_br(v, 0)),
+                                     "Mitigação": rk["mitigacao"], "Responsável": rk["responsavel"]}),
+                       larguras=(42, 12, 14, 12, 72, 28), alinhar=("LEFT", "CENTER", "CENTER", "CENTER", "LEFT", "LEFT"), tam=7.5)
+        if cr is not None and not cr.empty:
+            pdf.subtitulo("Cronograma de implantação")
+            pdf.tabela(pd.DataFrame({"Atividade": cr["atividade"], "Início (mês)": cr["mes_inicio"].map(lambda v: num_br(v, 0)),
+                                     "Duração (meses)": cr["duracao_meses"].map(lambda v: num_br(v, 1)),
+                                     "Responsável": cr["responsavel"], "Custo": cr["custo"].map(brl)}),
+                       larguras=(70, 22, 25, 35, 28), alinhar=("LEFT", "CENTER", "CENTER", "LEFT", "RIGHT"), tam=7.5)
+        if ex is not None and not ex.empty:
+            pdf.subtitulo("Quadro de experimentação")
+            pdf.tabela(pd.DataFrame({"Hipótese": ex["hipotese"], "Experimento": ex["experimento"], "Métrica": ex["metrica"],
+                                     "Critério": ex["criterio_sucesso"], "Resultado": ex["resultado"], "Situação": ex["status"]}),
+                       larguras=(38, 38, 24, 26, 34, 20), alinhar=("LEFT",) * 6, tam=7)
+
+    pdf.secao("SIMULADOR DE CENÁRIOS E CHECAGENS", nova_pagina=True)
     pdf.tabela(extras["cenarios"], larguras=(45, 45, 45, 45), tam=7.5)
     pdf.subtitulo("Checagens de consistência")
     ch = extras["checagens"]
     pdf.tabela(ch[["Teste", "Valor apurado", "Situação", "Observação"]], larguras=(50, 40, 20, 70),
                alinhar=("LEFT", "LEFT", "CENTER", "LEFT"), tam=7.5)
+
+    if str(proj.get("conclusao") or "").strip():
+        pdf.secao("CONCLUSÃO E PARECER FINAL", nova_pagina=True)
+        for par in str(proj["conclusao"]).split("\n"):
+            pdf.paragrafo(par, "", 10)
 
     out = pdf.output()
     return bytes(out)

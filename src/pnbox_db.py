@@ -270,7 +270,7 @@ def limpar(df: pd.DataFrame, tabela) -> pd.DataFrame:
             df[c] = None
         if t in ("REAL", "INTEGER"):
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-            if c == "priorizado":
+            if c in ("priorizado", "critico"):
                 df[c] = df[c].astype(bool)
         else:
             df[c] = df[c].astype(object).where(df[c].notna(), "")
