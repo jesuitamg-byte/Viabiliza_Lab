@@ -259,14 +259,21 @@ def aplicar_tema():
     """ if escuro else ""
     st.markdown(f"""
     <style>
-      [class*="st-key-card_"] button {{
-        min-height: 128px; width: 100%; border-radius: 16px; border: 0;
-        background: {fundo_card}; color: #fff; box-shadow: 0 4px 14px rgba(20,40,80,.18);
-        transition: transform .12s ease, box-shadow .12s ease; white-space: pre-line;
+      [class*="st-key-card_"] {{
+        position: relative; min-height: 186px; height: 100%; border-radius: 16px; padding: 16px 18px 14px 18px;
+        background: {fundo_card}; box-shadow: 0 4px 14px rgba(20,40,80,.18); gap: .25rem;
+        transition: transform .12s ease, box-shadow .12s ease; cursor: pointer;
       }}
-      [class*="st-key-card_"] button:hover {{ transform: translateY(-3px); box-shadow: 0 8px 22px rgba(20,40,80,.28);
-        color:#fff; border:0; }}
-      [class*="st-key-card_"] button p {{ font-size: 1.02rem; font-weight: 600; line-height: 1.35; color:#fff; }}
+      [class*="st-key-card_"]:hover {{ transform: translateY(-3px); box-shadow: 0 10px 24px rgba(20,40,80,.30); }}
+      [class*="st-key-card_"] p, [class*="st-key-card_"] div {{ color: #fff !important; }}
+      [class*="st-key-card_"] .pn-ic {{ font-size: 2.1rem; line-height: 1.1; }}
+      [class*="st-key-card_"] .pn-tit {{ font-size: 1.08rem; font-weight: 700; margin-top: .35rem; line-height: 1.25; }}
+      [class*="st-key-card_"] .pn-desc {{ font-size: .84rem; opacity: .88; margin-top: .3rem; line-height: 1.3; }}
+      [class*="st-key-card_"] .pn-selo {{ font-size: .8rem; margin-top: .45rem; opacity: .95; }}
+      [class*="st-key-cardbtn_"] {{ position: absolute !important; inset: 0; margin: 0 !important; z-index: 3; }}
+      [class*="st-key-cardbtn_"] > div, [class*="st-key-cardbtn_"] .stButton {{ height: 100%; width: 100%; }}
+      [class*="st-key-cardbtn_"] button {{ width: 100%; height: 100% !important; opacity: 0; cursor: pointer; }}
+      [class*="st-key-cardbtn_"] button:focus-visible {{ opacity: .25; }}
       [class*="st-key-nav_"] button {{ justify-content: flex-start; text-align: left; padding: .25rem .6rem;
         min-height: 2rem; }}
       [class*="st-key-voltar"] button {{ font-weight: 600; }}

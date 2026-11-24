@@ -111,9 +111,12 @@ se a ideia é **viável**. Como usar:
             cols = st.columns(4)
             for col, p in zip(cols, itens[i:i + 4]):
                 selo = situacao(p[0])
-                rotulo = f"{p[2]}\n\n{p[3]}" + (f"\n\n{selo}" if selo else "")
-                with col:
-                    if st.button(rotulo, key=f"card_{p[0]}", width="stretch", help=p[4]):
+                txt_selo = {"✅": "✅ concluído", "◐": "◐ em andamento", "○": "○ não iniciado"}.get(selo, "")
+                with col.container(key=f"card_{p[0]}"):
+                    st.markdown(f"<div class='pn-ic'>{p[2]}</div><div class='pn-tit'>{p[3]}</div>"
+                                f"<div class='pn-desc'>{p[4]}</div><div class='pn-selo'>{txt_selo}</div>",
+                                unsafe_allow_html=True)
+                    if st.button(f"Abrir {p[3]}", key=f"cardbtn_{p[0]}", width="stretch"):
                         ir(p[0])
                         st.rerun()
 
@@ -649,21 +652,26 @@ def tabela_funil(fu: pd.DataFrame) -> pd.DataFrame:
 
 def dot_organograma() -> str:
     def q(s):
-        return '"' + str(s).replace('"', "'") + '"'
-    linhas = ['digraph G {', 'rankdir=TB; node [shape=box, style="rounded,filled", fillcolor="#e8f0fb", fontname="Helvetica", fontsize=11];',
-              'edge [color="#7a8aa0"];', f'raiz [label={q(proj["nome_negocio"] or "Empresa")}, fillcolor="#2f6fd0", fontcolor="white"];']
-    for i, r in d["socios"].iterrows():
-        linhas.append(f's{i} [label={q(r["nome"] + chr(10) + (r["funcao"] or "Sócio"))}, fillcolor="#cfe0f7"];')
-        linhas.append(f'raiz -> s{i};')
+        return '"' + str(s).replace('"', "'").replace("\n", "\\n") + '"'
+    linhas = ['digraph G {', 'rankdir=TB; nodesep=0.35; ranksep=0.5;',
+              'node [shape=box, style="rounded,filled", fillcolor="#e8f0fb", fontname="Helvetica", fontsize=13, margin="0.25,0.12"];',
+              'edge [color="#7a8aa0"];', f'raiz [label={q(proj["nome_negocio"] or "Empresa")}, fillcolor="#2f6fd0", fontcolor="white", fontsize=16];']
+    soc = d["socios"]
+    if not soc.empty:
+        txt = "Sócios\n" + "\n".join(f"{r['nome']} ({r['funcao'] or 'sócio'})" for _, r in soc.iterrows())
+        linhas.append(f'socios [label={q(txt)}, fillcolor="#cfe0f7"];')
+        linhas.append("socios -> raiz [dir=none, style=dashed];")
+        linhas.append("{rank=min; socios}")
     pes = d["pessoal"]
     for j, area in enumerate(dict.fromkeys(pes["area"].tolist())):
         if not area:
             continue
-        linhas.append(f'a{j} [label={q(area)}, fillcolor="#fde3ef"];')
-        linhas.append(f'raiz -> a{j};')
-        for k, r in pes[pes["area"] == area].iterrows():
-            linhas.append(f'c{k} [label={q(r["cargo"] + " (" + num_br(r["num_empregados"], 0) + ")")}];')
-            linhas.append(f'a{j} -> c{k};')
+        sub = pes[pes["area"] == area]
+        cargos = "\n".join(f"{r['cargo']} ({num_br(r['num_empregados'], 0)})" for _, r in sub.iterrows())
+        total = num_br(sub["num_empregados"].sum(), 0)
+        linhas.append(f'a{j} [label={q(area + " - " + total + " pessoa(s)")}, fillcolor="#fde3ef", fontsize=14];')
+        linhas.append(f'c{j} [label={q(cargos)}, fillcolor="#ffffff"];')
+        linhas.append(f'raiz -> a{j}; a{j} -> c{j};')
     linhas.append("}")
     return "\n".join(linhas)
 
