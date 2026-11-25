@@ -81,7 +81,8 @@ Confira os números que ela citar com os do programa.
     c1, c2 = st.columns([2, 1])
     with c1:
         escolha = st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
-                                 default=["indicadores", "concorrencia", "custos", "graficos"], key=wk("ia_tarefas"))
+                                 default=["indicadores", "concorrencia", "custos", "graficos"] +
+                                 (["recorrencia"] if R()["recorrencia"].get("tem") else []), key=wk("ia_tarefas"))
     with c2:
         publico = st.selectbox("Quem está pedindo", ["estudante de Administração", "estudante de Ciências Contábeis",
                                                       "estudante de Economia", "empreendedor iniciante", "professor"],
@@ -490,7 +491,7 @@ ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "segmentos": pg_segmentos, 
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
          "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
-         "investimentos": pg_investimentos, "produtos": pg_produtos, "custos": pg_custos, "preco": pg_preco,
+         "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,
          "simulador": pg_simulador, "experimentos": pg_experimentos, "riscos": pg_riscos, "cronograma": pg_cronograma,
          "realizado": pg_realizado, "ia": pg_ia, "sumario": pg_sumario, "apresentacao": pg_apresentacao,

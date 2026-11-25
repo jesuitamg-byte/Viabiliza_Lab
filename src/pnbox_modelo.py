@@ -537,3 +537,129 @@ def popular_modelo_cafe(conn) -> None:
         ("Equipamentos", 2, 1, "Sócio(a) 2", 120000), ("Contratação e treinamento", 3, 1, "Sócio(a) 1", 2500),
         ("Inauguração", 3, 1, "Todos", 5000),
     ])
+
+
+# ==============================================================================
+# TERCEIRO ESTUDO DE CASO: CONECTA VALE (aplicativo com planos de assinatura)
+# Negócio fictício, para ensinar receita recorrente, churn, CAC/LTV e custos de tecnologia.
+# ==============================================================================
+def popular_modelo_assinatura(conn) -> None:
+    ins = conn.executemany
+    conn.execute("""
+        UPDATE projeto SET nome_negocio='Conecta Vale', objetivo='Criar um novo negócio',
+            enquadramento='Simples Nacional', periodo_anos=3, porte='Microempresa (ME)',
+            setor_atuacao='Tecnologia e aplicativos; Turismo, cultura e lazer', cidade_uf='Teófilo Otoni - MG',
+            contatos='@conectavale', tipo_negocio='Assinatura (receita recorrente)',
+            horas_mes_pessoa=168, utilizacao_pct=70, anexo_simples='Anexo III - Serviços',
+            aliquota_imposto_pct=6.0, crescimento_mensal_ano1_pct=3.0, crescimento_anual_pct=10.0,
+            inflacao_custos_anual_pct=4.5, tma_anual_pct=14.0, pme_dias=0, reserva_caixa_extra=50000,
+            recuperar_giro=1, cen_otim_receita_pct=15, cen_otim_custo_pct=5, cen_pess_receita_pct=25,
+            cen_pess_custo_pct=10, autores='Integrante 1; Integrante 2', turma='Exemplo didático - negócio por assinatura',
+            tam_desc='Empresas de comércio, alimentação, cultura e turismo do Vale do Mucuri (estimativa ilustrativa)',
+            tam_clientes=6000, sam_desc='Empresas de Teófilo Otoni com presença digital', sam_clientes=2000, som_pct=8,
+            gasto_anual_cliente=2400,
+            mercado_fontes='Estimativas ilustrativas; substitua por dados da Junta Comercial, IBGE e pesquisa com empresas.',
+            mkt_produto='Aplicativo que reúne eventos, cultura, gastronomia e lazer da região. Empresas pagam planos para aparecer em  destaque; usuários usam grátis ou assinam o Premium com descontos.',
+            mkt_preco='Três planos para empresas (mensal, trimestral e anual, com desconto para quem paga adiantado) e um plano  Premium barato para usuários. Primeiro mês grátis para empresas.',
+            mkt_praca='Aplicativo nas lojas Google Play e App Store; venda consultiva às empresas, de porta em porta e pelo WhatsApp.',
+            mkt_promocao='Parcerias com secretarias de cultura e turismo, influenciadores locais e semana de descontos mensal.',
+            loc_endereco='Coworking no centro de Teófilo Otoni - MG (trabalho principalmente remoto)',
+            loc_justificativa='Custo baixo e perto das empresas clientes para reuniões presenciais.',
+            op_processos='Cadastro da empresa -> criação do perfil e das publicações -> aprovação -> divulgação no app ->  relatório mensal de visualizações -> renovação.',
+            op_horario='Atendimento às empresas em horário comercial; aplicativo disponível 24 horas.',
+            rateio_criterio='Receita', margem_desejada_pct=15
+        WHERE id=1""")
+    ins("INSERT INTO socios (nome, funcao, contato, perfil, capital_integralizado) VALUES (?,?,?,?,?)", [
+        ("Sócio(a) 1", "Produto e tecnologia", "", "Desenvolvimento de aplicativos e gestão do produto.", 50000.0),
+        ("Sócio(a) 2", "Comercial e marketing", "", "Vendas para empresas, parcerias e conteúdo.", 50000.0),
+    ])
+    ins("INSERT INTO emprestimos (descricao, valor, taxa_anual_pct, prazo_meses) VALUES (?,?,?,?)", [
+        ("Pronampe", 21200, 14.0, 36)])
+    ins("""INSERT INTO segmentos (nome, descricao, nota_tamanho, nota_lucro, nota_longevidade,
+           nota_concorrencia, nota_aderencia) VALUES (?,?,?,?,?,?,?)""", [
+        ("Bares, restaurantes e cafés", "Querem atrair clientes em dias de pouco movimento.", 9, 7, 8, 6, 9),
+        ("Produtores de eventos e cultura", "Precisam divulgar shows, peças e festas.", 6, 6, 7, 7, 10),
+        ("Hotéis e pousadas", "Buscam turistas e visitantes de negócios.", 4, 8, 8, 5, 7),
+        ("Moradores e turistas (usuários)", "Querem saber o que fazer na cidade.", 10, 3, 8, 6, 8),
+    ])
+    ins("""INSERT INTO personas (nome, idade, profissao, estado_civil, renda_mensal, escolaridade, cidade,
+           descricao, citacao, habitos, ganhos, desafios, duvidas_objecoes, experiencia_ideal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [
+        ("Marcos", 41, "Dono de restaurante", "Casado", 9000.0, "Ensino Médio", "Teófilo Otoni - MG",
+         "Tem um restaurante com música ao vivo e faz a própria divulgação no Instagram.",
+         "Eu pago impulsionamento, mas não sei se vem cliente por causa disso.",
+         "Usa WhatsApp o dia todo; pouco tempo para marketing.", "Mesas cheias às quartas e quintas.",
+         "Não sabe medir o retorno do marketing; caixa apertado.", "Vale a pena pagar todo mês?",
+         "Ver no relatório quantas pessoas abriram a oferta e usaram o cupom."),
+    ])
+    concs = ["Plataforma nacional de eventos", "Perfis locais no Instagram"]
+    ins("INSERT INTO concorrentes (nome) VALUES (?)", [(c,) for c in concs])
+    notas = {"Conteúdo local": (9, 4, 8), "Preço para pequenas empresas": (8, 5, 9), "Relatórios de resultado": (8, 7, 2),
+             "Alcance de público": (5, 9, 7), "Facilidade de uso": (8, 8, 7)}
+    ins("INSERT INTO concorrencia_notas (atributo, empresa, nota) VALUES (?,?,?)",
+        [(a, e, v) for a, vals in notas.items() for e, v in zip(["Nossa Empresa"] + concs, vals)])
+    ins("""INSERT INTO swot (ambiente, dimensao, fator, natureza, impacto, diagnostico, plano_acao, priorizado)
+           VALUES (?,?,?,?,?,?,?,?)""", [
+        ("Interno", "Operação", "Equipe técnica própria", "Força", "Alto", "Sócio desenvolvedor e equipe enxuta.", "Lançar melhorias a cada mês.", 1),
+        ("Interno", "Finanças", "Receita depende de renovações", "Fraqueza", "Alto", "Churn alto derruba a receita.", "Programa de sucesso do cliente.", 1),
+        ("Externo", "Social", "Crescimento do turismo regional", "Oportunidade", "Alto", "Mais visitantes buscando o que fazer.", "Parcerias com o poder público.", 1),
+        ("Externo", "Tecnológico", "Mudança nas taxas das lojas de aplicativos", "Ameaça", "Médio", "Comissões e regras mudam com frequência.", "Cobrar empresas fora da loja (boleto/Pix).", 1),
+    ])
+    ins("""INSERT INTO inv_fixos (descricao, quantidade, valor_unitario, vida_util_anos, valor_residual_pct)
+           VALUES (?,?,?,?,?)""", [
+        ("Notebooks para desenvolvimento", 4, 6500, 5, 10), ("Celulares para testes (Android e iPhone)", 2, 3000, 3, 10),
+        ("Mobiliário e equipamentos de escritório", 1, 3500, 10, 10),
+    ])
+    ins("INSERT INTO inv_pre (descricao, valor) VALUES (?,?)", [
+        ("Desenvolvimento da primeira versão do app (MVP)", 25000), ("Legalização e contratos", 2500),
+        ("Registro de marca", 1500), ("Marketing de lançamento", 6000), ("Contas de desenvolvedor nas lojas", 700),
+    ])
+    ins("INSERT INTO capital_giro_prazos (tipo, prazo_dias, percentual) VALUES (?,?,?)", [
+        ("Recebimento", 0, 100.0), ("Pagamento", 0, 100.0)])
+    ins("""INSERT INTO catalogo (categoria, descricao, preco_venda, custo_aquisicao, qtd_mensal, qtd_estoque_inicial, horas_unit)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Serviço", "Cobertura de evento patrocinado", 900, 120, 2, 0, 16),
+        ("Serviço", "Produção de conteúdo avulso (post e vídeo)", 180, 10, 8, 0, 3),
+    ])
+    ins("INSERT INTO custos_variaveis (descricao, percentual) VALUES (?,?)", [("Comissões de vendas", 5.0)])
+    P, A, C = "Produção / operação", "Administrativo", "Comercial / vendas"
+    ins("""INSERT INTO pessoal (cargo, area, num_empregados, salario_mensal, encargos_pct, beneficios_unit, atribuicoes)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Desenvolvedor(a)", P, 1, 5500, 28, 300, "Manter e evoluir o aplicativo, corrigir falhas."),
+        ("Atendimento e conteúdo", P, 1, 2300, 28, 300, "Montar publicações, cobrir eventos, suporte às empresas."),
+        ("Vendedor(a) externo(a)", C, 1, 2200, 28, 300, "Visitar empresas e fechar planos."),
+    ])
+    TEC, DA, DC, DF = "Custo de tecnologia / infraestrutura", "Despesa administrativa", "Despesa comercial", "Despesa financeira"
+    ins("INSERT INTO custos_fixos (descricao, classificacao, valor_mensal) VALUES (?,?,?)", [
+        ("Servidores em nuvem (base fixa)", TEC, 700), ("Ferramentas e licenças de software", TEC, 450),
+        ("Contas de desenvolvedor (rateio mensal)", TEC, 60), ("Coworking", DA, 900), ("Pró-labore", DA, 4000),
+        ("Contador", DA, 500), ("Internet e telefone", DA, 200), ("Marketing digital (anúncios)", DC, 2000),
+        ("Tarifas bancárias", DF, 80),
+    ])
+    ins("""INSERT INTO assinaturas (plano, publico, preco_ciclo, ciclo_meses, novos_mes1, crescimento_novos_pct,
+           churn_mensal_pct, custo_entrega_mensal, taxa_cobranca_pct) VALUES (?,?,?,?,?,?,?,?,?)""", [
+        ("Parceiro Essencial (mensal)", "Empresas (B2B)", 149, 1, 8, 4, 6, 10, 3.5),
+        ("Parceiro Destaque (trimestral)", "Empresas (B2B)", 600, 3, 5, 4, 4, 14, 3.5),
+        ("Parceiro Premium (anual)", "Empresas (B2B)", 3000, 12, 2, 4, 2, 18, 3.5),
+        ("Usuário Premium (no app)", "Consumidores (B2C)", 6.90, 1, 50, 5, 8, 0.6, 15),
+    ])
+    ins("""INSERT INTO propostas (persona_nome, valores, que_desejam, por_meio, diferentemente, oferecem)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Marcos", "Clientes novos; Resultado medido; Preço acessível",
+         "lotar o restaurante nos dias fracos sem perder tempo com marketing",
+         "divulgação no aplicativo da cidade, cupons e relatório mensal de resultados",
+         "impulsionamentos genéricos em redes sociais", "divulgação local com resultado que dá para medir"),
+    ])
+    ins("INSERT INTO riscos (risco, probabilidade, impacto, mitigacao, responsavel) VALUES (?,?,?,?,?)", [
+        ("Churn maior que o previsto", 4, 5, "Acompanhamento mensal das empresas e relatórios de resultado", "Sócio(a) 2"),
+        ("Falha ou queda do aplicativo", 2, 4, "Monitoramento, cópias de segurança e plano de contingência", "Sócio(a) 1"),
+        ("Aumento do custo de nuvem com o crescimento", 3, 3, "Otimizar o sistema e negociar créditos de nuvem", "Sócio(a) 1"),
+    ])
+    ins("""INSERT INTO experimentos (hipotese, experimento, metrica, criterio_sucesso, resultado, status)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Restaurantes pagariam R$ 149/mês por divulgação no app", "Oferecer 30 dias grátis a 20 restaurantes",
+         "Conversão para pago", "Pelo menos 6 assinam após o teste", "", "Planejado")])
+    ins("INSERT INTO cronograma (atividade, mes_inicio, duracao_meses, responsavel, custo) VALUES (?,?,?,?,?)", [
+        ("Desenvolvimento do MVP", 1, 3, "Sócio(a) 1", 25000), ("Teste com empresas piloto", 3, 1, "Sócio(a) 2", 0),
+        ("Publicação nas lojas", 4, 1, "Sócio(a) 1", 700), ("Lançamento", 4, 1, "Todos", 6000),
+    ])

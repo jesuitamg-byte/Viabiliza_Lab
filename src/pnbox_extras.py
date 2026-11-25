@@ -17,7 +17,7 @@ from fpdf.enums import XPos, YPos
 
 from pnbox_motor import (brl, num_br, pct, div, QUADRANTES, pontuacao_swot, mercado, semaforo,
                          tabela_dre, tabela_indicadores, composicoes, sensibilidade, capacidade_demanda,
-                         tabela_checagens_v5, raio_x, executar_motor)
+                         tabela_checagens_v5, raio_x, executar_motor, custo_hora)
 from pnbox_db import SCHEMA, conectar, ler, ler_unica
 from pnbox_pdf import Relatorio, graficos_png, AZUL, FONTES_CANDIDATAS
 
@@ -29,6 +29,7 @@ def regras_situacao(proj: dict, d: dict) -> dict:
     def tem(t, n=1):
         return len(d[t]) >= n
     sw = d["swot"]
+    rec = tem("catalogo") or tem("assinaturas")
     return {
         "projeto": (bool(proj["nome_negocio"]) and bool(proj["cidade_uf"]), tem("socios")),
         "segmentos": (tem("segmentos", 2), tem("segmentos")),
@@ -51,12 +52,14 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "investimentos": (tem("inv_fixos") and (tem("socios") or tem("emprestimos")), tem("inv_fixos")),
         "produtos": (tem("catalogo") and tem("materiais"), tem("catalogo") or tem("materiais")),
         "custos": (tem("pessoal") and tem("custos_fixos"), tem("pessoal") or tem("custos_fixos")),
+        "servicos": (bool((d["catalogo"]["horas_unit"] > 0).any()), bool((d["catalogo"]["horas_unit"] > 0).any())),
+        "assinaturas": (tem("assinaturas") and bool((d["assinaturas"]["churn_mensal_pct"] > 0).all()), tem("assinaturas")),
         "preco": (tem("catalogo"), tem("catalogo")),
-        "dre": (tem("catalogo") and tem("custos_fixos"), tem("catalogo")),
-        "fluxo": (tem("catalogo") and tem("capital_giro_prazos"), tem("catalogo")),
-        "indicadores": (tem("catalogo") and tem("inv_fixos"), tem("catalogo")),
-        "graficos": (tem("catalogo"), tem("catalogo")),
-        "simulador": (tem("catalogo"), tem("catalogo")),
+        "dre": (rec and tem("custos_fixos"), rec),
+        "fluxo": (rec and tem("capital_giro_prazos"), rec),
+        "indicadores": (rec and tem("inv_fixos"), rec),
+        "graficos": (rec, rec),
+        "simulador": (rec, rec),
         "experimentos": (tem("experimentos"), tem("experimentos")),
         "riscos": (tem("riscos", 3), tem("riscos")),
         "cronograma": (tem("cronograma", 3), tem("cronograma")),
@@ -68,7 +71,15 @@ def regras_situacao(proj: dict, d: dict) -> dict:
 def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
-    vals = [1 if c else (0.5 if i else 0) for k, (c, i) in r.items() if k != "realizado"]
+    tipo = str(proj.get("tipo_negocio") or "Produtos")
+    fora = {"realizado"}
+    if not tipo.startswith(("Serviço", "Misto")):
+        fora.add("servicos")
+    if not tipo.startswith(("Assinatura", "Misto")):
+        fora.add("assinaturas")
+    if tipo.startswith("Assinatura") and not r["produtos"][1]:
+        fora.update({"produtos", "preco"})
+    vals = [1 if c else (0.5 if i else 0) for k, (c, i) in r.items() if k not in fora]
     return sum(vals) / max(len(vals), 1)
 
 
@@ -107,6 +118,11 @@ def gerar_sumario(proj: dict, d: dict, res: dict) -> str:
         p.append(f"O mercado alcançável foi estimado em {num_br(mk['sam_c'], 0)} clientes ({brl(mk['sam'])} por ano), e a meta "
                  f"de conquista (SOM) em {num_br(mk['som_c'], 0)} clientes. A receita prevista para o primeiro ano representa "
                  f"{pct(mk['pct_som'])} desse SOM.")
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        p.append(f"O modelo de receita é baseado em assinaturas: a projeção chega a {num_br(rc['ativos12'], 0)} assinantes e MRR de "
+                 f"{brl(rc['mrr12'])} no Mês 12, com churn médio de {pct(rc['churn'])} ao mês e relação LTV/CAC de "
+                 f"{num_br(rc['ltv_cac'], 1)}x.")
     p.append(f"A análise SWOT indica a {estrategia.lower()} como postura predominante.")
     p.append(f"O investimento total necessário é de {brl(res['investimento_total'])}, composto por {brl(res['inv_fixo'])} em "
              f"investimentos fixos, {brl(res['inv_pre'])} em gastos pré-operacionais, {brl(res['inv_estoque'])} em estoque inicial "
@@ -135,6 +151,7 @@ TAREFAS_IA = {
     "riscos": "Principais riscos do plano e como mitigá-los",
     "graficos": "Gráficos interpretativos dos principais números",
     "banca": "Simulação de banca examinadora: perguntas difíceis sobre o plano",
+    "recorrencia": "Assinaturas e serviços: churn, LTV/CAC, preço dos planos e custo da hora",
 }
 
 
@@ -207,6 +224,33 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                           "Margem": cat["margem_pct"].map(pct), "Qtd/mês": cat["qtd_mensal"].map(lambda v: num_br(v, 0)),
                           "Receita/mês": cat["receita_mensal"].map(brl)})
         b.append(_md_tabela(t, 60))
+    b.append(f"\n- Tipo de negócio: {proj.get('tipo_negocio') or 'Produtos'}")
+    ch = custo_hora(res, d, proj)
+    if not ch["tabela"].empty:
+        b.append("\n## 9b. Serviços e custo da hora")
+        b.append(f"- Equipe da operação: {num_br(ch['pessoas'], 0)} pessoa(s); {num_br(ch['horas_cobraveis'], 0)} horas cobráveis/mês "
+                 f"(utilização {pct(ch['utilizacao'], 0)}); custo da hora produtiva {brl(ch['custo_hora'])}; ocupação no Mês 12 "
+                 f"{pct(ch['ocupacao_m12'])}.")
+        t_ = ch["tabela"]
+        b.append(_md_tabela(pd.DataFrame({"Serviço": t_["Serviço"], "Horas": t_["Horas por serviço"].map(lambda v: num_br(v, 1)), "Custo pleno": t_["Custo pleno"].map(brl),
+                                          "Preço": t_["Preço atual"].map(brl),
+                                          "Sugerido": t_["Preço sugerido"].map(lambda v: brl(v) if v == v else "n.c."),
+                                          "R$/hora cobrada": t_["Valor da hora cobrada"].map(brl)})))
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        a_ = d["assinaturas"]
+        b.append("\n## 9c. Assinaturas (receita recorrente)")
+        b.append(_md_tabela(pd.DataFrame({"Plano": a_["plano"], "Público": a_["publico"], "Preço por ciclo": a_["preco_ciclo"].map(brl),
+                                          "Ciclo (meses)": a_["ciclo_meses"].map(lambda v: num_br(v, 0)),
+                                          "Novos no Mês 1": a_["novos_mes1"].map(lambda v: num_br(v, 0)),
+                                          "Crescimento dos novos %/mês": a_["crescimento_novos_pct"].map(lambda v: num_br(v, 1)),
+                                          "Churn %/mês": a_["churn_mensal_pct"].map(lambda v: num_br(v, 1)),
+                                          "Custo de entrega/assinante": a_["custo_entrega_mensal"].map(brl),
+                                          "Taxa de cobrança %": a_["taxa_cobranca_pct"].map(lambda v: num_br(v, 1))})))
+        b.append(f"- MRR Mês 1 {brl(rc['mrr1'])}; MRR Mês 12 {brl(rc['mrr12'])}; ARR {brl(rc['arr12'])}; assinantes no Mês 12 "
+                 f"{num_br(rc['ativos12'], 0)}; ARPU {brl(rc['arpu'])}; churn médio {pct(rc['churn'])}; margem bruta "
+                 f"{pct(rc['margem_bruta'])}; LTV {brl(rc['ltv'])}; CAC {brl(rc['cac'])}; LTV/CAC {num_br(rc['ltv_cac'], 1)}x; "
+                 f"payback do CAC {num_br(rc['payback_cac'], 1)} meses; receita antecipada no fim do Ano 1 {brl(rc['receita_diferida_a1'])}.")
     b.append("\n## 10. Estrutura de custos mensal")
     b.append(f"- Custos diretos {brl(res['cdir_m1'])}; impostos {pct(res['aliq'])} e despesas variáveis {pct(res['var_pct'])} da receita; "
              f"MOD {brl(res['mod_m'])}; custos indiretos de produção {brl(res['cif_m'])}; depreciação {brl(res['dep_m'])}; "
@@ -256,6 +300,10 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                     "uma tabela pronta para virar gráfico no Excel): (1) composição do investimento; (2) estrutura de custos; "
                     "(3) receita x custos x resultado nos 3 anos; (4) ponto de equilíbrio; (5) saldo de caixa mês a mês. "
                     "Abaixo de cada gráfico, escreva 2 ou 3 frases de interpretação.",
+        "recorrencia": "Se o plano tiver assinaturas ou serviços (seções 9b e 9c), avalie: o churn é realista para o setor? O LTV/CAC "
+                       "e o payback do CAC são saudáveis? Os preços dos planos e o desconto dos planos longos fazem sentido? O custo "
+                       "da hora cobre a equipe? Proponha 5 ações para reduzir cancelamentos e aumentar a receita por cliente, com o "
+                       "efeito estimado no MRR.",
         "banca": "Faça o papel de uma banca examinadora: elabore 10 perguntas difíceis sobre este plano (mercado, números, premissas, "
                  "riscos) e, para cada uma, indique o que uma boa resposta deveria conter.",
     }
@@ -536,6 +584,25 @@ def gerar_docx(proj: dict, d: dict, res: dict, piv_conc=None) -> bytes | None:
     it = res["investimento_total"]
     tabela(pd.DataFrame({"Item": ["Investimentos fixos", "Pré-operacionais", "Estoque inicial", "Capital de giro", "Total"],
                          "Valor": [brl(x) for x in (res["inv_fixo"], res["inv_pre"], res["inv_estoque"], res["capital_giro"], it)]}))
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        doc.add_heading("6.1b Assinaturas e receita recorrente", 2)
+        a_ = d["assinaturas"]
+        tabela(pd.DataFrame({"Plano": a_["plano"], "Preço por ciclo": a_["preco_ciclo"].map(brl),
+                             "Ciclo (meses)": a_["ciclo_meses"].map(lambda v: num_br(v, 0)),
+                             "Novos no Mês 1": a_["novos_mes1"].map(lambda v: num_br(v, 0)),
+                             "Churn/mês": a_["churn_mensal_pct"].map(lambda v: pct(v / 100))}))
+        doc.add_paragraph(f"MRR no Mês 12 de {brl(rc['mrr12'])} ({num_br(rc['ativos12'], 0)} assinantes), churn médio de "
+                          f"{pct(rc['churn'])} ao mês, margem bruta recorrente de {pct(rc['margem_bruta'])}, LTV de {brl(rc['ltv'])}, "
+                          f"CAC de {brl(rc['cac'])} e LTV/CAC de {num_br(rc['ltv_cac'], 1)}x.")
+    ch = custo_hora(res, d, proj)
+    if not ch["tabela"].empty:
+        doc.add_heading("6.1c Serviços e custo da hora", 2)
+        doc.add_paragraph(f"Custo da hora produtiva de {brl(ch['custo_hora'])}, com {num_br(ch['horas_cobraveis'], 0)} horas "
+                          f"cobráveis por mês e ocupação prevista de {pct(ch['ocupacao_m12'])} no Mês 12.")
+        t_ = ch["tabela"]
+        tabela(pd.DataFrame({"Serviço": t_["Serviço"], "Custo pleno": t_["Custo pleno"].map(brl), "Preço": t_["Preço atual"].map(brl),
+                             "Preço sugerido": t_["Preço sugerido"].map(lambda v: brl(v) if v == v else "n.c.")}))
     doc.add_heading("6.2 Demonstração do resultado", 2)
     tabela(tabela_dre(res))
     doc.add_heading("6.3 Indicadores de viabilidade", 2)

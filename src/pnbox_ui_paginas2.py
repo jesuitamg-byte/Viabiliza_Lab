@@ -129,7 +129,12 @@ def pg_produtos():
             "preco_venda": moeda("Preço de venda (R$)"),
             "custo_aquisicao": moeda("Valor de aquisição / custo informado (R$)"),
             "qtd_mensal": N("Qtd. vendida no Mês 1", min_value=0, step=1),
-            "qtd_estoque_inicial": N("Estoque inicial (só revenda)", min_value=0, step=1)}, "descricao")
+            "qtd_estoque_inicial": N("Estoque inicial (só revenda)", min_value=0, step=1),
+            "horas_unit": N("Horas de trabalho por unidade (serviços)", min_value=0.0, step=0.5,
+                            help="Quanto tempo da equipe cada serviço consome. Usado em 🧑‍💻 Serviços e custo da hora.")},
+            "descricao")
+        st.caption("Vende planos com pagamento recorrente (mensal, trimestral, anual)? Cadastre-os em "
+                   "**💳 Assinaturas e receita recorrente**, não aqui: lá o programa considera renovações e cancelamentos.")
     with t3:
         cat, mat = d["catalogo"], d["materiais"]
         fabricaveis = cat[cat["categoria"] != "Revenda"]["descricao"].tolist()
@@ -221,6 +226,7 @@ def pg_custos():
 | **Custo direto (variável)** | Vai direto no produto e varia com a quantidade | matéria-prima, embalagem, mercadoria de revenda | Ficha técnica / valor de aquisição |
 | **Mão de obra direta (MOD)** | Pessoas que produzem ou prestam o serviço | cozinheiros, auxiliares de produção | Mão de obra com área "Produção / operação" |
 | **Custo indireto de produção (CIF)** | Gasto da produção que não dá para medir por unidade | energia da cozinha, manutenção de máquinas, aluguel da área produtiva | Custos fixos classificados como "Custo indireto" |
+| **Custo de tecnologia / infraestrutura** | Base fixa para entregar um serviço digital | nuvem mínima, licenças de software, domínio, contas de desenvolvedor | Custos fixos classificados como "Custo de tecnologia" (gastos por assinante ficam em 💳 Assinaturas) |
 | **Despesa** | Gasto para administrar e vender, fora da produção | pró-labore, contador, marketing, tarifas bancárias | Custos fixos "Despesa administrativa / comercial / financeira" |
 | **Despesa variável de venda** | Proporcional à receita | impostos, comissões, taxas de cartão | Custos de comercialização (%) |
 | **Investimento** | Compra de bens duráveis; entra no resultado só pela depreciação | máquinas, móveis, reforma | Investimentos e fontes |

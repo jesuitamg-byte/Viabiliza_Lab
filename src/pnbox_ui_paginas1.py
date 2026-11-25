@@ -42,6 +42,9 @@ def salvo_txt():
 # PAINEL DO PLANO (tela inicial)
 # ==============================================================================
 def pg_inicio():
+    if ss.get("_pag_vista") != "inicio":
+        ss["_pag_vista"] = "inicio"
+        rolar_para_topo()
     if not ss.get("bemvindo_ok"):
         with st.container(border=True):
             st.markdown(f"""
@@ -124,11 +127,66 @@ se a ideia é **viável**. Como usar:
 # ==============================================================================
 # IDENTIFICAÇÃO
 # ==============================================================================
+TIPOS_NEGOCIO = {
+    "Produtos": "Fabrica ou revende mercadorias. Use Produtos e materiais, ficha técnica e estoques.",
+    "Serviços (hora ou projeto)": "Vende tempo e conhecimento (consultoria, manutenção, design, desenvolvimento sob encomenda, "
+                                  "estética...). Use também 🧑‍💻 Serviços e custo da hora.",
+    "Assinatura (receita recorrente)": "Cobra planos que se renovam (aplicativos, software, clubes, academias, mensalidades). "
+                                       "Use 💳 Assinaturas e receita recorrente.",
+    "Misto": "Combina produtos, serviços e/ou assinaturas.",
+}
+
+
+def calculadora_simples():
+    res = R()
+    fr = fator_r(res, d)
+    st.markdown("""
+No Simples Nacional a alíquota depende do **anexo** da atividade e da **receita bruta dos últimos 12 meses (RBT12)**:
+alíquota efetiva = (RBT12 × alíquota nominal − parcela a deduzir) ÷ RBT12. Serviços de tecnologia, engenharia e outros de
+natureza intelectual ficam no **Anexo V**, mas passam ao **Anexo III**, mais barato, quando o **fator R** (folha de pagamento,
+incluindo pró-labore, ÷ receita bruta) é de 28% ou mais. Confirme sempre o CNAE e o anexo com um contador.
+""")
+    c1, c2, c3 = st.columns(3)
+    anexos = list(TABELAS_SIMPLES)
+    sugerido = proj["anexo_simples"] if proj["anexo_simples"] in anexos else (
+        "Anexo III - Serviços" if str(proj["tipo_negocio"]).startswith(("Serviço", "Assinatura")) else "Anexo I - Comércio")
+    anexo = c1.selectbox("Anexo da atividade", anexos, index=anexos.index(sugerido), key=wk("anexo"))
+    rbt = c2.number_input("Receita bruta de 12 meses (RBT12)", 0.0, 1e9, float(round(res["anos"][1]["rec_bruta"], 2)), 1000.0,
+                          key=wk("rbt12"), help="Sugestão: a receita prevista para o Ano 1.")
+    usar_r = anexo in ("Anexo III - Serviços", "Anexo V - Serviços")
+    anexo_final = fr["anexo_por_fator_r"] if usar_r else anexo
+    r = aliquota_simples(anexo_final, rbt)
+    c3.metric("Fator R previsto", pct(fr["fator_r"]) if fr["fator_r"] == fr["fator_r"] else "n.a.",
+              help=f"Folha de 12 meses {brl(fr['folha12'])} (salários, encargos e pró-labore de {brl(fr['pro_labore_m'])}/mês) "
+                   f"÷ receita {brl(fr['receita12'])}")
+    if usar_r:
+        st.info(f"Com fator R de {pct(fr['fator_r'])}, a atividade é tributada pelo **{anexo_final}**.")
+    if r["efetiva"] == r["efetiva"]:
+        a, b, c = st.columns(3)
+        a.metric("Faixa", "acima do limite" if r.get("acima_limite") else f"{r['faixa']}ª")
+        b.metric("Alíquota nominal", pct(r["nominal"]))
+        c.metric("Alíquota efetiva", pct(r["efetiva"]))
+        if st.button(f"Usar {pct(r['efetiva'])} como imposto sobre vendas", key=wk("usar_aliq")):
+            salvar_unica(conn, "projeto", {"aliquota_imposto_pct": round(r["efetiva"] * 100, 2), "anexo_simples": anexo})
+            ss.pop(wk("aliq"), None)
+            invalidar()
+            marcar_salvo()
+            st.rerun()
+    st.caption("Tabelas da LC 123/2006 com a redação da LC 155/2016. A reforma tributária (EC 132/2023 e LC 214/2025) mantém o "
+               "Simples, mas a partir de 2027 a empresa pode recolher IBS e CBS dentro da guia única ou por fora, no regime "
+               "regular. Para o plano, use a regra vigente, cite a fonte e confirme com um contador.")
+
+
 def pg_projeto():
     cabecalho("projeto")
     t1, t2, t3 = st.tabs(["🏢 Negócio", "👥 Grupo e entrega", "📈 Premissas financeiras"])
     v = {}
     with t1:
+        tipos = list(TIPOS_NEGOCIO)
+        atual_t = proj["tipo_negocio"] if proj["tipo_negocio"] in tipos else tipos[0]
+        v["tipo_negocio"] = st.radio("Como o negócio ganha dinheiro?", tipos, index=tipos.index(atual_t), horizontal=True,
+                                     key=wk("tipo_neg"), help="Define quais ferramentas o programa recomenda e quais checagens aplica.")
+        st.caption(TIPOS_NEGOCIO[v["tipo_negocio"]])
         c1, c2, c3 = st.columns(3)
         v["nome_negocio"] = c1.text_input("Nome do negócio", proj["nome_negocio"], key=wk("nome"), max_chars=60)
         objs = ["Criar um novo negócio", "Expandir um negócio existente", "Captar recursos", "Outro"]
@@ -169,6 +227,8 @@ def pg_projeto():
         v["pme_dias"] = p3.number_input("Prazo médio de estoques (dias)", 0.0, 365.0, proj["pme_dias"], 1.0, key=wk("pme"))
         v["reserva_caixa_extra"] = p1.number_input("Reserva financeira de segurança (R$)", 0.0, 1e8, proj["reserva_caixa_extra"], 1000.0, key=wk("res"))
         v["recuperar_giro"] = int(p2.checkbox("No VPL, recuperar o capital de giro no último ano", bool(proj["recuperar_giro"]), key=wk("rg")))
+        with st.expander("🧮 Calcular a alíquota do Simples Nacional (anexos e fator R)"):
+            calculadora_simples()
     auto_unica("projeto", v)
     salvo_txt()
 

@@ -130,6 +130,136 @@ def calcular_tir(fluxos):
 
 
 # ------------------------------------------------------------------------------
+# 3b. RECEITA RECORRENTE (ASSINATURAS) POR SAFRAS DE CLIENTES
+# ------------------------------------------------------------------------------
+COLS_ASS = ["Mês", "Novos", "Cancelamentos", "Ativos", "Receita reconhecida", "Cobranças (caixa)",
+            "Custo de entrega", "Taxas de cobrança"]
+
+
+def simular_assinaturas(ass: pd.DataFrame | None, g_a: float, inf: float, meses: int = 36):
+    """
+    Cada mês de entrada forma uma safra (coorte) de assinantes. A safra encolhe a cada renovação
+    conforme o churn; quem paga por ciclo (trimestral, anual...) só pode sair na renovação.
+    - Cobrança (caixa): no início de cada ciclo, preço do ciclo x assinantes ativos.
+    - Receita reconhecida: preço do ciclo / meses do ciclo, todos os meses em que o assinante está ativo.
+    - Custo de entrega: custo mensal por assinante ativo (nuvem, APIs, suporte), corrigido pela inflação.
+    - Taxas de cobrança: % sobre o valor cobrado (meio de pagamento, loja de aplicativos).
+    - Novos assinantes: crescem à taxa mensal do plano no Ano 1; nos Anos 2 e 3 partem do Mês 12
+      e crescem à taxa anual de crescimento do projeto.
+    """
+    vazio = pd.DataFrame(columns=COLS_ASS), pd.DataFrame(columns=["Mês", "Plano", "Ativos", "Receita reconhecida"])
+    if ass is None or ass.empty:
+        return vazio
+    tot = {c: [0.0] * meses for c in COLS_ASS[1:]}
+    por_plano = []
+    for _, p in ass.iterrows():
+        preco, c = float(p["preco_ciclo"] or 0), max(1, int(round(float(p["ciclo_meses"] or 1))))
+        n1, g = float(p["novos_mes1"] or 0), float(p["crescimento_novos_pct"] or 0) / 100
+        churn_m = min(max(float(p["churn_mensal_pct"] or 0) / 100, 0.0), 1.0)
+        sobra_ciclo = (1 - churn_m) ** c              # fração que renova a cada ciclo
+        custo, taxa = float(p["custo_entrega_mensal"] or 0), float(p["taxa_cobranca_pct"] or 0) / 100
+        if preco <= 0 and n1 <= 0:
+            continue
+        novos = [n1 * (1 + g) ** t if t < 12 else n1 * (1 + g) ** 11 * (1 + g_a) ** (t // 12) for t in range(meses)]
+        ativos, rec, cob, canc = [0.0] * meses, [0.0] * meses, [0.0] * meses, [0.0] * meses
+        for t0 in range(meses):
+            for t in range(t0, meses):
+                a = t - t0
+                ren = a // c
+                vivos = novos[t0] * sobra_ciclo ** ren
+                ativos[t] += vivos
+                rec[t] += vivos * preco / c
+                if a % c == 0:
+                    cob[t] += vivos * preco
+                    if a > 0:
+                        canc[t] += novos[t0] * sobra_ciclo ** (ren - 1) - vivos
+        for t in range(meses):
+            tot["Novos"][t] += novos[t]
+            tot["Cancelamentos"][t] += canc[t]
+            tot["Ativos"][t] += ativos[t]
+            tot["Receita reconhecida"][t] += rec[t]
+            tot["Cobranças (caixa)"][t] += cob[t]
+            tot["Custo de entrega"][t] += ativos[t] * custo * (1 + inf) ** (t // 12)
+            tot["Taxas de cobrança"][t] += cob[t] * taxa
+            por_plano.append({"Mês": t + 1, "Plano": p["plano"], "Ativos": ativos[t], "Receita reconhecida": rec[t]})
+    if not por_plano:
+        return vazio
+    df = pd.DataFrame({"Mês": list(range(1, meses + 1)), **tot})
+    return df, pd.DataFrame(por_plano)
+
+
+def metricas_recorrencia(s: pd.DataFrame, planos: pd.DataFrame, ass: pd.DataFrame, gasto_aquisicao_m1: float) -> dict:
+    """Indicadores de negócios por assinatura (Ano 1)."""
+    if s is None or s.empty or float(s["Receita reconhecida"].sum()) <= 0:
+        return {"tem": False}
+    a1 = s.iloc[:12]
+    mrr1, mrr12 = float(s["Receita reconhecida"].iloc[0]), float(s["Receita reconhecida"].iloc[11])
+    ativos12 = float(s["Ativos"].iloc[11])
+    arpu = div(mrr12, ativos12)
+    # churn mensal médio: churn informado em cada plano, ponderado pelos assinantes ativos no Mês 12
+    p12 = planos[planos["Mês"] == 12].groupby("Plano")["Ativos"].sum()
+    taxas = dict(zip(ass["plano"], ass["churn_mensal_pct"] / 100))
+    churn = div(sum(p12.get(k, 0.0) * taxas.get(k, 0.0) for k in p12.index), float(p12.sum())) if p12.sum() > 0 else 0.0
+    rec_a1 = float(a1["Receita reconhecida"].sum())
+    margem_bruta = div(rec_a1 - float(a1["Custo de entrega"].sum()) - float(a1["Taxas de cobrança"].sum()), rec_a1)
+    lucro_bruto_cliente = arpu * margem_bruta
+    ltv = div(lucro_bruto_cliente, churn) if churn and churn > 0 else float("nan")
+    vida_meses = div(1, churn) if churn and churn > 0 else float("nan")
+    novos1 = float(s["Novos"].iloc[0])
+    cac = div(gasto_aquisicao_m1, novos1) if novos1 > 0 else float("nan")
+    ltv_cac = div(ltv, cac) if cac == cac and cac and cac > 0 and ltv == ltv else float("nan")
+    payback_cac = div(cac, lucro_bruto_cliente) if lucro_bruto_cliente > 0 and cac == cac else float("nan")
+    diferida = float(a1["Cobranças (caixa)"].sum()) - rec_a1
+    return {"tem": True, "mrr1": mrr1, "mrr12": mrr12, "arr12": mrr12 * 12, "ativos12": ativos12, "arpu": arpu,
+            "churn": churn, "vida_meses": vida_meses, "margem_bruta": margem_bruta, "ltv": ltv, "cac": cac,
+            "gasto_aquisicao_m1": gasto_aquisicao_m1, "novos1": novos1, "ltv_cac": ltv_cac,
+            "payback_cac": payback_cac, "receita_diferida_a1": diferida, "rec_a1": rec_a1,
+            "cobrancas_a1": float(a1["Cobranças (caixa)"].sum()),
+            "crescimento_mrr": div(mrr12, mrr1) - 1 if mrr1 > 0 else float("nan")}
+
+
+# ------------------------------------------------------------------------------
+# 3c. SIMPLES NACIONAL (Anexos I a V, LC 123/2006 com redação da LC 155/2016)
+# ------------------------------------------------------------------------------
+TABELAS_SIMPLES = {
+    "Anexo I - Comércio": [(180000, .04, 0), (360000, .073, 5940), (720000, .095, 13860), (1800000, .107, 22500),
+                           (3600000, .143, 87300), (4800000, .19, 378000)],
+    "Anexo II - Indústria": [(180000, .045, 0), (360000, .078, 5940), (720000, .10, 13860), (1800000, .112, 22500),
+                             (3600000, .147, 85500), (4800000, .30, 720000)],
+    "Anexo III - Serviços": [(180000, .06, 0), (360000, .112, 9360), (720000, .135, 17640), (1800000, .16, 35640),
+                             (3600000, .21, 125640), (4800000, .33, 648000)],
+    "Anexo IV - Serviços": [(180000, .045, 0), (360000, .09, 8100), (720000, .102, 12420), (1800000, .14, 39780),
+                            (3600000, .22, 183780), (4800000, .33, 828000)],
+    "Anexo V - Serviços": [(180000, .155, 0), (360000, .18, 4500), (720000, .195, 9900), (1800000, .205, 17100),
+                           (3600000, .23, 62100), (4800000, .305, 540000)],
+}
+
+
+def aliquota_simples(anexo: str, rbt12: float) -> dict:
+    """Alíquota efetiva = (RBT12 x alíquota nominal - parcela a deduzir) / RBT12."""
+    tab = TABELAS_SIMPLES.get(anexo)
+    if not tab or rbt12 <= 0:
+        return {"faixa": 0, "nominal": float("nan"), "deduzir": 0.0, "efetiva": float("nan")}
+    for i, (lim, nom, ded) in enumerate(tab, start=1):
+        if rbt12 <= lim:
+            return {"faixa": i, "nominal": nom, "deduzir": ded, "efetiva": (rbt12 * nom - ded) / rbt12}
+    lim, nom, ded = tab[-1]
+    return {"faixa": 7, "nominal": nom, "deduzir": ded, "efetiva": (rbt12 * nom - ded) / rbt12, "acima_limite": True}
+
+
+def fator_r(res: dict, d: dict) -> dict:
+    """Fator R = folha de salários dos últimos 12 meses (com pró-labore e encargos) ÷ receita bruta."""
+    cf = d["custos_fixos"]
+    pro = float(cf.loc[cf["descricao"].astype(str).str.lower().str.replace("-", "").str.replace(" ", "")
+                       .str.contains("prolabore|prólabore"), "valor_mensal"].sum())
+    folha12 = (res["salarios_m"] + res["encargos_m"] + pro) * 12
+    rec = res["anos"][1]["rec_bruta"]
+    fr = div(folha12, rec) if rec > 0 else float("nan")
+    return {"folha12": folha12, "pro_labore_m": pro, "receita12": rec, "fator_r": fr,
+            "anexo_por_fator_r": "Anexo III - Serviços" if fr == fr and fr >= 0.28 else "Anexo V - Serviços"}
+
+
+# ------------------------------------------------------------------------------
 # 4. MOTOR PRINCIPAL
 # ------------------------------------------------------------------------------
 def executar_motor(proj: dict, d: dict) -> dict:
@@ -143,6 +273,18 @@ def executar_motor(proj: dict, d: dict) -> dict:
     cdir_cat_m1 = {c: float(cat.loc[cat["categoria"] == c, "custo_mensal"].sum()) for c in CATEGORIAS}
     rec_cat_m1 = {c: float(cat.loc[cat["categoria"] == c, "receita_mensal"].sum()) for c in CATEGORIAS}
     cdir_m1 = sum(cdir_cat_m1.values())
+
+    # --- Assinaturas (receita recorrente), 36 meses
+    g_m = proj["crescimento_mensal_ano1_pct"] / 100
+    g_a = proj["crescimento_anual_pct"] / 100
+    inf = proj["inflacao_custos_anual_pct"] / 100
+    ass_df, ass_planos = simular_assinaturas(d.get("assinaturas"), g_a, inf)
+    tem_ass = not ass_df.empty
+
+    def serie(col):
+        return [float(v) for v in ass_df[col]] if tem_ass else [0.0] * 36
+    s_rec, s_cob, s_custo, s_taxa = (serie("Receita reconhecida"), serie("Cobranças (caixa)"),
+                                     serie("Custo de entrega"), serie("Taxas de cobrança"))
 
     # --- Pessoal, custos fixos e depreciação (mensais)
     pes = d["pessoal"]
@@ -159,7 +301,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
     pessoal_com_m = pessoal_m - mod_m - pessoal_adm_m
     cfx = d["custos_fixos"]
     cls = cfx["classificacao"].fillna("") if "classificacao" in cfx else pd.Series([""] * len(cfx))
-    cif_m = float(cfx.loc[cls.str.startswith("Custo indireto"), "valor_mensal"].sum())
+    cif_m = float(cfx.loc[cls.str.startswith("Custo"), "valor_mensal"].sum())   # indiretos de produção e de tecnologia
     desp_adm_m = float(cfx.loc[cls.str.contains("administrativa") | (cls == ""), "valor_mensal"].sum())
     desp_com_m = float(cfx.loc[cls.str.contains("comercial"), "valor_mensal"].sum())
     desp_fin_m = float(cfx.loc[cls.str.contains("financeira"), "valor_mensal"].sum())
@@ -192,7 +334,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
     pme = float(proj["pme_dias"])
     ciclo_op = pme + pmr
     ciclo_fin = ciclo_op - pmp
-    desembolso_m1 = cdir_m1 + receita_m1 * (aliq + var_pct) + cf_desemb_m
+    desembolso_m1 = (cdir_m1 + (receita_m1 + s_rec[0]) * (aliq + var_pct) + cf_desemb_m + s_custo[0] + s_taxa[0])
     ncg = max(0.0, desembolso_m1 / 30.0 * ciclo_fin)
     reserva = float(proj["reserva_caixa_extra"])
     capital_giro = ncg + reserva
@@ -205,15 +347,12 @@ def executar_motor(proj: dict, d: dict) -> dict:
     crono = cronograma_emprestimos(d["emprestimos"], anos=5)
 
     # --- Projeção mensal do Ano 1
-    g_m = proj["crescimento_mensal_ano1_pct"] / 100
-    g_a = proj["crescimento_anual_pct"] / 100
-    inf = proj["inflacao_custos_anual_pct"] / 100
     tma = proj["tma_anual_pct"] / 100
     meses = []
     for m in range(12):
         f = (1 + g_m) ** m
-        rec = receita_m1 * f
-        cv = cdir_m1 * f + rec * (aliq + var_pct)
+        rec = receita_m1 * f + s_rec[m]
+        cv = cdir_m1 * f + rec * (aliq + var_pct) + s_custo[m] + s_taxa[m]
         cf = cf_desemb_m + dep_m
         meses.append({"Mês": f"Mês {m + 1}", "Receita": rec, "Custos variáveis": cv,
                       "Margem de contribuição": rec - cv, "Custos fixos": cf,
@@ -227,13 +366,17 @@ def executar_motor(proj: dict, d: dict) -> dict:
     for k in (1, 2, 3):
         fr = fator_a1 * (1 + g_a) ** (k - 1)
         fi = (1 + inf) ** (k - 1)
-        rec_bruta = receita_m1 * fr
+        meses_k = slice((k - 1) * 12, k * 12)
+        ass_rec, ass_custo, ass_taxa = sum(s_rec[meses_k]), sum(s_custo[meses_k]), sum(s_taxa[meses_k])
+        rec_prod = receita_m1 * fr
+        rec_bruta = rec_prod + ass_rec
         rec_cat = {c: v * fr for c, v in rec_cat_m1.items()}
+        rec_cat["Assinatura"] = ass_rec
         cmv, cpv, csv = (cdir_cat_m1["Revenda"] * fr, cdir_cat_m1["Fabricação Própria"] * fr,
-                         cdir_cat_m1["Serviço"] * fr)
+                         cdir_cat_m1["Serviço"] * fr + ass_custo)
         custo_dir = cmv + cpv + csv
         impostos = rec_bruta * aliq
-        outras_var = rec_bruta * var_pct
+        outras_var = rec_bruta * var_pct + ass_taxa
         rec_liquida = rec_bruta - impostos
         cv_tot = custo_dir + impostos + outras_var
         mc = rec_bruta - cv_tot
@@ -252,7 +395,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
 
         # Balanço simplificado (caixa calculado por diferença: Ativo = Passivo + PL)
         receber = rec_bruta / 360 * pmr
-        estoques = inv_estoque * (rec_bruta / (receita_m1 * fator_a1)) if receita_m1 > 0 else inv_estoque
+        estoques = inv_estoque * (rec_prod / (receita_m1 * fator_a1)) if receita_m1 > 0 else inv_estoque
         imobilizado = max(0.0, inv_fixo - dep_anual * k)
         fornecedores = custo_dir / 360 * pmp
         obrigacoes = (pessoal + impostos) / 12
@@ -260,7 +403,9 @@ def executar_motor(proj: dict, d: dict) -> dict:
         div_cp = crono["amort"][k] if k < len(crono["amort"]) else 0.0
         div_cp = min(div_cp, saldo_div)
         div_lp = saldo_div - div_cp
-        pc = fornecedores + obrigacoes + div_cp
+        # Receita antecipada (assinaturas cobradas e ainda não prestadas): passivo circulante
+        receita_diferida = sum(s_cob[:k * 12]) - sum(s_rec[:k * 12])
+        pc = fornecedores + obrigacoes + div_cp + receita_diferida
         pnc = div_lp
         pl = capital_proprio + lucros_acum
         caixa = pc + pnc + pl - (receber + estoques + imobilizado + inv_pre)
@@ -279,7 +424,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
             dep=dep_anual, cf_total=cf_total, ebitda=ebitda, ebit=ebit, juros=juros,
             resultado=resultado, fco=fco, amort=amort, fluxo_socio=fluxo_socio,
             caixa=caixa, receber=receber, estoques=estoques, ac=ac, imobilizado=imobilizado,
-            ativo_total=ativo_total, fornecedores=fornecedores, obrigacoes=obrigacoes,
+            ativo_total=ativo_total, fornecedores=fornecedores, obrigacoes=obrigacoes, receita_diferida=receita_diferida,
             div_cp=div_cp, div_lp=div_lp, pc=pc, pnc=pnc, pl=pl, divida_bruta=saldo_div,
             divida_liquida=saldo_div - caixa, pe_contabil=pe_cont, pe_financeiro=pe_fin,
             pe_economico=pe_eco,
@@ -328,7 +473,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
 
     # --- Formação de preço (markup divisor)
     margem_desej = float(proj.get("margem_desejada_pct") or 0) / 100
-    df_pct = div(cf_desemb_m + dep_m, receita_m1) if receita_m1 > 0 else 0.0
+    df_pct = div(cf_desemb_m + dep_m, receita_m1 + s_rec[0]) if receita_m1 + s_rec[0] > 0 else 0.0
     df_pct = 0.0 if df_pct != df_pct else df_pct
     divisor = 1 - (aliq + var_pct + df_pct + margem_desej)
     markup_mult = div(1, divisor) if divisor > 0 else float("nan")
@@ -357,12 +502,12 @@ def executar_motor(proj: dict, d: dict) -> dict:
 
     rec_mes = [receita_m1 * (1 + g_m) ** m for m in range(12)]
     cdir_mes = [cdir_m1 * (1 + g_m) ** m for m in range(12)]
-    entradas = distribuir(rec_mes, rec_pz)
+    entradas = [e + c for e, c in zip(distribuir(rec_mes, rec_pz), s_cob[:12])]   # assinaturas: caixa na cobrança
     pag_forn = distribuir(cdir_mes, pag_pz)
     saldo = fontes - inv_fixo - inv_pre - inv_estoque
     fluxo_m = []
     for m in range(12):
-        sai_var = rec_mes[m] * (aliq + var_pct)
+        sai_var = (rec_mes[m] + s_rec[m]) * (aliq + var_pct) + s_custo[m] + s_taxa[m]
         parcela = crono["juros_m"][m] + crono["amort_m"][m]
         sai = pag_forn[m] + sai_var + cf_desemb_m + parcela
         ini = saldo
@@ -372,6 +517,9 @@ def executar_motor(proj: dict, d: dict) -> dict:
                         "Pessoal e custos fixos": cf_desemb_m, "Parcelas de empréstimos": parcela,
                         "Saldo final": saldo})
     df_fluxo_m = pd.DataFrame(fluxo_m)
+
+    # --- Indicadores de recorrência (CAC = gasto comercial fixo do Mês 1 ÷ novos assinantes do Mês 1)
+    rec_ind = metricas_recorrencia(ass_df, ass_planos, d.get("assinaturas"), desp_com_m + pessoal_com_m)
 
     return dict(
         mod_m=mod_m, pessoal_adm_m=pessoal_adm_m, pessoal_com_m=pessoal_com_m, cif_m=cif_m,
@@ -387,6 +535,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         capital_proprio=capital_proprio, capital_terceiros=capital_terceiros, fontes=fontes,
         crono=crono, meses=df_meses, anos=anos, fluxos=fluxos, vpl=vpl, tir=tir, il=il,
         payback_simples=payback_simples, payback_desc=payback_desc, resumo=resumo, tma=tma,
+        ass=ass_df, ass_planos=ass_planos, recorrencia=rec_ind, g_a=g_a, inf=inf,
     )
 
 
@@ -784,6 +933,20 @@ def semaforo(res: dict) -> list:
         "🟢" if pes <= 0.25 else ("🟡" if pes <= 0.35 else "🔴"),
         "Quanto da receita líquida vai para salários, encargos e benefícios. Acima de 35% costuma apertar o resultado.",
         f"{brl(a1['pessoal'])} ÷ {brl(a1['rec_liquida'])} = {pct(pes)}")
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        lc = rc["ltv_cac"]
+        add("LTV/CAC (assinaturas)", lc, f"{num_br(lc, 1)}x" if lc == lc else "n.a.",
+            "🟢" if lc == lc and lc >= 3 else ("🟡" if lc == lc and lc >= 1 else "🔴"),
+            "Quantas vezes o lucro bruto que um assinante deixa ao longo da vida cobre o custo de conquistá-lo. "
+            "Abaixo de 1 cada cliente novo dá prejuízo; 3 ou mais é a referência usada por investidores.",
+            f"LTV {brl(rc['ltv'])} ÷ CAC {brl(rc['cac'])}" if lc == lc else "Sem gasto comercial ou sem novos assinantes no Mês 1")
+        ch_ = rc["churn"]
+        add("Churn mensal efetivo", ch_, pct(ch_),
+            "🟢" if ch_ <= 0.03 else ("🟡" if ch_ <= 0.07 else "🔴"),
+            "Percentual de assinantes que cancelam por mês. Cada ponto de churn encurta a vida do cliente e o LTV.",
+            f"Churn de cada plano ponderado pelos assinantes ativos no Mês 12 = {pct(ch_)}; vida média ≈ 1 ÷ churn = "
+            f"{num_br(rc['vida_meses'], 0)} meses")
     fm = res["fluxo_mensal"]
     minimo = float(fm["Saldo final"].min()) if not fm.empty else 0.0
     mes_min = fm.loc[fm["Saldo final"].idxmin(), "Mês"] if not fm.empty else "-"
@@ -846,6 +1009,44 @@ def tabela_checagens_v5(res: dict, d: dict, proj: dict) -> pd.DataFrame:
                        "Observação": ", ".join(exced["Recurso"]) or "A capacidade atende a demanda prevista até o Mês 12.",
                        "destino": "operacional", "Onde corrigir": "Marketing e operação → Plano operacional",
                        "Como corrigir": "Aumente a capacidade (equipamentos, pessoas, turnos) ou reveja a meta de vendas."})
+    # --- Serviços: horas demandadas x horas disponíveis
+    ch = custo_hora(res, d, proj)
+    if ch["horas_demandadas_m1"] > 0:
+        ok = ch["ocupacao_m12"] == ch["ocupacao_m12"] and ch["ocupacao_m12"] <= 1
+        extras.append({"Teste": "Horas da equipe suficientes para os serviços",
+                       "Valor apurado": f"Ocupação no Mês 12: {pct(ch['ocupacao_m12'])}" if ch["horas_cobraveis"] > 0
+                       else "nenhuma pessoa na área de produção/operação",
+                       "Situação": "OK" if ok else "VERIFICAR",
+                       "Observação": "As horas vendidas não podem passar das horas cobráveis da equipe.",
+                       "destino": "servicos", "Onde corrigir": "Finanças → Serviços e custo da hora",
+                       "Como corrigir": "Contrate mais pessoas, aumente a utilização ou reduza as horas vendidas."})
+    # --- Assinaturas
+    ass = d.get("assinaturas")
+    rc = res.get("recorrencia", {"tem": False})
+    if ass is not None and not ass.empty:
+        sem_churn = ass[(ass["churn_mensal_pct"] <= 0) & (ass["preco_ciclo"] > 0)]
+        extras.append({"Teste": "Assinaturas com taxa de cancelamento (churn)",
+                       "Valor apurado": f"{len(sem_churn)} plano(s) com churn zero",
+                       "Situação": "OK" if sem_churn.empty else "VERIFICAR",
+                       "Observação": ", ".join(sem_churn["plano"].astype(str)) or
+                       "Todos os planos preveem cancelamentos, como acontece na prática.",
+                       "destino": "assinaturas", "Onde corrigir": "Finanças → Assinaturas e receita recorrente",
+                       "Como corrigir": "Informe um churn mensal realista (pesquisas citam algo entre 3% e 8% ao mês para pequenas "
+                                        "empresas de software e aplicativos)."})
+        if rc.get("tem"):
+            lc = rc["ltv_cac"]
+            ok = lc == lc and lc >= 3
+            extras.append({"Teste": "LTV/CAC de pelo menos 3", "Valor apurado": f"{num_br(lc, 1)}x" if lc == lc else "sem CAC",
+                           "Situação": "OK" if ok else "VERIFICAR",
+                           "Observação": "Cada cliente deve gerar, ao longo da vida, ao menos 3 vezes o que custou para conquistá-lo.",
+                           "destino": "assinaturas", "Onde corrigir": "Finanças → Assinaturas → Indicadores",
+                           "Como corrigir": "Reduza o churn, aumente o preço/ARPU ou diminua o gasto comercial por novo cliente."})
+    if str(proj.get("tipo_negocio", "")).startswith(("Serviço", "Assinatura")) and res["inv_estoque"] > 0:
+        extras.append({"Teste": "Estoque inicial em negócio de serviço", "Valor apurado": brl(res["inv_estoque"]),
+                       "Situação": "VERIFICAR",
+                       "Observação": "Serviços e assinaturas costumam não ter estoque; confira se os materiais são mesmo necessários.",
+                       "destino": "produtos", "Onde corrigir": "Produtos e materiais → Materiais",
+                       "Como corrigir": "Zere o estoque inicial dos itens que não serão comprados antes da abertura."})
     return pd.concat([base, pd.DataFrame(extras)], ignore_index=True)
 
 
@@ -862,3 +1063,52 @@ def raio_x(res: dict, chk: pd.DataFrame, completude: float, sem: list) -> dict:
     acoes = [f"{r['Teste']}: {r['Como corrigir'] or r['Observação']}" for _, r in chk[chk["Situação"] != "OK"].iterrows()]
     acoes += [f"{s['Indicador']} em {s['Valor']}: {s['Leitura']}" for s in sem if s["Status"] == "🔴"]
     return {"nota": nota, "acoes": acoes[:5], "pontos": (round(pontos_comp), round(pontos_chk), round(pontos_fin))}
+
+
+# ------------------------------------------------------------------------------
+# 15. SERVIÇOS: CUSTO DA HORA PRODUTIVA, CAPACIDADE EM HORAS E PREÇO DO SERVIÇO
+# ------------------------------------------------------------------------------
+def custo_hora(res: dict, d: dict, proj: dict) -> dict:
+    """
+    Custo da hora produtiva = (mão de obra da operação + custos indiretos + depreciação) ÷ horas cobráveis.
+    Horas cobráveis = pessoas da operação x horas contratadas por mês x taxa de utilização.
+    Custo pleno do serviço = insumos + horas x custo da hora.
+    Preço sugerido = custo pleno ÷ [1 − (impostos + despesas variáveis + despesas de estrutura % + margem)].
+    """
+    pes = d["pessoal"]
+    area = pes["area"].fillna("").astype(str)
+    pessoas = float(pes.loc[area.str.startswith("Produ"), "num_empregados"].sum())
+    h_mes = float(proj.get("horas_mes_pessoa") or 168)
+    util = float(proj.get("utilizacao_pct") or 75) / 100
+    horas_contr = pessoas * h_mes
+    horas_fat = horas_contr * util
+    custo_base = res["mod_m"] + res["cif_m"] + res["dep_m"]
+    ch = div(custo_base, horas_fat) if horas_fat > 0 else float("nan")
+    rec_a1 = res["anos"][1]["rec_bruta"]
+    estrutura = res["pessoal_adm_m"] + res["pessoal_com_m"] + res["desp_adm_m"] + res["desp_com_m"] + res["desp_fin_m"]
+    desp_pct = div(estrutura * 12, rec_a1) if rec_a1 > 0 else 0.0       # média do Ano 1
+    margem = res["margem_desejada"]
+    divisor = 1 - (res["aliq"] + res["var_pct"] + desp_pct + margem)
+    cat = res["cat"]
+    sv = cat[cat["horas_unit"] > 0].copy() if "horas_unit" in cat else cat.iloc[0:0].copy()
+    linhas = []
+    for _, r in sv.iterrows():
+        h = float(r["horas_unit"])
+        mao = h * ch if ch == ch else float("nan")
+        pleno = float(r["custo_unit"]) + (mao if mao == mao else 0.0)
+        preco = float(r["preco_venda"])
+        sug = div(pleno, divisor) if divisor > 0.05 else float("nan")
+        margem_real = div(preco - pleno - preco * (res["aliq"] + res["var_pct"]), preco) if preco > 0 else float("nan")
+        linhas.append({"Serviço": r["descricao"], "Horas por serviço": h, "Qtd/mês": float(r["qtd_mensal"]),
+                       "Horas/mês": h * float(r["qtd_mensal"]), "Insumos": float(r["custo_unit"]),
+                       "Mão de obra (horas x custo hora)": mao, "Custo pleno": pleno, "Preço atual": preco,
+                       "Preço sugerido": sug, "Margem após custos diretos": margem_real,
+                       "Valor da hora cobrada": div(preco, h)})
+    tab = pd.DataFrame(linhas)
+    horas_dem = float(tab["Horas/mês"].sum()) if not tab.empty else 0.0
+    return {"pessoas": pessoas, "horas_mes_pessoa": h_mes, "utilizacao": util, "horas_contratadas": horas_contr,
+            "horas_cobraveis": horas_fat, "custo_base": custo_base, "custo_hora": ch, "desp_pct": desp_pct,
+            "divisor": divisor, "tabela": tab, "horas_demandadas_m1": horas_dem,
+            "horas_demandadas_m12": horas_dem * (1 + res["g_m"]) ** 11,
+            "ocupacao_m1": div(horas_dem, horas_fat) if horas_fat > 0 else float("nan"),
+            "ocupacao_m12": div(horas_dem * (1 + res["g_m"]) ** 11, horas_fat) if horas_fat > 0 else float("nan")}
