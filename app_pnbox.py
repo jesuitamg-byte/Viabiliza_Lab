@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v7.2 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.0 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -97,6 +97,96 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
+
+
+# Historico de versoes (tela Novidades), gerado de CHANGELOG.md
+NOVIDADES_MD = r'''# Histórico de versões do ViabilizaLab
+
+Programa gratuito de plano de negócio e análise de viabilidade para o ensino de Administração (antigo PNBOX Acadêmico).
+Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
+`maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
+funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.0 (25/11/2026): dados públicos, ABNT, financiamento e modo professor completo
+
+**Funções básicas**
+- **Trilha guiada e o que falta:** ordem recomendada de preenchimento, próximo passo e lista de pendências com atalho.
+- **Glossário e leitura dos números:** 35 termos explicados e a interpretação, em linguagem simples, dos indicadores do projeto aberto.
+- **Importar e exportar planilha:** produtos, custos, investimentos, materiais, equipe, entrevistas, teste de preço,
+  concorrentes e riscos vindos de Excel ou CSV, com planilha-modelo.
+- **Relatório acadêmico ABNT:** capa, folha de rosto, sumário com páginas (NBR 6027), seções numeradas (NBR 6024),
+  tabelas com título e fonte, citações autor-data (NBR 10520) e referências (NBR 6023), margens de 3 e 2 cm e fonte 12.
+- **Financiamento:** sistemas SAC e Price, carência, custo efetivo total e comparação entre propostas de crédito.
+- **Histórico de versões do projeto:** comparação dos indicadores entre as versões salvas.
+
+**Funções completas**
+- **Dados públicos:** população, domicílios, PIB e empresas do município pela API do IBGE, e gastos das famílias por
+  categoria da POF 2017-2018, com botões para usar os valores no tamanho do mercado.
+- **Referências do setor:** comparação com a média nacional da atividade (IBGE, Pesquisa Anual de Comércio e Pesquisa
+  Anual de Serviços 2024) e taxas de sobrevivência das empresas (Sebrae).
+- **SWOT cruzada:** estratégias ofensivas, de confronto, de reforço e defensivas.
+- **Lean Canvas**, montado a partir das outras ferramentas.
+- **Valuation e rodada de investimento:** fluxo de caixa descontado com perpetuidade, múltiplos de EBITDA e receita,
+  tabela de participação dos sócios antes e depois do aporte.
+- **Impacto social e ODS:** teoria da mudança, indicadores de impacto e os 17 Objetivos de Desenvolvimento Sustentável.
+- **Editais de fomento:** rascunho da proposta no formato usual do Programa Centelha, com limite de caracteres e
+  orçamento por rubrica.
+- **Modo professor:** comentários do professor em cada ferramenta (modo de correção), painel de prontidão e evidências
+  da turma, detecção de planos parecidos e rodada de investimento da turma.
+
+**Controle de versões**
+- Este arquivo, etiquetas e páginas de *release* para todas as versões e a tela **Novidades** dentro do programa.
+
+---
+
+## v7.2.1 (25/11/2026): correção
+- O rascunho automático do sumário executivo aparece na hora também na versão on-line.
+
+## v7.2 (25/11/2026): novo visual das matrizes e modelo de serviços
+- Matriz GE/McKinsey 3x3 colorida, BCG com quadrantes descritos e bolhas, BSC em ciclo e Canvas com blocos coloridos, na
+  tela e no PDF.
+- Quarto exemplo: **TecVale Soluções**, empresa de serviços de TI (link `?versao=servico`).
+- Correção do texto "None" que aparecia ao gerar o PDF.
+
+## v7.1 (25/11/2026): validação, marketing estratégico, incerteza e defesa
+- Placar de evidências, entrevistas com clientes, teste de preço de Van Westendorp e intenção de compra ajustada.
+- Canvas da proposta de valor, curva de valor e matriz ERRC, posicionamento e mapa perceptual, orçamento por canal e funil AARRR.
+- Simulação de Monte Carlo, perda aceitável dos sócios e curva de adoção de Bass.
+- Régua de prontidão, banca simulada e checklist de formalização.
+- Teste de viabilidade real no prompt de IA.
+
+## v7.0 (25/11/2026): ViabilizaLab
+- Novo nome (antes PNBOX Acadêmico); arquivos `.pnbox` continuam compatíveis.
+- Horizonte de projeção de 1 a 10 anos, plano de contratações mês a mês e CAC pela verba de aquisição.
+- Missão, visão, valores e objetivos SMART; Business Model Canvas, cinco forças de Porter, matrizes GE e BCG e Balanced Scorecard.
+- Simulação da reforma tributária (Simples puro x híbrido).
+
+## v6.0 (24/11/2026): serviços e assinaturas
+- Custo da hora de serviço e ocupação da equipe; receita recorrente com safras, churn, MRR, CAC, LTV e receita antecipada.
+- Calculadora do Simples Nacional (anexos I a V e fator R).
+- Exemplo **Conecta Vale** (aplicativo por assinatura) e layout adaptado para celular.
+
+## v5.0.1 (24/11/2026): ajustes
+- Cartões clicáveis com descrição e selo de andamento; organograma legível; instalador sem a janela do Python.
+
+## v5.0 (24/11/2026): plano completo
+- Interface em cartões, banco de dados e motor financeiro ampliados.
+- Análise com IA, sumário executivo, modo apresentação, relatório em PDF, pitch e Word, modo professor com rubrica,
+  configurações, pontos de restauração e o exemplo **Café Mucuri**.
+
+## v4.1 (24/11/2026): primeira versão publicada no GitHub
+- Segmentação, proposta de valor, personas, jornada do cliente, concorrência, matriz SWOT, canais e funil, investimentos,
+  materiais e fichas técnicas, custos, DRE de 3 anos, indicadores (VPL, TIR, payback, pontos de equilíbrio), cenários,
+  gráficos, checagens de consistência e relatório em PDF e Excel.
+- Versão on-line (GitHub Pages) e instaladores para Windows (modelo FitBox e em branco).
+
+## v1 a v4.0: desenvolvimento local
+- Versões construídas no computador do autor, antes da criação do repositório. Não há registro detalhado de cada etapa;
+  o conjunto de funções que elas reuniram é o descrito na v4.1.
+'''
 
 
 # ##############################################################################
@@ -166,6 +256,14 @@ SCHEMA = {
         ("posic_beneficio", "TEXT"), ("posic_concorrente", "TEXT"), ("posic_diferencial", "TEXT"),
         ("mapa_eixo_x", "TEXT"), ("mapa_eixo_y", "TEXT"), ("nps_meta", "REAL"),
         ("bass_mercado", "REAL"), ("bass_p", "REAL"), ("bass_q", "REAL"), ("revenda_ativos_pct", "REAL"),
+        # v8: relatório ABNT, dados públicos, Lean Canvas, valuation, impacto e edital
+        ("abnt_instituicao", "TEXT"), ("abnt_curso", "TEXT"), ("abnt_disciplina", "TEXT"), ("abnt_orientador", "TEXT"),
+        ("abnt_cidade", "TEXT"), ("abnt_ano", "TEXT"), ("municipio_ibge", "TEXT"), ("municipio_nome", "TEXT"),
+        ("uf_sigla", "TEXT"), ("setor_referencia", "TEXT"), ("lean_vantagem", "TEXT"), ("lean_alternativas", "TEXT"),
+        ("lean_metricas", "TEXT"), ("val_crescimento_perp_pct", "REAL"), ("val_multiplo_ebitda", "REAL"),
+        ("val_multiplo_receita", "REAL"), ("rodada_investimento", "REAL"), ("rodada_pre_money", "REAL"),
+        ("imp_problema", "TEXT"), ("imp_publico", "TEXT"), ("imp_atividades", "TEXT"), ("imp_produtos", "TEXT"),
+        ("imp_resultados", "TEXT"), ("imp_impacto", "TEXT"), ("ods", "TEXT"), ("edital_trl", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -201,7 +299,7 @@ SCHEMA = {
                   ("vida_util_anos", "REAL"), ("valor_residual_pct", "REAL")],
     "inv_pre": [("descricao", "TEXT"), ("valor", "REAL")],
     "emprestimos": [("descricao", "TEXT"), ("valor", "REAL"), ("taxa_anual_pct", "REAL"),
-                    ("prazo_meses", "REAL")],
+                    ("prazo_meses", "REAL"), ("carencia_meses", "REAL"), ("sistema", "TEXT")],
     "capital_giro_prazos": [("tipo", "TEXT"), ("prazo_dias", "REAL"), ("percentual", "REAL")],
     "materiais": [("nome", "TEXT"), ("categoria", "TEXT"), ("unidade", "TEXT"), ("valor_unitario", "REAL"),
                   ("qtd_estoque_inicial", "REAL")],
@@ -257,6 +355,14 @@ SCHEMA = {
     "mc_faixas": [("variavel", "TEXT"), ("minimo_pct", "REAL"), ("maximo_pct", "REAL")],
     "formalizacao": [("item", "TEXT"), ("status", "TEXT"), ("observacao", "TEXT")],
     "banca_respostas": [("pergunta", "TEXT"), ("resposta", "TEXT")],
+    # --- v8 ---
+    "referencias": [("referencia", "TEXT")],
+    "swot_estrategias": [("quadrante", "TEXT"), ("estrategia", "TEXT"), ("acao", "TEXT"), ("prazo_meses", "REAL")],
+    "impacto_indicadores": [("indicador", "TEXT"), ("tipo", "TEXT"), ("linha_base", "TEXT"), ("meta", "TEXT"), ("ods", "TEXT")],
+    "edital_textos": [("secao", "TEXT"), ("texto", "TEXT"), ("limite", "REAL")],
+    "edital_orcamento": [("rubrica", "TEXT"), ("item", "TEXT"), ("valor", "REAL")],
+    "comentarios": [("pagina", "TEXT"), ("comentario", "TEXT"), ("autor", "TEXT"), ("data", "TEXT"), ("resolvido", "INTEGER")],
+    "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 
 # Valores-padrão de um projeto em branco
@@ -277,6 +383,8 @@ PROJETO_PADRAO = {
     "intencao_certamente_pct": 0.0, "intencao_provavel_pct": 0.0, "fator_certamente_pct": 70.0, "fator_provavel_pct": 30.0,
     "nps_meta": 50.0, "bass_mercado": 0.0, "bass_p": 0.03, "bass_q": 0.38, "revenda_ativos_pct": 40.0,
     "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
+    "val_crescimento_perp_pct": 3.0, "val_multiplo_ebitda": 4.0, "val_multiplo_receita": 1.0,
+    "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -342,6 +450,8 @@ def _migrar_versao_anterior(conn):
     conn.execute("UPDATE pessoal SET area='Produção / operação' WHERE area IS NULL OR area=''")
     conn.execute("UPDATE catalogo SET horas_unit=0 WHERE horas_unit IS NULL")
     conn.execute("UPDATE pessoal SET mes_inicio=1 WHERE mes_inicio IS NULL OR mes_inicio<1")
+    conn.execute("UPDATE emprestimos SET carencia_meses=0 WHERE carencia_meses IS NULL")
+    conn.execute("UPDATE emprestimos SET sistema='Price' WHERE sistema IS NULL OR sistema=''")
     conn.execute("UPDATE assinaturas SET ciclo_meses=1 WHERE ciclo_meses IS NULL OR ciclo_meses<1")
     # Proposta de valor única (v1-v4) -> lista de propostas
     if conn.execute("SELECT COUNT(*) FROM propostas").fetchone()[0] == 0:
@@ -1583,6 +1693,76 @@ _VALIDACAO = {
 }
 
 
+# Dados reais de Teófilo Otoni (MG) consultados na API do IBGE em 25/11/2026
+_DADOS_TEOFILO_OTONI = [
+    ("populacao", "População residente (Censo 2022)", 137418, "2022", "IBGE. Censo Demográfico 2022, tabela 4709 (Sidra)."),
+    ("domicilios", "Domicílios particulares permanentes ocupados (Censo 2022)", 49858, "2022", "IBGE. Censo Demográfico 2022, tabela 4712 (Sidra)."),
+    ("pib", "PIB a preços correntes (mil R$)", 3540248, "2023", "IBGE. Produto Interno Bruto dos Municípios, tabela 5938 (Sidra)."),
+    ("unidades_locais", "Unidades locais de empresas e organizações", 3880, "2021", "IBGE. Cadastro Central de Empresas (Cempre), tabela 1685 (Sidra)."),
+    ("pib_per_capita", "PIB per capita (R$)", 3540248 * 1000 / 137418, "2023", "Calculado: PIB ÷ população do Censo 2022 (IBGE)."),
+    ("moradores_dom", "Moradores por domicílio", 137418 / 49858, "2022", "Calculado com o Censo 2022 (IBGE)."),
+]
+_V8 = {
+    "fitbox": {"setor": "Serviços · Serviços de alimentação (restaurantes, lanchonetes)",
+               "pof": ("pof_alimentacao", "Alimentação", 688.51),
+               "swot": [("Ofensiva (forças × oportunidades)", "Usar o cardápio planejado por nutricionista para atender a procura por alimentação saudável",
+                         "Parceria com 5 academias no primeiro trimestre", 3),
+                        ("Confronto (forças × ameaças)", "Destacar a tabela nutricional para se diferenciar das marmitarias comuns",
+                         "Selo de informação nutricional em todas as embalagens", 2),
+                        ("Reforço (fraquezas × oportunidades)", "Reduzir a dependência de um só canal com vendas por assinatura",
+                         "Lançar o plano mensal com desconto", 6),
+                        ("Defensiva (fraquezas × ameaças)", "Proteger o caixa contra a alta dos insumos", "Contrato de preço com dois fornecedores", 4)],
+               "lean": ("Marmita feita em casa; restaurante a quilo; aplicativos de delivery",
+                        "Assinantes ativos; renovação mensal; custo por refeição; avaliação semanal",
+                        "Nutricionista parceira e base de clientes das academias da cidade"),
+               "imp": None, "ods": "3 Saúde e bem-estar", "rodada": (0, 0), "emp": None},
+    "cafe": {"setor": "Comércio · Produtos alimentícios, bebidas e fumo (varejo)", "pof": ("pof_alimentacao", "Alimentação", 688.51),
+             "swot": [("Ofensiva (forças × oportunidades)", "Valorizar os produtos da região para atrair quem busca experiência", "Cardápio com origem dos grãos", 3),
+                      ("Defensiva (fraquezas × ameaças)", "Evitar falta de caixa nos meses fracos", "Reserva equivalente a dois meses de custos fixos", 6)],
+             "lean": ("Padarias do centro; café em casa", "Ticket médio; clientes por dia; recompra no cartão fidelidade",
+                      "Relação com produtores de café da região"),
+             "imp": None, "ods": "8 Trabalho decente e crescimento econômico", "rodada": (0, 0), "emp": None},
+    "assinatura": {"setor": "Serviços · Tecnologia da informação", "pof": None,
+                   "swot": [("Ofensiva (forças × oportunidades)", "Ser a agenda oficial de eventos do Vale", "Parceria com a secretaria de cultura", 6)],
+                   "lean": ("Perfis locais no Instagram; grupos de WhatsApp", "Parceiros pagantes; churn; usuários ativos por mês",
+                            "Base de eventos locais que nenhum concorrente nacional cobre"),
+                   "imp": ("Pouca divulgação da cultura e do comércio local", "Produtores culturais e pequenos comerciantes do Vale do Mucuri",
+                           "Agenda gratuita de eventos e planos de divulgação", "Eventos divulgados por mês",
+                           "Mais público nos eventos locais e mais renda para os produtores", "Economia criativa mais forte no Vale do Mucuri"),
+                   "ods": "8 Trabalho decente e crescimento econômico;11 Cidades e comunidades sustentáveis", "rodada": (300000, 60000), "emp": None},
+    "servico": {"setor": "Serviços · Manutenção e reparação de informática e comunicação", "pof": None,
+                "swot": [("Confronto (forças × ameaças)", "Vender garantia e prazo contra a concorrência por preço dos técnicos informais",
+                          "Garantia por escrito de 90 dias", 1),
+                         ("Reforço (fraquezas × oportunidades)", "Aumentar a receita previsível com contratos para clínicas que precisam se adequar à LGPD",
+                          "Pacote de backup e segurança", 6)],
+                "lean": ("Sobrinho que entende de computador; técnico avulso; loja de informática",
+                         "Contratos ativos; horas vendidas; tempo de resposta", "Atendimento no mesmo dia na cidade"),
+                "imp": None, "ods": "", "rodada": (0, 0), "emp": ("Pronampe", 6, "SAC")},
+}
+
+
+def popular_v8(conn, qual: str) -> None:
+    v = _V8[qual]
+    conn.execute("UPDATE projeto SET setor_referencia=?, municipio_nome='Teófilo Otoni', municipio_ibge='3168606', uf_sigla='MG', "
+                 "lean_alternativas=?, lean_metricas=?, lean_vantagem=?, ods=?, rodada_pre_money=?, rodada_investimento=? WHERE id=1",
+                 (v["setor"], v["lean"][0].replace("; ", "\n"), v["lean"][1].replace("; ", "\n"), v["lean"][2], v["ods"], *v["rodada"]))
+    dados = list(_DADOS_TEOFILO_OTONI)
+    if v["pof"]:
+        dados.append((v["pof"][0], v["pof"][1], v["pof"][2], "2017-2018",
+                      "IBGE. Pesquisa de Orçamentos Familiares 2017-2018, tabela 6715 (Minas Gerais)."))
+    conn.executemany("INSERT INTO dados_publicos (chave, rotulo, valor, periodo, fonte) VALUES (?,?,?,?,?)", dados)
+    conn.executemany("INSERT INTO swot_estrategias (quadrante, estrategia, acao, prazo_meses) VALUES (?,?,?,?)", v["swot"])
+    if v["imp"]:
+        conn.execute("UPDATE projeto SET imp_problema=?, imp_publico=?, imp_atividades=?, imp_produtos=?, imp_resultados=?, imp_impacto=? "
+                     "WHERE id=1", v["imp"])
+        conn.execute("INSERT INTO impacto_indicadores (indicador, tipo, linha_base, meta, ods) VALUES (?,?,?,?,?)",
+                     ("Eventos locais divulgados por mês", "Produto (output)", "0", "60", "11 Cidades e comunidades sustentáveis"))
+    if v["emp"]:
+        conn.execute("UPDATE emprestimos SET carencia_meses=?, sistema=? WHERE descricao=?", (v["emp"][1], v["emp"][2], v["emp"][0]))
+    conn.execute("UPDATE emprestimos SET carencia_meses=0 WHERE carencia_meses IS NULL")
+    conn.execute("UPDATE emprestimos SET sistema='Price' WHERE sistema IS NULL OR sistema=''")
+
+
 def popular_validacao(conn, qual: str) -> None:
     v = _VALIDACAO[qual]
     vpc = v["vpc"]
@@ -1608,6 +1788,7 @@ def popular_validacao(conn, qual: str) -> None:
     conn.executemany("UPDATE socios SET perda_aceitavel=? WHERE id=?", list(zip(v["perda"], ids)))
     conn.executemany("INSERT INTO formalizacao (item, status, observacao) VALUES (?,?,'')", list(v["formal"].items()))
     conn.executemany("INSERT INTO banca_respostas (pergunta, resposta) VALUES (?,?)", v["banca"])
+    popular_v8(conn, qual)
 
 # ##############################################################################
 # PARTE: pnbox_motor.py
@@ -1683,6 +1864,40 @@ def custos_unitarios(cat: pd.DataFrame, mat: pd.DataFrame, ficha: pd.DataFrame) 
 # ------------------------------------------------------------------------------
 # 2. CRONOGRAMA DOS EMPRÉSTIMOS (TABELA PRICE, PARCELAS MENSAIS)
 # ------------------------------------------------------------------------------
+def parcelas_emprestimo(pv: float, taxa_anual_pct: float, n: int, carencia: int = 0, sistema: str = "Price",
+                        meses: int | None = None) -> pd.DataFrame:
+    """
+    Tabela mês a mês de um empréstimo.
+    Price: parcelas iguais após a carência. SAC: amortização constante (parcelas decrescentes).
+    Carência: nos primeiros meses paga-se só os juros; o prazo total inclui a carência.
+    """
+    n = max(int(round(n)), 1)
+    carencia = 0 if carencia is None or carencia != carencia else carencia
+    sistema = "Price" if not isinstance(sistema, str) or not sistema.strip() else sistema
+    carencia = int(min(max(round(carencia), 0), n - 1))
+    i = (1 + float(taxa_anual_pct or 0) / 100.0) ** (1 / 12) - 1
+    na = n - carencia
+    sac = str(sistema or "Price").upper().startswith("SAC")
+    pmt = (pv / na if i == 0 else pv * i / (1 - (1 + i) ** (-na))) if not sac else 0.0
+    amort_sac = pv / na
+    saldo = pv
+    linhas = []
+    for m in range(meses if meses is not None else n):
+        if m < n and saldo > 1e-9:
+            j = saldo * i
+            if m < carencia:
+                a = 0.0
+            elif sac:
+                a = min(amort_sac, saldo)
+            else:
+                a = min(pmt - j, saldo)
+            saldo -= a
+        else:
+            j = a = 0.0
+        linhas.append((m + 1, j, a, j + a, max(saldo, 0.0)))
+    return pd.DataFrame(linhas, columns=["Mês", "Juros", "Amortização", "Parcela", "Saldo devedor"])
+
+
 def cronograma_emprestimos(emp: pd.DataFrame, anos: int = 4) -> dict:
     juros = [0.0] * anos
     amort = [0.0] * anos
@@ -1693,22 +1908,16 @@ def cronograma_emprestimos(emp: pd.DataFrame, anos: int = 4) -> dict:
         pv, n = float(r["valor"]), int(round(r["prazo_meses"]))
         if pv <= 0:
             continue
-        n = max(n, 1)
-        i = (1 + r["taxa_anual_pct"] / 100.0) ** (1 / 12) - 1
-        pmt = pv / n if i == 0 else pv * i / (1 - (1 + i) ** (-n))
-        saldo = pv
-        for m in range(anos * 12):
+        tab = parcelas_emprestimo(pv, r["taxa_anual_pct"], n, r.get("carencia_meses", 0) or 0, r.get("sistema", "Price") or "Price",
+                                  meses=anos * 12)
+        for m, (j, a, s) in enumerate(zip(tab["Juros"], tab["Amortização"], tab["Saldo devedor"])):
             ano = m // 12
-            if m < n and saldo > 1e-9:
-                j = saldo * i
-                a = min(pmt - j, saldo)
-                saldo -= a
-                juros[ano] += j
-                amort[ano] += a
-                juros_m[m] += j
-                amort_m[m] += a
+            juros[ano] += j
+            amort[ano] += a
+            juros_m[m] += j
+            amort_m[m] += a
             if m % 12 == 11:
-                saldo_fim[ano] += max(saldo, 0.0)
+                saldo_fim[ano] += s
     return {"juros": juros, "amort": amort, "saldo_fim": saldo_fim, "juros_m": juros_m, "amort_m": amort_m}
 
 
@@ -3699,8 +3908,643 @@ def regras_v71(proj: dict, d: dict) -> dict:
     }
 
 # ##############################################################################
+# PARTE: pnbox_v8.py
+# ##############################################################################
+
+
+
+
+# ------------------------------------------------------------------------------
+# 1. GLOSSÁRIO E LEITURA DOS INDICADORES
+# ------------------------------------------------------------------------------
+GLOSSARIO = {
+    "Capital de giro": "Dinheiro necessário para manter a operação entre pagar fornecedores e salários e receber dos clientes.",
+    "CAC": "Custo de aquisição de cliente: quanto se gasta em marketing e vendas para conquistar um cliente novo.",
+    "Churn": "Percentual de clientes que cancelam a assinatura em um período, normalmente por mês.",
+    "CMV / CPV / CSV": "Custo das mercadorias vendidas, dos produtos vendidos ou dos serviços vendidos: o custo direto do que foi vendido.",
+    "Custo fixo": "Gasto que não muda com o volume de vendas no curto prazo, como aluguel, salários administrativos e contador.",
+    "Custo variável": "Gasto que acompanha as vendas, como matéria-prima, comissões, impostos sobre a venda e taxas de cartão.",
+    "Depreciação": "Perda de valor dos bens (equipamentos, móveis, veículos) pelo uso e pelo tempo, lançada como despesa sem saída de caixa.",
+    "DRE": "Demonstração do Resultado do Exercício: receitas menos custos e despesas, até o lucro ou prejuízo do período.",
+    "EBITDA": "Resultado antes de juros, impostos sobre o lucro, depreciação e amortização: mostra a geração de caixa da operação.",
+    "Fator R": "No Simples Nacional, a razão entre a folha de pagamento e a receita dos últimos 12 meses; acima de 28% alguns serviços pagam menos imposto.",
+    "Fluxo de caixa": "Registro das entradas e saídas de dinheiro mês a mês; mostra se vai faltar caixa mesmo com lucro.",
+    "Índice de lucratividade (IL)": "Valor presente das entradas dividido pelo investimento; acima de 1 o projeto cria valor.",
+    "Investimento inicial": "Tudo o que se gasta antes de abrir: equipamentos, reformas, legalização, estoque inicial e capital de giro.",
+    "LTV": "Valor do tempo de vida do cliente: quanto um cliente deixa de margem enquanto continua comprando ou assinando.",
+    "Margem de contribuição": "Receita menos custos variáveis: o que sobra de cada venda para pagar os custos fixos e gerar lucro.",
+    "Markup": "Multiplicador aplicado ao custo para chegar ao preço de venda, cobrindo despesas, impostos e lucro desejado.",
+    "MRR": "Receita recorrente mensal das assinaturas ativas.",
+    "Payback": "Tempo para recuperar o investimento com o caixa gerado. O descontado considera o valor do dinheiro no tempo.",
+    "Ponto de equilíbrio": "Receita em que o lucro é zero: abaixo dela há prejuízo. O financeiro desconsidera a depreciação; o econômico inclui o custo de oportunidade.",
+    "Pró-labore": "Remuneração dos sócios pelo trabalho na empresa, diferente da distribuição de lucros.",
+    "Ponto de equilíbrio em unidades": "Quantidade que precisa ser vendida para cobrir todos os custos.",
+    "Rentabilidade": "Lucro em relação ao investimento feito (retorno sobre o capital investido).",
+    "Lucratividade": "Lucro em relação à receita (quanto sobra de cada real vendido).",
+    "Simples Nacional": "Regime tributário de micro e pequenas empresas, com um documento único de arrecadação (DAS) e alíquota por faixa de receita.",
+    "SOM / SAM / TAM": "Mercado total (TAM), mercado que a empresa consegue atender (SAM) e a fatia que pretende conquistar (SOM).",
+    "TIR": "Taxa interna de retorno: a rentabilidade anual que o projeto oferece. Compare com a TMA.",
+    "TMA": "Taxa mínima de atratividade: o retorno mínimo exigido pelos sócios, em geral o que renderia uma aplicação segura mais um prêmio pelo risco.",
+    "VPL": "Valor presente líquido: soma dos fluxos de caixa futuros trazidos a valor de hoje pela TMA, menos o investimento. Positivo = o projeto cria valor.",
+    "Valuation": "Estimativa de quanto vale o negócio, por fluxo de caixa descontado ou por múltiplos de mercado.",
+    "Pre-money / post-money": "Valor da empresa antes e depois de receber o dinheiro de um investidor.",
+    "SAC": "Sistema de amortização constante: o principal é pago em partes iguais e as parcelas diminuem com o tempo.",
+    "Tabela Price": "Sistema de parcelas iguais: no início paga-se mais juros e no fim mais principal.",
+    "Carência": "Período inicial do empréstimo em que se paga só os juros, sem amortizar o principal.",
+    "CET": "Custo efetivo total do empréstimo: a taxa que iguala o valor recebido a todas as parcelas pagas.",
+    "Teoria da mudança": "Cadeia que liga as atividades de um negócio de impacto aos resultados e às transformações sociais pretendidas.",
+}
+
+
+def explicar_indicadores(res: dict) -> list:
+    """Leitura em linguagem simples dos principais números do projeto aberto."""
+    a1 = res["anos"][1]
+    N = res["N"]
+    L = []
+    v = res["vpl"]
+    L.append(("VPL", brl(v), f"Trazendo os {N} anos de caixa para valores de hoje pela TMA de {pct(res['tma'])}, o projeto "
+              + (f"devolve o investimento e ainda cria {brl(v)} de valor." if v > 0 else f"não recupera o investimento: faltam {brl(-v)}.")))
+    tir = res["tir"]
+    if tir is not None and tir == tir:
+        L.append(("TIR", pct(tir), "O projeto rende " + pct(tir) + " ao ano; " +
+                  ("mais" if tir > res["tma"] else "menos") + f" que a TMA de {pct(res['tma'])}."))
+    L.append(("Payback descontado", str(res["payback_desc"]), "É o tempo para o caixa gerado, já descontado pela TMA, pagar o investimento inicial."))
+    if a1["rec_bruta"]:
+        L.append(("Margem de contribuição (Ano 1)", pct(a1["imc"]),
+                  f"De cada R$ 100 vendidos, R$ {num_br(a1['imc'] * 100, 2)} sobram para pagar os custos fixos e gerar lucro."))
+        L.append(("Lucratividade (Ano 1)", pct(div(a1["resultado"], a1["rec_bruta"])),
+                  f"De cada R$ 100 vendidos, o lucro do Ano 1 é de R$ {num_br(div(a1['resultado'], a1['rec_bruta']) * 100, 2)}."))
+        L.append(("Ponto de equilíbrio contábil", brl(a1["pe_contabil"]),
+                  f"É preciso vender {brl(a1['pe_contabil'] / 12)} por mês, em média, para não ter prejuízo. A receita prevista é "
+                  f"{pct(div(a1['rec_bruta'], a1['pe_contabil']) - 1, 0)} {'acima' if a1['rec_bruta'] >= a1['pe_contabil'] else 'abaixo'} disso."))
+    minimo = float(res["fluxo_mensal"]["Saldo final"].min())
+    L.append(("Menor saldo de caixa (Ano 1)", brl(minimo),
+              "O caixa nunca fica negativo no primeiro ano." if minimo >= 0 else "Em algum mês falta dinheiro: aumente o capital de giro ou a reserva."))
+    return L
+
+
+# ------------------------------------------------------------------------------
+# 2. FINANCIAMENTO: SIMULAÇÃO E COMPARAÇÃO DE PROPOSTAS
+# ------------------------------------------------------------------------------
+def resumo_emprestimo(valor, taxa_aa, prazo, carencia, sistema) -> dict:
+    tab = parcelas_emprestimo(float(valor), float(taxa_aa), int(prazo), int(carencia or 0), sistema)
+    p = tab["Parcela"]
+    pos = p[p > 0]
+    fluxo = [float(valor)] + [-x for x in p]
+    tir_m = calcular_tir(fluxo)
+    cet = (1 + tir_m) ** 12 - 1 if tir_m is not None else float("nan")
+    return {"tabela": tab, "total_pago": float(p.sum()), "juros": float(tab["Juros"].sum()),
+            "primeira": float(pos.iloc[0]) if len(pos) else 0.0, "maior": float(p.max()), "menor": float(pos.min()) if len(pos) else 0.0,
+            "cet": cet, "carencia_parcela": float(p.iloc[0]) if int(carencia or 0) > 0 else float("nan")}
+
+
+# ------------------------------------------------------------------------------
+# 3. DADOS PÚBLICOS: IBGE (CENSO 2022, PIB, CEMPRE) E POF 2017-2018
+# ------------------------------------------------------------------------------
+UFS = {"AC": (12, "Acre"), "AL": (27, "Alagoas"), "AP": (16, "Amapá"), "AM": (13, "Amazonas"), "BA": (29, "Bahia"),
+       "CE": (23, "Ceará"), "DF": (53, "Distrito Federal"), "ES": (32, "Espírito Santo"), "GO": (52, "Goiás"),
+       "MA": (21, "Maranhão"), "MT": (51, "Mato Grosso"), "MS": (50, "Mato Grosso do Sul"), "MG": (31, "Minas Gerais"),
+       "PA": (15, "Pará"), "PB": (25, "Paraíba"), "PR": (41, "Paraná"), "PE": (26, "Pernambuco"), "PI": (22, "Piauí"),
+       "RJ": (33, "Rio de Janeiro"), "RN": (24, "Rio Grande do Norte"), "RS": (43, "Rio Grande do Sul"), "RO": (11, "Rondônia"),
+       "RR": (14, "Roraima"), "SC": (42, "Santa Catarina"), "SP": (35, "São Paulo"), "SE": (28, "Sergipe"), "TO": (17, "Tocantins")}
+API_IBGE = "https://servicodados.ibge.gov.br/api"
+
+
+def baixar_json(url: str):
+    """Baixa JSON da internet na versão on-line (Pyodide) ou instalada (Python comum)."""
+    try:
+        from pyodide.http import open_url  # versão on-line: requisição feita pelo próprio navegador
+        return json.loads(open_url(url).read())
+    except ImportError:
+        import urllib.request
+        with urllib.request.urlopen(url, timeout=20) as r:
+            return json.loads(r.read().decode("utf-8"))
+
+
+def municipios_da_uf(uf: str) -> list:
+    js = baixar_json(f"{API_IBGE}/v1/localidades/estados/{uf}/municipios")
+    return sorted(((str(m["id"]), m["nome"]) for m in js), key=lambda x: x[1])
+
+
+def _serie_ibge(agregado: int, variavel: int, cod: str, periodo: str = "-1") -> tuple:
+    js = baixar_json(f"{API_IBGE}/v3/agregados/{agregado}/periodos/{periodo}/variaveis/{variavel}?localidades=N6[{cod}]")
+    serie = js[0]["resultados"][0]["series"][0]["serie"]
+    per = sorted(serie)[-1]
+    v = serie[per]
+    return (float(v) if v not in ("-", "...", "X", None) else float("nan")), per
+
+
+INDICADORES_MUNICIPIO = [
+    ("populacao", "População residente (Censo 2022)", 4709, 93, "2022", "pessoas",
+     "IBGE. Censo Demográfico 2022, tabela 4709 (Sidra)."),
+    ("domicilios", "Domicílios particulares permanentes ocupados (Censo 2022)", 4712, 381, "2022", "domicílios",
+     "IBGE. Censo Demográfico 2022, tabela 4712 (Sidra)."),
+    ("pib", "PIB a preços correntes (mil R$)", 5938, 37, "-1", "mil R$", "IBGE. Produto Interno Bruto dos Municípios, tabela 5938 (Sidra)."),
+    ("unidades_locais", "Unidades locais de empresas e organizações", 1685, 706, "-1", "unidades",
+     "IBGE. Cadastro Central de Empresas (Cempre), tabela 1685 (Sidra)."),
+]
+
+
+def dados_municipio(cod: str) -> list:
+    """Busca os indicadores do município na API do IBGE. Cada item: (chave, rótulo, valor, período, fonte)."""
+    saida = []
+    for chave, rot, ag, var, per, _, fonte in INDICADORES_MUNICIPIO:
+        try:
+            v, p = _serie_ibge(ag, var, cod, per)
+            saida.append((chave, rot, v, p, fonte))
+        except Exception:
+            continue
+    m = {c: (v, p) for c, _, v, p, _ in saida}
+    if "pib" in m and "populacao" in m and m["populacao"][0]:
+        saida.append(("pib_per_capita", "PIB per capita (R$)", m["pib"][0] * 1000 / m["populacao"][0], m["pib"][1],
+                      "Calculado: PIB ÷ população do Censo 2022 (IBGE)."))
+    if "populacao" in m and "domicilios" in m and m["domicilios"][0]:
+        saida.append(("moradores_dom", "Moradores por domicílio", m["populacao"][0] / m["domicilios"][0], "2022",
+                      "Calculado com o Censo 2022 (IBGE)."))
+    return saida
+
+
+# Fallback da POF 2017-2018 (despesa monetária e não monetária média mensal familiar, R$; tabela 6715 do Sidra)
+POF_FALLBACK = {
+    "Brasil": {"1 Despesa total": 4649.03, "2.1 Despesas de consumo": 3764.51, "2.1.1 Alimentação": 658.23,
+               "2.1.2 Habitação": 1377.14, "2.1.3 Vestuário": 160.25, "2.1.4 Transporte": 679.76,
+               "2.1.5 Higiene e cuidados pessoais": 136.82, "2.1.6 Assistência à saude": 302.06, "2.1.7 Educação": 175.60,
+               "2.1.8 Recreação e cultura": 96.16, "2.1.9 Fumo": 17.40, "2.1.10 Serviços pessoais": 48.55,
+               "2.1.10.1 Cabeleireiro": 29.16, "2.1.10.2 Manicuro e pedicuro": 9.13, "2.1.11 Despesas diversas": 112.53},
+    "Minas Gerais": {"1 Despesa total": 4390.72, "2.1 Despesas de consumo": 3635.92, "2.1.1 Alimentação": 688.51,
+                     "2.1.2 Habitação": 1230.81, "2.1.3 Vestuário": 165.41, "2.1.4 Transporte": 662.29,
+                     "2.1.5 Higiene e cuidados pessoais": 126.94, "2.1.6 Assistência à saude": 324.49, "2.1.7 Educação": 163.56,
+                     "2.1.8 Recreação e cultura": 95.09, "2.1.9 Fumo": 15.11, "2.1.10 Serviços pessoais": 50.81,
+                     "2.1.10.1 Cabeleireiro": 29.63, "2.1.10.2 Manicuro e pedicuro": 10.11, "2.1.11 Despesas diversas": 112.90},
+}
+
+
+def pof_uf(uf: str) -> tuple:
+    """Despesa média mensal familiar por tipo de gasto (POF 2017-2018) na UF. Retorna (DataFrame, origem)."""
+    cod, nome = UFS.get(uf, (None, "Brasil"))
+    try:
+        loc = f"N3[{cod}]" if cod else "N1[all]"
+        js = baixar_json(f"{API_IBGE}/v3/agregados/6715/periodos/2018/variaveis/1201?localidades={loc}"
+                         "&classificacao=339[7999]|12190[all]")
+        linhas = []
+        for r in js[0]["resultados"]:
+            cat = list(next(c for c in r["classificacoes"] if c["id"] == "12190")["categoria"].values())[0]
+            v = r["series"][0]["serie"]["2018"]
+            linhas.append((cat, float(v) if v not in ("-", "...", "X") else 0.0))
+        return pd.DataFrame(linhas, columns=["Tipo de despesa", "R$ por mês por família"]), f"API do IBGE ({nome})"
+    except Exception:
+        base = POF_FALLBACK.get(nome, POF_FALLBACK["Brasil"])
+        rot = nome if nome in POF_FALLBACK else "Brasil"
+        return (pd.DataFrame(list(base.items()), columns=["Tipo de despesa", "R$ por mês por família"]),
+                f"tabela embutida no programa ({rot}; sem conexão com o IBGE)")
+
+
+# ------------------------------------------------------------------------------
+# 4. REFERÊNCIAS DO SETOR (IBGE PAC 2024 E PAS 2024) E SOBREVIVÊNCIA (SEBRAE)
+# ------------------------------------------------------------------------------
+# PAC 2024 (tabela 10645): receita operacional líquida e salários em mil R$, pessoal ocupado, empresas, taxa de margem (%)
+PAC_2024 = [
+    ("Comércio varejista (total)", 3196219376, 229175228, 7647251, 1175862, 38.6),
+    ("Hipermercados e supermercados", 924967521, 50717945, 1609883, 19434, 26.5),
+    ("Minimercados, mercearias e armazéns", 148833942, 11026259, 526752, 113355, 32.8),
+    ("Produtos alimentícios, bebidas e fumo (varejo)", 156338185, 17654808, 736302, 167786, 52.3),
+    ("Material de construção (varejo)", 288251891, 26750623, 858513, 166575, 54.9),
+    ("Informática e comunicação (varejo)", 42907443, 5093579, 162032, 45099, 53.2),
+    ("Eletrodomésticos, áudio e vídeo (varejo)", 84546506, 5775333, 139352, 10728, 51.3),
+    ("Móveis e artigos de uso doméstico (varejo)", 101785615, 10667868, 362219, 72325, 68.5),
+    ("Tecidos e armarinho (varejo)", 24404688, 2802899, 127716, 30696, 77.9),
+    ("Artigos culturais, recreativos e esportivos (varejo)", 62914009, 5612408, 207344, 49431, 72.1),
+    ("Farmácia, perfumaria e cosméticos (varejo)", 314671039, 31665392, 887305, 133786, 66.2),
+    ("Vestuário e complementos (varejo)", 127724083, 18816230, 653824, 123163, 86.1),
+    ("Calçados, artigos de couro e viagem (varejo)", 41230762, 5393552, 190949, 27246, 70.1),
+    ("Combustíveis e lubrificantes (varejo)", 569223037, 12982495, 424940, 38620, 15.8),
+    ("Peças e acessórios para veículos", 232531527, 19400443, 568790, 103533, 42.8),
+    ("Comércio por atacado (total)", 3753962262, 102806917, 2014081, 270636, 22.0),
+]
+# PAS 2024 (tabela 10758): empresas, pessoal ocupado, receita operacional líquida (mil R$), salários e retiradas (mil R$)
+PAS_2024 = [
+    ("Serviços de alimentação (restaurantes, lanchonetes)", 220098, 1856632, 257709554, 44068802),
+    ("Serviços de alojamento", 31828, 386535, 59173475, 10594948),
+    ("Atividades culturais, recreativas e esportivas", 57579, 253500, 33676457, 5054736),
+    ("Serviços pessoais (beleza, lavanderia etc.)", 56993, 254839, 28389907, 5521780),
+    ("Ensino continuado (cursos livres)", 89232, 348550, 32517587, 7361978),
+    ("Tecnologia da informação", 120332, 888225, 397283053, 74780082),
+    ("Serviços audiovisuais", 29931, 129679, 52818481, 7581899),
+    ("Serviços técnico-profissionais (consultoria, contabilidade, engenharia)", 430594, 1768914, 446082202, 63468515),
+    ("Agências de viagens e turismo", 16735, 76859, 20135883, 2797727),
+    ("Serviços de escritório e apoio administrativo", 189964, 1317782, 135359231, 31424511),
+    ("Serviços para edifícios e paisagismo (limpeza, jardinagem)", 27986, 1251112, 87352375, 30309006),
+    ("Transporte rodoviário de cargas", 111658, 1286209, 431203673, 49867401),
+    ("Transporte rodoviário de passageiros", 28495, 587512, 101062930, 21968911),
+    ("Intermediação imobiliária", 68634, 245300, 27940901, 5483068),
+    ("Manutenção e reparação de veículos", 83924, 338492, 34852163, 7378712),
+    ("Manutenção e reparação de informática e comunicação", 15265, 65003, 10636573, 1909897),
+    ("Manutenção e reparação de objetos pessoais e domésticos", 14199, 53944, 5315556, 1142785),
+]
+FONTE_PAC = "IBGE, Pesquisa Anual de Comércio 2024 (Sidra, tabela 10645)"
+FONTE_PAS = "IBGE, Pesquisa Anual de Serviços 2024 (Sidra, tabela 10758)"
+# Sebrae (DataSebrae, seminário "Aplicações de análise de sobrevivência", jul. 2026): sobrevivência em 5 anos
+SOBREVIVENCIA_5A = {"MEI": 0.415, "Pequenos negócios (MEI + ME + EPP)": 0.525, "Micro e pequenas empresas (ME + EPP)": 0.76}
+CAUSAS_FECHAMENTO = [("Falta de capital de giro", 0.22), ("Baixo volume de vendas e falta de clientes", 0.20)]
+
+
+def atividades_referencia() -> list:
+    return [f"Comércio · {a[0]}" for a in PAC_2024] + [f"Serviços · {a[0]}" for a in PAS_2024]
+
+
+def comparar_setor(atividade: str, proj: dict, d: dict, res: dict) -> pd.DataFrame:
+    """Compara os números do plano com a média do setor no Brasil. Retorna linhas (indicador, plano, setor, leitura)."""
+    a1 = res["anos"][1]
+    rec = a1["rec_bruta"]
+    pessoas = float(d["pessoal"]["num_empregados"].sum()) + len(d["socios"])
+    linhas = []
+    if atividade.startswith("Comércio · "):
+        nome = atividade.split(" · ", 1)[1]
+        _, rol, sal, po, emp, tm = next(x for x in PAC_2024 if x[0] == nome)
+        cmv = a1["custo_dir"]
+        if cmv > 0:
+            margem_plano = rec / cmv - 1
+            linhas.append(("Taxa de margem sobre o custo da mercadoria", margem_plano, tm / 100,
+                           "Margem = (receita − custo das mercadorias) ÷ custo das mercadorias."))
+        linhas.append(("Salários e retiradas ÷ receita", div(res["salarios_m"] * 12 + _prolabore(d) * 12, rec), sal / rol,
+                       "O setor não inclui encargos; o plano usa só salários e pró-labore."))
+        linhas.append(("Receita por pessoa ocupada (R$/ano)", div(rec, pessoas), rol * 1000 / po, "Produtividade da equipe."))
+        linhas.append(("Receita média por empresa (R$/ano)", rec, rol * 1000 / emp, "Inclui empresas grandes: a média puxa para cima."))
+    else:
+        nome = atividade.split(" · ", 1)[1]
+        _, emp, po, rol, sal = next(x for x in PAS_2024 if x[0] == nome)
+        linhas.append(("Salários e retiradas ÷ receita", div(res["salarios_m"] * 12 + _prolabore(d) * 12, rec), sal / rol,
+                       "O setor não inclui encargos; o plano usa só salários e pró-labore."))
+        linhas.append(("Receita por pessoa ocupada (R$/ano)", div(rec, pessoas), rol * 1000 / po, "Produtividade da equipe."))
+        linhas.append(("Receita média por empresa (R$/ano)", rec, rol * 1000 / emp, "Inclui empresas grandes: a média puxa para cima."))
+    df = pd.DataFrame(linhas, columns=["Indicador", "Plano", "Setor (Brasil)", "Observação"])
+    df["Plano ÷ setor"] = [div(a, b) if b else float("nan") for a, b in zip(df["Plano"], df["Setor (Brasil)"])]
+    return df
+
+
+def _prolabore(d: dict) -> float:
+    cf = d["custos_fixos"]
+    if cf.empty:
+        return 0.0
+    return float(cf.loc[cf["descricao"].astype(str).str.lower().str.contains("pró-labore|pro-labore|prolabore", regex=True),
+                        "valor_mensal"].sum())
+
+
+def leitura_setor(df: pd.DataFrame) -> list:
+    alertas = []
+    for _, r in df.iterrows():
+        x = r["Plano ÷ setor"]
+        if x != x:
+            continue
+        if r["Indicador"].startswith("Taxa de margem") and x > 1.5:
+            alertas.append("A margem sobre o custo está bem acima da média do setor: confira se o preço é aceito pelos clientes.")
+        if r["Indicador"].startswith("Taxa de margem") and x < 0.6:
+            alertas.append("A margem sobre o custo está bem abaixo da média do setor: o preço pode estar baixo ou o custo alto.")
+        if r["Indicador"].startswith("Receita por pessoa") and x > 2:
+            alertas.append("A receita por pessoa está muito acima do setor: a equipe pode estar pequena para o volume previsto.")
+        if r["Indicador"].startswith("Salários") and x < 0.5:
+            alertas.append("O peso dos salários está muito abaixo do setor: confira se toda a equipe e o pró-labore foram incluídos.")
+    return alertas
+
+
+# ------------------------------------------------------------------------------
+# 5. SWOT CRUZADA
+# ------------------------------------------------------------------------------
+QUADRANTES_CRUZADA = {
+    "Ofensiva (forças × oportunidades)": ("Força", "Oportunidade", "Use as forças para aproveitar as oportunidades."),
+    "Confronto (forças × ameaças)": ("Força", "Ameaça", "Use as forças para neutralizar as ameaças."),
+    "Reforço (fraquezas × oportunidades)": ("Fraqueza", "Oportunidade", "Corrija fraquezas para não perder oportunidades."),
+    "Defensiva (fraquezas × ameaças)": ("Fraqueza", "Ameaça", "Reduza fraquezas que deixam a empresa exposta às ameaças."),
+}
+
+
+def fatores_swot(d: dict, natureza: str) -> list:
+    s = d["swot"]
+    s = s[s["natureza"] == natureza]
+    pri = s[s["priorizado"].fillna(0).astype(int) == 1]
+    return list((pri if not pri.empty else s)["fator"].astype(str))
+
+
+def sugestoes_cruzada(d: dict) -> dict:
+    out = {}
+    for q, (a, b, dica) in QUADRANTES_CRUZADA.items():
+        fa, fb = fatores_swot(d, a), fatores_swot(d, b)
+        out[q] = {"dica": dica, "a": fa, "b": fb,
+                  "pares": [f"{x} + {y}" for x in fa[:3] for y in fb[:2]]}
+    return out
+
+
+# ------------------------------------------------------------------------------
+# 6. LEAN CANVAS
+# ------------------------------------------------------------------------------
+def linhas(t) -> list:
+    return [x.strip(" -•\t") for x in re.split(r"[\n;]", str(t or "")) if x.strip(" -•\t")]
+
+
+def lean_canvas(proj: dict, d: dict, res: dict) -> dict:
+    """Lean Canvas (Maurya, 2012) montado com o que o grupo já preencheu nas outras ferramentas."""
+    dores = linhas(proj.get("vpc_dores"))
+    if not dores and not d["entrevistas"].empty:
+        from collections import Counter
+        cont = Counter(x.strip().lower() for t in d["entrevistas"]["dores"] for x in str(t).split(";") if x.strip())
+        dores = [k for k, _ in cont.most_common(3)]
+    segs = list(d["segmentos"]["nome"].astype(str))
+    pers = list(d["personas"]["nome"].astype(str)) if "nome" in d["personas"] else []
+    prop = ""
+    if str(proj.get("posic_beneficio") or "").strip():
+        prop = f"{proj.get('posic_marca') or proj.get('nome_negocio')}: {proj.get('posic_beneficio')}"
+    elif not d["propostas"].empty:
+        r = d["propostas"].iloc[0]
+        prop = f"Ajudamos a {r['que_desejam']} por meio de {r['por_meio']}"
+    solucao = linhas(proj.get("vpc_aliviadores")) or list(res["cat"]["descricao"].astype(str))[:4]
+    canais = list(d["canais"]["canal"].astype(str))[:5]
+    cat = res["cat"]
+    receitas = [f"{r['descricao']}: {brl(r['preco_venda'])}" for _, r in cat.head(5).iterrows()] if not cat.empty else []
+    if res.get("recorrencia", {}).get("tem"):
+        receitas.append(f"Assinaturas (MRR do mês 12: {brl(res['recorrencia'].get('mrr12', 0))})")
+    a1 = res["anos"][1]
+    custos = [f"Pessoal: {brl(a1['pessoal'])}/ano", f"Custos fixos: {brl(a1['fixos'])}/ano",
+              f"Custos diretos: {brl(a1['custo_dir'])}/ano", f"Investimento inicial: {brl(res['investimento_total'])}"]
+    metricas = linhas(proj.get("lean_metricas"))
+    if not metricas and not d["aarrr"].empty:
+        metricas = [f"{r['etapa']}: {r['metrica']} (meta {r['meta']})" for _, r in d["aarrr"].iterrows() if str(r["metrica"]).strip()]
+    if not metricas:
+        metricas = list(d["objetivos"]["indicador"].astype(str))[:4]
+    alternativas = linhas(proj.get("lean_alternativas")) or list(d["concorrentes"]["nome"].astype(str))[:4]
+    return {"Problema": dores[:3], "Alternativas existentes": alternativas, "Segmentos de clientes": segs[:3],
+            "Primeiros clientes (early adopters)": pers[:2], "Proposta única de valor": [prop] if prop else [],
+            "Solução": solucao[:4], "Canais": canais, "Fontes de receita": receitas, "Estrutura de custos": custos,
+            "Métricas-chave": metricas[:5], "Vantagem injusta": linhas(proj.get("lean_vantagem"))}
+
+
+# ------------------------------------------------------------------------------
+# 7. VALUATION E RODADA DE INVESTIMENTO
+# ------------------------------------------------------------------------------
+def valuation(res: dict, proj: dict, d: dict) -> dict:
+    tma = res["tma"]
+    g = float(proj.get("val_crescimento_perp_pct") if proj.get("val_crescimento_perp_pct") is not None else 3) / 100
+    N = res["N"]
+    ebitdas = [res["anos"][k]["ebitda"] for k in res["ANOS"]]
+    vp = sum(e / (1 + tma) ** k for k, e in zip(res["ANOS"], ebitdas))
+    terminal = ebitdas[-1] * (1 + g) / (tma - g) if tma > g and ebitdas[-1] > 0 else 0.0
+    vp_term = terminal / (1 + tma) ** N
+    divida = float(d["emprestimos"]["valor"].sum())
+    ev = vp + vp_term
+    m_eb = float(proj.get("val_multiplo_ebitda") or 4)
+    m_rec = float(proj.get("val_multiplo_receita") or 1)
+    a1 = res["anos"][1]
+    eb_ref = res["anos"][min(2, N)]["ebitda"]
+    met = pd.DataFrame([
+        ("Fluxo de caixa descontado (EBITDA + perpetuidade)", ev - divida),
+        (f"Múltiplo de EBITDA ({num_br(m_eb, 1)}x o EBITDA do Ano {min(2, N)})", eb_ref * m_eb - divida),
+        (f"Múltiplo de receita ({num_br(m_rec, 1)}x a receita do Ano 1)", a1["rec_bruta"] * m_rec - divida),
+    ], columns=["Método", "Valor do patrimônio dos sócios"])
+    return {"vp_fluxos": vp, "terminal": terminal, "vp_terminal": vp_term, "ev": ev, "divida": divida,
+            "equity_dcf": ev - divida, "metodos": met, "g": g, "faixa": (float(met.iloc[:, 1].min()), float(met.iloc[:, 1].max()))}
+
+
+def cap_table(d: dict, pre_money: float, investimento: float) -> pd.DataFrame:
+    soc = d["socios"]
+    total = float(soc["capital_integralizado"].sum())
+    linhas_ = []
+    post = pre_money + investimento
+    for _, r in soc.iterrows():
+        antes = div(float(r["capital_integralizado"]), total) if total else div(1, len(soc))
+        depois = antes * div(pre_money, post) if post > 0 else antes
+        linhas_.append((str(r["nome"]), antes, depois, depois * post))
+    if investimento > 0 and post > 0:
+        linhas_.append(("Investidor", 0.0, investimento / post, investimento))
+    return pd.DataFrame(linhas_, columns=["Sócio", "Participação antes", "Participação depois", "Valor da participação"])
+
+
+# ------------------------------------------------------------------------------
+# 8. IMPACTO SOCIAL E ODS
+# ------------------------------------------------------------------------------
+ODS = ["1 Erradicação da pobreza", "2 Fome zero e agricultura sustentável", "3 Saúde e bem-estar", "4 Educação de qualidade",
+       "5 Igualdade de gênero", "6 Água potável e saneamento", "7 Energia limpa e acessível",
+       "8 Trabalho decente e crescimento econômico", "9 Indústria, inovação e infraestrutura", "10 Redução das desigualdades",
+       "11 Cidades e comunidades sustentáveis", "12 Consumo e produção responsáveis", "13 Ação contra a mudança global do clima",
+       "14 Vida na água", "15 Vida terrestre", "16 Paz, justiça e instituições eficazes", "17 Parcerias e meios de implementação"]
+TIPOS_INDICADOR_IMPACTO = ["Produto (output)", "Resultado (outcome)", "Impacto"]
+ETAPAS_MUDANCA = [("imp_problema", "Problema social ou ambiental", "Qual problema da comunidade o negócio enfrenta?"),
+                  ("imp_publico", "Público beneficiado", "Quem é afetado e quantas pessoas?"),
+                  ("imp_atividades", "Atividades", "O que a empresa faz no dia a dia que gera o efeito?"),
+                  ("imp_produtos", "Produtos imediatos (outputs)", "O que é entregue e pode ser contado?"),
+                  ("imp_resultados", "Resultados (outcomes)", "Que mudança acontece na vida do público?"),
+                  ("imp_impacto", "Impacto de longo prazo", "Que transformação se espera na comunidade?")]
+
+
+# ------------------------------------------------------------------------------
+# 9. EDITAIS DE FOMENTO (estrutura usual do Programa Centelha e editais de inovação)
+# ------------------------------------------------------------------------------
+SECOES_EDITAL = [("Título da proposta", 150), ("Problema ou oportunidade", 2000), ("Solução proposta", 2000),
+                 ("Caráter inovador e diferencial", 2000), ("Mercado e clientes", 2000), ("Modelo de negócio", 2000),
+                 ("Estágio de desenvolvimento", 1500), ("Equipe", 1500), ("Impactos esperados", 1500),
+                 ("Cronograma e próximos passos", 1500)]
+RUBRICAS_EDITAL = ["Bolsas", "Material de consumo", "Serviços de terceiros", "Equipamentos e material permanente",
+                   "Passagens e diárias", "Outros"]
+TRL = {1: "Princípios básicos observados", 2: "Conceito tecnológico formulado", 3: "Prova de conceito",
+       4: "Validação em laboratório", 5: "Validação em ambiente relevante", 6: "Protótipo demonstrado em ambiente relevante",
+       7: "Protótipo demonstrado em ambiente real", 8: "Sistema completo e qualificado", 9: "Sistema em operação"}
+
+
+def rascunho_edital(proj: dict, d: dict, res: dict) -> dict:
+    nome = proj.get("nome_negocio") or "o negócio"
+    seg = ", ".join(d["segmentos"]["nome"].astype(str).head(2)) or "o público-alvo"
+    dores = linhas(proj.get("vpc_dores"))
+    prod = ", ".join(res["cat"]["descricao"].astype(str).head(4))
+    soc = d["socios"]
+    m_tam, m_sam = float(proj.get("tam_clientes") or 0), float(proj.get("sam_clientes") or 0)
+    a1 = res["anos"][1]
+    trl = int(proj.get("edital_trl") or 3)
+    errc = d.get("errc", pd.DataFrame())
+    criar = list(errc.loc[errc["acao"] == "Criar", "atributo"]) if not errc.empty else []
+    cron = d["cronograma"]
+    return {
+        "Título da proposta": f"{nome}: {proj.get('posic_categoria') or 'novo negócio'} para {seg}",
+        "Problema ou oportunidade": (f"{seg} enfrenta: " + "; ".join(dores[:3]) + ".") if dores else
+        f"Descreva o problema que {seg} enfrenta, com dados (entrevistas, pesquisa, IBGE).",
+        "Solução proposta": f"{nome} oferece {prod}. " + (proj.get("vpc_job") or ""),
+        "Caráter inovador e diferencial": (frase_pos(proj) + (" Atributos novos em relação aos concorrentes: " + ", ".join(criar) + "."
+                                                              if criar else "")).strip(),
+        "Mercado e clientes": f"Mercado total estimado em {num_br(m_tam, 0)} clientes e mercado atendível de {num_br(m_sam, 0)}. "
+                              f"Receita prevista no Ano 1: {brl(a1['rec_bruta'])}.",
+        "Modelo de negócio": f"Receita com {prod}. Margem de contribuição de {pct(a1['imc'])}; investimento inicial de "
+                             f"{brl(res['investimento_total'])}; VPL de {brl(res['vpl'])} em {res['N']} anos.",
+        "Estágio de desenvolvimento": f"Nível de maturidade tecnológica (TRL) {trl}: {TRL.get(trl, '')}. "
+                                      f"{len(d['entrevistas'])} entrevistas com clientes e {len(d['experimentos'])} experimento(s) planejado(s).",
+        "Equipe": "; ".join(f"{r['nome']} ({r['funcao']}): {r['perfil']}" for _, r in soc.iterrows()),
+        "Impactos esperados": "; ".join(str(proj.get(k) or "") for k in ("imp_resultados", "imp_impacto") if proj.get(k)) or
+        "Descreva os impactos econômicos, sociais e ambientais.",
+        "Cronograma e próximos passos": "; ".join(f"mês {num_br(r['mes_inicio'], 0)}: {r['atividade']}" for _, r in cron.iterrows()),
+    }
+
+
+def frase_pos(proj: dict) -> str:
+    if not str(proj.get("posic_beneficio") or "").strip():
+        return ""
+    return (f"Para {proj.get('posic_segmento') or '...'}, {proj.get('posic_marca') or proj.get('nome_negocio')} "
+            f"{proj.get('posic_beneficio')}. Diferentemente de {proj.get('posic_concorrente') or '...'}, {proj.get('posic_diferencial') or '...'}.")
+
+
+# ------------------------------------------------------------------------------
+# 10. IMPORTAÇÃO DE PLANILHAS (EXCEL OU CSV)
+# ------------------------------------------------------------------------------
+def _norm(s) -> str:
+    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode().lower().strip()
+    return re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+
+
+def ler_planilha(nome: str, dados: bytes) -> pd.DataFrame:
+    import io as _io
+    if nome.lower().endswith((".xlsx", ".xls")):
+        return pd.read_excel(_io.BytesIO(dados))
+    texto = dados.decode("utf-8-sig", errors="replace")
+    sep = ";" if texto.count(";") > texto.count(",") else ","
+    df = pd.read_csv(_io.StringIO(texto), sep=sep)
+    return df
+
+
+def mapear_colunas(df: pd.DataFrame, colunas_destino: list, rotulos: dict | None = None) -> dict:
+    """Liga as colunas da planilha às do programa pelo nome (ignora acentos, maiúsculas e espaços)."""
+    rotulos = rotulos or {}
+    alvo = {_norm(c): c for c in colunas_destino}
+    alvo.update({_norm(r): c for c, r in rotulos.items()})
+    return {c: alvo[_norm(c)] for c in df.columns if _norm(c) in alvo}
+
+
+def converter_numero(v):
+    if isinstance(v, (int, float, np.integer, np.floating)):
+        return float(v)
+    s = str(v).strip().replace("R$", "").replace("%", "").strip()
+    if not s or s.lower() == "nan":
+        return 0.0
+    if "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+# ------------------------------------------------------------------------------
+# 11. MODO PROFESSOR: SEMELHANÇA ENTRE PLANOS E RODADA DE INVESTIMENTO DA TURMA
+# ------------------------------------------------------------------------------
+def _assinatura_texto(proj: dict, d: dict) -> set:
+    partes = [str(proj.get(k) or "") for k in ("nome_negocio", "mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao",
+                                                "sumario_executivo", "conclusao", "missao", "visao", "vpc_dores")]
+    for t in ("segmentos", "swot", "riscos", "catalogo"):
+        df = d.get(t)
+        if df is not None and not df.empty:
+            partes.extend(df.astype(str).fillna("").agg(" ".join, axis=1).tolist())
+    palavras = re.findall(r"[a-zà-ú0-9]{3,}", " ".join(partes).lower())
+    return {" ".join(palavras[i:i + 3]) for i in range(max(len(palavras) - 2, 0))}
+
+
+def _assinatura_numeros(d: dict) -> set:
+    nums = set()
+    for t, cols in (("catalogo", ("preco_venda", "custo_aquisicao", "qtd_mensal")), ("custos_fixos", ("valor_mensal",)),
+                    ("inv_fixos", ("valor_unitario",))):
+        df = d.get(t)
+        if df is not None and not df.empty:
+            for c in cols:
+                nums.update(round(float(x), 2) for x in df[c] if float(x or 0) > 0)
+    return nums
+
+
+def semelhanca_planos(projetos: list) -> pd.DataFrame:
+    """projetos: lista de (rotulo, proj, d). Retorna pares com semelhança de texto (trigramas) e de números (Jaccard)."""
+    ass = [(r, _assinatura_texto(p, d), _assinatura_numeros(d)) for r, p, d in projetos]
+    out = []
+    for i in range(len(ass)):
+        for j in range(i + 1, len(ass)):
+            a, b = ass[i], ass[j]
+            jt = div(len(a[1] & b[1]), len(a[1] | b[1])) if (a[1] | b[1]) else 0.0
+            jn = div(len(a[2] & b[2]), len(a[2] | b[2])) if (a[2] | b[2]) else 0.0
+            out.append((a[0], b[0], jt, jn))
+    df = pd.DataFrame(out, columns=["Grupo A", "Grupo B", "Textos em comum", "Números em comum"])
+    return df.sort_values(["Textos em comum", "Números em comum"], ascending=False).reset_index(drop=True)
+
+
+def resultado_rodada(aloc: pd.DataFrame) -> pd.DataFrame:
+    """aloc: linhas = investidores (grupos), colunas = projetos. Soma o capital recebido, sem contar o próprio grupo."""
+    m = aloc.copy()
+    for c in m.columns:
+        if c in m.index:
+            m.loc[c, c] = 0.0
+    tot = m.sum(axis=0)
+    inv = (m > 0).sum(axis=0)
+    df = pd.DataFrame({"Projeto": tot.index, "Capital recebido": tot.values, "Investidores": inv.values})
+    return df.sort_values("Capital recebido", ascending=False).reset_index(drop=True)
+
+
+# ------------------------------------------------------------------------------
+# 12. TRILHA GUIADA
+# ------------------------------------------------------------------------------
+ESSENCIAIS = ["projeto", "identidade", "segmentos", "personas", "mercado", "proposta", "concorrencia", "swot", "marketing",
+              "canais", "investimentos", "produtos", "custos", "preco", "dre", "fluxo", "indicadores", "riscos", "sumario"]
+
+
+def referencias_abnt_dados(proj: dict, d: dict, acesso: str | None = None) -> list:
+    """Referências (NBR 6023:2025) das bases de dados usadas pelo programa, para o relatório ABNT."""
+    hoje = acesso or date.today().strftime("%d %b. %Y").lower()
+    meses = {"jan.": "jan.", "feb.": "fev.", "mar.": "mar.", "apr.": "abr.", "may.": "maio", "jun.": "jun.", "jul.": "jul.",
+             "aug.": "ago.", "sep.": "set.", "oct.": "out.", "nov.": "nov.", "dec.": "dez."}
+    for a, b in meses.items():
+        hoje = hoje.replace(a, b)
+    refs = []
+    chaves = set(d["dados_publicos"]["chave"]) if "dados_publicos" in d and not d["dados_publicos"].empty else set()
+    ibge = "INSTITUTO BRASILEIRO DE GEOGRAFIA E ESTATÍSTICA."
+    if chaves & {"populacao", "domicilios", "moradores_dom"}:
+        refs.append(f"{ibge} **Censo demográfico 2022**: tabelas 4709 e 4712. Rio de Janeiro: IBGE, 2023. "
+                    f"Disponível em: https://sidra.ibge.gov.br/tabela/4709. Acesso em: {hoje}.")
+    if chaves & {"pib", "pib_per_capita"}:
+        refs.append(f"{ibge} **Produto interno bruto dos municípios**: tabela 5938. Rio de Janeiro: IBGE, [2025]. "
+                    f"Disponível em: https://sidra.ibge.gov.br/tabela/5938. Acesso em: {hoje}.")
+    if "unidades_locais" in chaves:
+        refs.append(f"{ibge} **Cadastro central de empresas**: tabela 1685. Rio de Janeiro: IBGE, [2023]. "
+                    f"Disponível em: https://sidra.ibge.gov.br/tabela/1685. Acesso em: {hoje}.")
+    if any(str(c).startswith("pof") for c in chaves):
+        refs.append(f"{ibge} **Pesquisa de orçamentos familiares 2017-2018**: tabela 6715. Rio de Janeiro: IBGE, 2019. "
+                    f"Disponível em: https://sidra.ibge.gov.br/tabela/6715. Acesso em: {hoje}.")
+    setor = str(proj.get("setor_referencia") or "")
+    if setor.startswith("Comércio"):
+        refs.append(f"{ibge} **Pesquisa anual de comércio 2024**: tabela 10645. Rio de Janeiro: IBGE, [2026]. "
+                    f"Disponível em: https://sidra.ibge.gov.br/tabela/10645. Acesso em: {hoje}.")
+    if setor.startswith("Serviços"):
+        refs.append(f"{ibge} **Pesquisa anual de serviços 2024**: tabela 10758. Rio de Janeiro: IBGE, [2026]. "
+                    f"Disponível em: https://sidra.ibge.gov.br/tabela/10758. Acesso em: {hoje}.")
+    return refs
+
+
+# ------------------------------------------------------------------------------
+# 13. SITUAÇÃO DE PREENCHIMENTO DAS FERRAMENTAS DA V8
+# ------------------------------------------------------------------------------
+OPCIONAIS_V8 = {"financiamento", "valuation", "impacto", "editais"}
+
+
+def regras_v8(proj: dict, d: dict) -> dict:
+    def n(t):
+        x = d.get(t)
+        return 0 if x is None else len(x)
+    est = d.get("swot_estrategias", pd.DataFrame(columns=["quadrante"]))
+    lean = [proj.get(k) for k in ("lean_alternativas", "lean_metricas", "lean_vantagem")]
+    imp = [proj.get(k) for k, _, _ in ETAPAS_MUDANCA]
+    return {
+        "dados_publicos": (n("dados_publicos") >= 3, n("dados_publicos") >= 1),
+        "swot_cruzada": (n("swot_estrategias") >= 4 and est["quadrante"].nunique() >= 3, n("swot_estrategias") >= 1),
+        "lean": (all(lean), any(lean)),
+        "referencias": (bool(proj.get("setor_referencia")), bool(proj.get("setor_referencia"))),
+        "financiamento": (n("emprestimos") >= 1, n("emprestimos") >= 1),
+        "valuation": (float(proj.get("rodada_investimento") or 0) > 0, float(proj.get("rodada_pre_money") or 0) > 0),
+        "impacto": (all(imp) and n("impacto_indicadores") >= 1, any(imp)),
+        "editais": (n("edital_textos") >= 1 and n("edital_orcamento") >= 1, n("edital_textos") >= 1),
+    }
+
+# ##############################################################################
 # PARTE: pnbox_pdf.py
 # ##############################################################################
+
 
 
 
@@ -4052,7 +4896,7 @@ def png_bsc(ob: pd.DataFrame) -> bytes | None:
         ax.text(Rm * np.cos(am), Rm * np.sin(am), f"{tit}\n\n{desc}\n{n} objetivo{'s' if n != 1 else ''}", ha="center",
                 va="center", color="white", fontsize=6.8, fontweight="bold", linespacing=1.15)
     ax.add_patch(plt.Circle((0, 0), R0 - 0.03, color="white"))
-    ax.text(0, 0, "BSC", ha="center", va="center", fontsize=34, fontweight="black", color="#333")
+    ax.text(0, 0, "BSC", ha="center", va="center", fontsize=34, fontweight="bold", color="#333")
     ax.set_xlim(-1.08, 1.08)
     ax.set_ylim(-1.08, 1.08)
     ax.set_aspect("equal")
@@ -4278,6 +5122,75 @@ def secoes_v71(pdf, proj, d, res):
     if not d["formalizacao"].empty:
         pdf.tabela(d["formalizacao"].rename(columns={"item": "Item", "status": "Situação", "observacao": "Observação"}),
                    larguras=(100, 26, 54), alinhar=("LEFT", "CENTER", "LEFT"), tam=7.5)
+
+
+def secoes_v8(pdf, proj, d, res):
+    """Seções da versão 8 no relatório completo."""
+    est = d.get("swot_estrategias", pd.DataFrame())
+    if not est.empty:
+        pdf.secao("SWOT CRUZADA: ESTRATÉGIAS", nova_pagina=True)
+        pdf.tabela(est.rename(columns={"quadrante": "Tipo", "estrategia": "Estratégia", "acao": "Ação", "prazo_meses": "Prazo (meses)"})
+                   .assign(**{"Prazo (meses)": est["prazo_meses"].map(lambda v: num_br(v, 0))}),
+                   larguras=(44, 60, 60, 16), alinhar=("LEFT", "LEFT", "LEFT", "CENTER"), tam=7.5)
+    lc = lean_canvas(proj, d, res)
+    pdf.secao("LEAN CANVAS", nova_pagina=True)
+    pdf.tabela(pd.DataFrame([(k, "; ".join(str(x) for x in v) or "-") for k, v in lc.items()], columns=["Bloco", "Conteúdo"]),
+               larguras=(45, 135), alinhar=("LEFT", "LEFT"), tam=7.8)
+    dp = d.get("dados_publicos", pd.DataFrame())
+    if not dp.empty or proj.get("setor_referencia"):
+        pdf.secao("DADOS PÚBLICOS E REFERÊNCIAS DO SETOR", nova_pagina=True)
+        if not dp.empty:
+            pdf.subtitulo(f"{proj.get('municipio_nome') or ''} ({proj.get('uf_sigla') or ''})")
+            pdf.tabela(pd.DataFrame({"Indicador": dp["rotulo"], "Valor": dp["valor"].map(lambda v: num_br(v, 2)), "Período": dp["periodo"],
+                                     "Fonte": dp["fonte"]}), larguras=(55, 28, 20, 77), alinhar=("LEFT", "RIGHT", "CENTER", "LEFT"), tam=7.5)
+        if proj.get("setor_referencia") and res["anos"][1]["rec_bruta"] > 0:
+            try:
+                cs = comparar_setor(proj["setor_referencia"], proj, d, res)
+                pdf.subtitulo(f"Comparação com a média do setor: {proj['setor_referencia'].split(' · ')[1]}")
+                fm = lambda i, v: pct(v) if ("÷" in i or "margem" in i.lower()) else brl(v)
+                pdf.tabela(pd.DataFrame({"Indicador": cs["Indicador"], "Plano": [fm(i, v) for i, v in zip(cs["Indicador"], cs["Plano"])],
+                                         "Setor (Brasil)": [fm(i, v) for i, v in zip(cs["Indicador"], cs["Setor (Brasil)"])],
+                                         "Plano ÷ setor": cs["Plano ÷ setor"].map(lambda v: f"{num_br(v, 2)}x" if v == v else "n.a.")}),
+                           larguras=(80, 35, 35, 30), tam=7.8)
+                for a in leitura_setor(cs):
+                    pdf.paragrafo(a, "I", 8)
+                pdf.paragrafo(FONTE_PAC if proj["setor_referencia"].startswith("Comércio") else FONTE_PAS, "I", 7.5)
+            except Exception:
+                pass
+        pdf.paragrafo("Sobrevivência em 5 anos (Sebrae, 2026): " + "; ".join(f"{k}: {pct(v, 1)}" for k, v in SOBREVIVENCIA_5A.items()) + ".",
+                      "", 8.5)
+    emp = d["emprestimos"]
+    if not emp.empty and float(emp["valor"].sum()) > 0:
+        pdf.secao("FINANCIAMENTO", nova_pagina=True)
+        linhas_ = []
+        for _, r in emp.iterrows():
+            if float(r["valor"] or 0) > 0:
+                rs = resumo_emprestimo(r["valor"], r["taxa_anual_pct"], r["prazo_meses"], r["carencia_meses"], r["sistema"])
+                linhas_.append((r["descricao"], brl(r["valor"]), f"{num_br(r['taxa_anual_pct'], 2)}%", num_br(r["prazo_meses"], 0),
+                                num_br(r["carencia_meses"] or 0, 0), r["sistema"] or "Price", brl(rs["juros"]), pct(rs["cet"])))
+        pdf.tabela(pd.DataFrame(linhas_, columns=["Linha", "Valor", "Juros a.a.", "Prazo", "Carência", "Sistema", "Juros totais", "CET a.a."]),
+                   larguras=(38, 22, 16, 13, 15, 16, 24, 18), tam=7.3)
+    vl = valuation(res, proj, d)
+    pdf.secao("VALUATION E RODADA DE INVESTIMENTO", nova_pagina=True)
+    pdf.tabela(vl["metodos"].assign(**{"Valor do patrimônio dos sócios": vl["metodos"]["Valor do patrimônio dos sócios"].map(brl)}),
+               larguras=(130, 50), alinhar=("LEFT", "RIGHT"))
+    pre, inv = float(proj.get("rodada_pre_money") or 0), float(proj.get("rodada_investimento") or 0)
+    if inv > 0 and pre > 0:
+        ct = cap_table(d, pre, inv)
+        pdf.subtitulo(f"Rodada: aporte de {brl(inv)} com pre-money de {brl(pre)}")
+        pdf.tabela(ct.assign(**{"Participação antes": ct["Participação antes"].map(pct), "Participação depois": ct["Participação depois"].map(pct),
+                                "Valor da participação": ct["Valor da participação"].map(brl)}), larguras=(60, 40, 40, 40))
+    imp = [(rot, proj.get(k_)) for k_, rot, _ in ETAPAS_MUDANCA if proj.get(k_)]
+    if imp or not d["impacto_indicadores"].empty:
+        pdf.secao("IMPACTO SOCIAL E ODS", nova_pagina=True)
+        for rot, v_ in imp:
+            pdf.campo(rot, v_)
+        if proj.get("ods"):
+            pdf.campo("ODS", str(proj["ods"]).replace(";", "; "))
+        ii = d["impacto_indicadores"]
+        if not ii.empty:
+            pdf.tabela(ii.rename(columns={"indicador": "Indicador", "tipo": "Tipo", "linha_base": "Situação atual", "meta": "Meta", "ods": "ODS"}),
+                       larguras=(55, 28, 30, 30, 37), alinhar=("LEFT",) * 5, tam=7.5)
 
 
 def graficos_png(comp: dict) -> list:
@@ -5029,6 +5942,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                       "referência de 11,3% para 2027 calculada pelo TCU, sujeita à definição do Senado. Confirme com um contador.", "I", 7.5)
 
     secoes_v71(pdf, proj, d, res)
+    secoes_v8(pdf, proj, d, res)
 
     if str(proj.get("conclusao") or "").strip():
         pdf.secao("CONCLUSÃO E PARECER FINAL", nova_pagina=True)
@@ -5102,6 +6016,7 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "realizado": (tem("realizado"), tem("realizado")),
         "sumario": (len(str(proj["sumario_executivo"])) > 200, bool(proj["sumario_executivo"])),
         **regras_v71(proj, d),
+        **regras_v8(proj, d),
     }
 
 
@@ -5109,7 +6024,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao"}
+    fora = {"realizado", "adocao"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -5199,6 +6114,9 @@ TAREFAS_IA = {
     "coerencia": "Coerência entre as ferramentas (mercado x vendas x capacidade x equipe x finanças)",
     "reforma": "Efeito da reforma tributária e escolha entre Simples puro e híbrido",
     "posicionamento": "Proposta de valor, posicionamento, curva de valor (ERRC) e orçamento de marketing por canal",
+    "setor": "Comparação com a média do setor (IBGE) e com os dados do município e das famílias",
+    "investidor": "Valuation, rodada de investimento e financiamento do ponto de vista de um investidor",
+    "impacto": "Impacto social, ODS e adequação a editais de fomento",
 }
 
 
@@ -5302,6 +6220,65 @@ def _prompt_v71(proj: dict, d: dict, res: dict) -> list:
     b.append(f"\n## 12. Formalização\n- Enquadramento sugerido pela receita do Ano 1: {ps['porte']}.")
     if not d["formalizacao"].empty:
         b.append(_md_tabela(d["formalizacao"][["item", "status"]]))
+    return b
+
+
+def _prompt_v8(proj: dict, d: dict, res: dict) -> list:
+    """Seções do prompt com as ferramentas da versão 8."""
+    b = []
+    dp = d.get("dados_publicos", pd.DataFrame())
+    if not dp.empty:
+        b.append(f"\n## 12. Dados públicos ({proj.get('municipio_nome') or ''} - {proj.get('uf_sigla') or ''})")
+        for _, r in dp.iterrows():
+            b.append(f"- {r['rotulo']} ({r['periodo']}): {num_br(r['valor'], 2)}. Fonte: {r['fonte']}")
+    if proj.get("setor_referencia") and res["anos"][1]["rec_bruta"] > 0:
+        try:
+            cs = comparar_setor(proj["setor_referencia"], proj, d, res)
+            b.append(f"\n## 12. Comparação com o setor: {proj['setor_referencia']} (média Brasil, IBGE 2024)")
+            b.append(_md_tabela(cs.assign(**{c: cs[c].map(lambda v: num_br(v, 3)) for c in ("Plano", "Setor (Brasil)", "Plano ÷ setor")})))
+        except Exception:
+            pass
+    b.append("- Sobrevivência em 5 anos (Sebrae, 2026): " + "; ".join(f"{k}: {pct(v, 1)}" for k, v in SOBREVIVENCIA_5A.items()) + ".")
+    est = d.get("swot_estrategias", pd.DataFrame())
+    if not est.empty:
+        b.append("\n## 12. SWOT cruzada (estratégias)")
+        b.append(_md_tabela(est))
+    lc = lean_canvas(proj, d, res)
+    b.append("\n## 12. Lean Canvas")
+    for k_, v_ in lc.items():
+        if v_:
+            b.append(f"- {k_}: " + "; ".join(str(x) for x in v_))
+    emp = d["emprestimos"]
+    if not emp.empty:
+        b.append("\n## 12. Financiamento")
+        for _, r in emp.iterrows():
+            if float(r["valor"] or 0) > 0:
+                rs = resumo_emprestimo(r["valor"], r["taxa_anual_pct"], r["prazo_meses"], r["carencia_meses"], r["sistema"])
+                b.append(f"- {r['descricao']}: {brl(r['valor'])}, {num_br(r['taxa_anual_pct'], 2)}% a.a., {num_br(r['prazo_meses'], 0)} meses, "
+                         f"carência de {num_br(r['carencia_meses'] or 0, 0)} meses, sistema {r['sistema'] or 'Price'}; juros totais {brl(rs['juros'])}; "
+                         f"CET {pct(rs['cet'])} a.a.")
+    vl = valuation(res, proj, d)
+    b.append(f"\n## 12. Valuation\n- Fluxo de caixa descontado: {brl(vl['equity_dcf'])} (perpetuidade com crescimento de "
+             f"{pct(vl['g'])}); faixa entre métodos: {brl(vl['faixa'][0])} a {brl(vl['faixa'][1])}.")
+    if float(proj.get("rodada_investimento") or 0) > 0:
+        pre, inv = float(proj.get("rodada_pre_money") or 0), float(proj["rodada_investimento"])
+        b.append(f"- Rodada: aporte de {brl(inv)} com pre-money de {brl(pre)}; investidor fica com {pct(div(inv, pre + inv))}.")
+    imp = [(rot, proj.get(k_)) for k_, rot, _ in ETAPAS_MUDANCA if proj.get(k_)]
+    if imp or proj.get("ods"):
+        b.append("\n## 12. Impacto social")
+        for rot, v_ in imp:
+            b.append(f"- {rot}: {v_}")
+        if proj.get("ods"):
+            b.append(f"- ODS: {str(proj['ods']).replace(';', '; ')}")
+        if not d["impacto_indicadores"].empty:
+            b.append(_md_tabela(d["impacto_indicadores"]))
+    cm = d.get("comentarios", pd.DataFrame())
+    if not cm.empty:
+        abertos = cm[cm["resolvido"].fillna(0).astype(int) == 0]
+        if not abertos.empty:
+            b.append("\n## 12. Comentários do professor ainda não resolvidos")
+            for _, r in abertos.iterrows():
+                b.append(f"- [{r['pagina']}] {r['comentario']}")
     return b
 
 
@@ -5497,6 +6474,7 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
         if str(proj.get(k_) or "").strip():
             b.append(f"\n## 12. {tit}\n{proj[k_]}")
     b.extend(_prompt_v71(proj, d, res))
+    b.extend(_prompt_v8(proj, d, res))
     pend = chk[chk["Situação"] != "OK"]
     if not pend.empty:
         b.append("\n## 13. Inconsistências apontadas pelo programa")
@@ -5562,6 +6540,15 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                      "(veja o Placar de evidências). Para cada uma: experimento barato (entrevista, página de pré-cadastro, pré-venda, "
                      "piloto, venda manual antes de automatizar), métrica, critério de sucesso definido antes do teste, custo, prazo e o "
                      "que fazer se o resultado for ruim.",
+        "setor": "Compare as premissas do plano com a média do setor (tabela de referências do IBGE) e com os dados do município e da "
+                 "POF. Aponte o que está fora da curva, explique se a diferença é plausível para um pequeno negócio local e "
+                 "sugira valores mais realistas quando for o caso.",
+        "investidor": "Avalie o plano como um investidor-anjo: o valuation é coerente com o risco e com o estágio do negócio? A "
+                      "participação oferecida na rodada é razoável? O financiamento escolhido (sistema, carência, custo efetivo) cabe "
+                      "no caixa? Diga o que faria você investir ou recusar.",
+        "impacto": "Avalie a teoria da mudança (as atividades levam mesmo aos resultados e ao impacto declarados?), os indicadores de "
+                   "impacto e a ligação com os ODS. Sugira como fortalecer a proposta para um edital de inovação ou de negócios de "
+                   "impacto, sem exagerar os efeitos.",
         "posicionamento": "Avalie o Canvas da proposta de valor (as dores mais importantes têm resposta?), a declaração de posicionamento "
                           "(é específica e defensável?), a curva de valor e a matriz ERRC (há diferenciação real ou só mais custo?) e o "
                           "orçamento por canal (CAC, retorno e coerência com o gasto comercial da DRE). Proponha uma versão melhor do "
@@ -6067,6 +7054,359 @@ def ficha_avaliacao_pdf(avaliacoes: list, rubrica=RUBRICA_PADRAO, professor="", 
     return bytes(pdf.output())
 
 # ##############################################################################
+# PARTE: pnbox_abnt.py
+# ##############################################################################
+
+
+
+
+
+
+
+
+ENTRELINHA = 6.4      # 12 pt com espaçamento 1,5
+RECUO = " " * 8  # recuo de primeira linha do parágrafo
+
+REFS_METODO = {
+    "swot": "WRIGHT, Peter; KROLL, Mark J.; PARNELL, John. **Administração estratégica**: conceitos. São Paulo: Atlas, 2000.",
+    "canvas": "OSTERWALDER, Alexander; PIGNEUR, Yves. **Business model generation**: inovação em modelos de negócios. "
+              "Rio de Janeiro: Alta Books, 2011.",
+    "sebrae": "SERVIÇO BRASILEIRO DE APOIO ÀS MICRO E PEQUENAS EMPRESAS. **Aplicações de análise de sobrevivência em estudos do "
+              "Sebrae**. Brasília: Sebrae, 2026. Disponível em: https://datasebrae.com.br. Acesso em: {hoje}.",
+}
+
+
+class RelatorioABNT(Relatorio):
+    def __init__(self, nome):
+        super().__init__(nome)
+        self.set_margins(30, 30, 20)
+        self.set_auto_page_break(auto=True, margin=20)
+        self.numerar_a_partir = 10 ** 6
+        self.n_tab = 0
+        self.toc = []
+
+    def header(self):
+        if self.page_no() >= self.numerar_a_partir:
+            self.set_y(20)
+            self.fonte("", 10)
+            self.cell(0, 5, str(self.page_no() - 1), align="R")
+            self.set_y(30)
+
+    def footer(self):
+        pass
+
+    def secao_abnt(self, numero: str, titulo: str, nivel: int = 1, nova_pagina=False):
+        if nova_pagina:
+            self.add_page()
+        elif self.get_y() > 245:
+            self.add_page()
+        self.ln(4 if nivel == 1 else 2)
+        self.fonte("B" if nivel <= 2 else "", 12)
+        txt = f"{numero} {titulo.upper() if nivel == 1 else titulo}".strip()
+        self.multi_cell(0, ENTRELINHA, self.t(txt), align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.ln(2)
+        self.toc.append((nivel, numero, titulo.upper() if nivel == 1 else titulo, self.page_no() - 1))
+
+    def texto(self, t: str):
+        for par in [p.strip() for p in str(t or "").split("\n") if p.strip()]:
+            self.fonte("", 12)
+            self.multi_cell(0, ENTRELINHA, self.t(RECUO + par), align="J", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    def tabela_abnt(self, titulo: str, df: pd.DataFrame, larguras=None, alinhar=None, fonte="Elaborada pelos autores (2026).",
+                    tam=10):
+        if df is None or df.empty:
+            return
+        self.n_tab += 1
+        if self.get_y() > 230:
+            self.add_page()
+        self.ln(2)
+        self.fonte("", 10)
+        self.multi_cell(0, 5, self.t(f"Tabela {self.n_tab} - {titulo}"), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        cols = list(df.columns)
+        if alinhar is None:
+            alinhar = ["LEFT"] + ["RIGHT"] * (len(cols) - 1)
+        self.fonte("", tam)
+        with self.table(col_widths=larguras, text_align=alinhar, line_height=tam * 0.5, borders_layout="HORIZONTAL_LINES",
+                        headings_style=FontFace(emphasis="BOLD"), first_row_as_headings=True) as tb:
+            r = tb.row()
+            for c in cols:
+                r.cell(self.t(c))
+            for _, linha in df.iterrows():
+                r = tb.row()
+                for c in cols:
+                    r.cell(self.t(linha[c]))
+        self.fonte("", 10)
+        self.multi_cell(0, 5, self.t(f"Fonte: {fonte}"), align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.ln(3)
+
+
+def _capa(pdf, proj, autores, titulo):
+    pdf.add_page()
+    pdf.fonte("B", 12)
+    for linha in [proj.get("abnt_instituicao") or "INSTITUIÇÃO DE ENSINO", proj.get("abnt_curso") or ""]:
+        if linha:
+            pdf.multi_cell(0, ENTRELINHA, pdf.t(str(linha).upper()), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(18)
+    pdf.fonte("", 12)
+    for a in autores:
+        pdf.multi_cell(0, ENTRELINHA, pdf.t(a.upper()), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_y(120)
+    pdf.fonte("B", 14)
+    pdf.multi_cell(0, 8, pdf.t(titulo.upper()), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_y(250)
+    pdf.fonte("", 12)
+    pdf.multi_cell(0, ENTRELINHA, pdf.t(proj.get("abnt_cidade") or proj.get("cidade_uf") or ""), align="C",
+                   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.multi_cell(0, ENTRELINHA, pdf.t(proj.get("abnt_ano") or str(date.today().year)), align="C",
+                   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+
+def _folha_rosto(pdf, proj, autores, titulo):
+    pdf.add_page()
+    pdf.fonte("", 12)
+    for a in autores:
+        pdf.multi_cell(0, ENTRELINHA, pdf.t(a.upper()), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_y(110)
+    pdf.fonte("B", 14)
+    pdf.multi_cell(0, 8, pdf.t(titulo.upper()), align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(14)
+    disc = proj.get("abnt_disciplina") or "disciplina"
+    natureza = (f"Plano de negócio apresentado à {disc}" + (f" do curso de {proj['abnt_curso']}" if proj.get("abnt_curso") else "")
+                + (f" da {proj['abnt_instituicao']}" if proj.get("abnt_instituicao") else "") + ", como requisito parcial para aprovação.")
+    if proj.get("abnt_orientador"):
+        natureza += f"\n\nOrientador(a): {proj['abnt_orientador']}"
+    pdf.fonte("", 10)
+    pdf.set_x(30 + 80)
+    pdf.multi_cell(80, 5, pdf.t(natureza), align="J", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_y(250)
+    pdf.fonte("", 12)
+    pdf.multi_cell(0, ENTRELINHA, pdf.t(proj.get("abnt_cidade") or proj.get("cidade_uf") or ""), align="C",
+                   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.multi_cell(0, ENTRELINHA, pdf.t(proj.get("abnt_ano") or str(date.today().year)), align="C",
+                   new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+
+def _sumario(pdf, toc):
+    pdf.add_page()
+    pdf.fonte("B", 12)
+    pdf.cell(0, ENTRELINHA, "SUMÁRIO" if pdf.unicode else "SUMARIO", align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(4)
+    w = pdf.w - pdf.l_margin - pdf.r_margin
+    for nivel, num, tit, pag in toc:
+        pdf.fonte("B" if nivel == 1 else "", 12)
+        esq = pdf.t(f"{num} {tit}".strip())
+        while pdf.get_string_width(esq) > w - 25 and len(esq) > 5:
+            esq = esq[:-2]
+        y = pdf.get_y()
+        pdf.set_xy(pdf.l_margin, y)
+        pdf.cell(pdf.get_string_width(esq) + 1, ENTRELINHA, esq)
+        pdf.fonte("", 12)
+        x_ini = pdf.get_x()
+        num_w = pdf.get_string_width(str(pag)) + 1
+        largura_pontos = w - (x_ini - pdf.l_margin) - num_w - 1
+        n_pontos = max(int(largura_pontos / max(pdf.get_string_width("."), 0.1)), 0)
+        pdf.cell(largura_pontos, ENTRELINHA, "." * n_pontos)
+        pdf.set_xy(pdf.l_margin + w - num_w, y)
+        pdf.cell(num_w, ENTRELINHA, str(pag), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+
+def _conteudo(pdf, proj, d, res, refs_extra: list) -> list:
+    """Escreve as seções textuais. Retorna as referências metodológicas usadas."""
+    usadas = []
+    a1 = res["anos"][1]
+    N = res["N"]
+    pdf.numerar_a_partir = pdf.page_no() + 1
+    # 1 INTRODUÇÃO
+    pdf.secao_abnt("1", "Introdução", nova_pagina=True)
+    pdf.texto(proj.get("sumario_executivo") or gerar_sumario(proj, d, res))
+    # 2 APRESENTAÇÃO
+    pdf.secao_abnt("2", "Apresentação do empreendimento")
+    pdf.texto(f"O empreendimento {proj.get('nome_negocio') or ''} será instalado em {proj.get('cidade_uf') or 'local a definir'}, "
+              f"no setor de {str(proj.get('setor_atuacao') or 'atuação a definir').lower()}, com enquadramento previsto no "
+              f"{proj.get('enquadramento') or 'regime tributário a definir'}.")
+    if any(proj.get(k) for k in ("missao", "visao", "valores")):
+        pdf.secao_abnt("2.1", "Missão, visão e valores", 2)
+        pdf.texto(f"Missão: {proj.get('missao') or '-'}\nVisão: {proj.get('visao') or '-'}\nValores: {proj.get('valores') or '-'}")
+    soc = d["socios"]
+    if not soc.empty:
+        pdf.secao_abnt("2.2", "Quadro societário", 2)
+        pdf.tabela_abnt("Quadro societário e capital investido", pd.DataFrame({
+            "Sócio": soc["nome"], "Função": soc["funcao"], "Capital investido": soc["capital_integralizado"].map(brl)}),
+            larguras=(60, 60, 40), alinhar=("LEFT", "LEFT", "RIGHT"))
+    # 3 MERCADO
+    pdf.secao_abnt("3", "Análise de mercado")
+    seg = d["segmentos"]
+    if not seg.empty:
+        pdf.secao_abnt("3.1", "Segmentos de clientes", 2)
+        pdf.tabela_abnt("Segmentos de clientes avaliados", pd.DataFrame({"Segmento": seg["nome"], "Descrição": seg["descricao"]}),
+                        larguras=(50, 110), alinhar=("LEFT", "LEFT"))
+    pdf.secao_abnt("3.2", "Tamanho do mercado", 2)
+    tam, sam = float(proj.get("tam_clientes") or 0), float(proj.get("sam_clientes") or 0)
+    txt = (f"O mercado total foi estimado em {num_br(tam, 0)} clientes potenciais e o mercado atendível em {num_br(sam, 0)}, "
+           f"com meta de participação de {num_br(proj.get('som_pct') or 0, 1)}%.")
+    dp = d.get("dados_publicos", pd.DataFrame())
+    if not dp.empty:
+        m = {r["chave"]: r for _, r in dp.iterrows()}
+        if "populacao" in m:
+            txt += (f" Segundo o Censo Demográfico, o município de {proj.get('municipio_nome') or ''} tinha "
+                    f"{num_br(m['populacao']['valor'], 0)} habitantes em 2022 (IBGE, 2023)")
+            txt += (f", distribuídos em {num_br(m['domicilios']['valor'], 0)} domicílios ocupados." if "domicilios" in m else ".")
+        pofs = [r for k, r in m.items() if str(k).startswith("pof")]
+        for r in pofs[:2]:
+            txt += (f" De acordo com a Pesquisa de Orçamentos Familiares, a despesa média mensal das famílias com "
+                    f"{str(r['rotulo']).lower()} era de {brl(r['valor'])} em 2017-2018 (IBGE, 2019).")
+    pdf.texto(txt)
+    conc = d["concorrentes"]
+    if not conc.empty:
+        pdf.secao_abnt("3.3", "Concorrência", 2)
+        notas = d["concorrencia_notas"]
+        if not notas.empty:
+            piv = notas.pivot_table(index="atributo", columns="empresa", values="nota", aggfunc="first").reset_index()
+            piv = piv.rename(columns={"atributo": "Atributo"})
+            for c in piv.columns[1:]:
+                piv[c] = piv[c].map(lambda v: num_br(v, 0))
+            w = 160 / len(piv.columns)
+            pdf.tabela_abnt("Notas atribuídas à empresa e aos concorrentes (0 a 10)", piv, larguras=[w] * len(piv.columns))
+    ent = resumo_entrevistas(d, preco_referencia(proj, res))
+    pl = placar_evidencias(proj, d, res)
+    pdf.secao_abnt("3.4", "Validação das premissas", 2)
+    t = f"O placar de evidências indica que {pct(pl['score'], 0)} do resultado projetado se apoia em premissas pesquisadas ou testadas."
+    if ent["n"]:
+        t += (f" Foram realizadas {ent['n']} entrevistas com potenciais clientes, das quais {pct(ent['pct_sim'], 0)} indicaram que "
+              f"pagariam pelo produto ou serviço.")
+    pdf.texto(t)
+    # 4 ESTRATÉGIA
+    pdf.secao_abnt("4", "Estratégia")
+    sw = d["swot"]
+    if not sw.empty:
+        pdf.secao_abnt("4.1", "Análise SWOT", 2)
+        pdf.texto("A análise SWOT confronta os fatores internos (forças e fraquezas) com os externos (oportunidades e ameaças) e deve "
+                  "subsidiar diretamente a formulação estratégica (Wright; Kroll; Parnell, 2000).")
+        usadas.append("swot")
+        pdf.tabela_abnt("Fatores da análise SWOT", pd.DataFrame({"Natureza": sw["natureza"], "Fator": sw["fator"],
+                                                                 "Impacto": sw["impacto"]}), larguras=(30, 105, 25),
+                        alinhar=("LEFT", "LEFT", "CENTER"))
+    est = d.get("swot_estrategias", pd.DataFrame())
+    if not est.empty:
+        pdf.secao_abnt("4.2", "Estratégias da SWOT cruzada", 2)
+        pdf.tabela_abnt("Estratégias derivadas do cruzamento dos fatores", pd.DataFrame({
+            "Tipo": est["quadrante"].str.split(" ").str[0], "Estratégia": est["estrategia"], "Ação": est["acao"]}),
+            larguras=(28, 66, 66), alinhar=("LEFT", "LEFT", "LEFT"))
+    # 5 MARKETING
+    pdf.secao_abnt("5", "Plano de marketing")
+    pdf.texto("\n".join(f"{r}: {proj.get(k)}" for r, k in (("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"),
+                                                           ("Promoção", "mkt_promocao")) if proj.get(k)))
+    # 6 OPERACIONAL
+    pdf.secao_abnt("6", "Plano operacional")
+    pdf.texto(proj.get("op_processos") or "Processos a descrever.")
+    pes = d["pessoal"]
+    if not pes.empty:
+        pdf.tabela_abnt("Equipe prevista", pd.DataFrame({"Cargo": pes["cargo"], "Pessoas": pes["num_empregados"].map(lambda v: num_br(v, 0)),
+                                                         "Salário": pes["salario_mensal"].map(brl),
+                                                         "Início (mês)": pes["mes_inicio"].map(lambda v: num_br(v, 0))}),
+                        larguras=(70, 25, 35, 30))
+    # 7 FINANCEIRO
+    pdf.secao_abnt("7", "Plano financeiro")
+    pdf.secao_abnt("7.1", "Investimento e fontes", 2)
+    pdf.tabela_abnt("Investimento total", pd.DataFrame({
+        "Item": ["Investimentos fixos", "Investimentos pré-operacionais", "Capital de giro", "Total"],
+        "Valor": [brl(res["inv_fixo"]), brl(res["inv_pre"]), brl(res["capital_giro"]), brl(res["investimento_total"])]}),
+        larguras=(110, 50))
+    pdf.secao_abnt("7.2", "Demonstração do resultado", 2)
+    dre = tabela_dre(res)
+    cols = list(dre.columns)[: min(len(dre.columns), 5)]
+    pdf.tabela_abnt(f"Demonstração do resultado projetada ({N} ano{'s' if N > 1 else ''})", dre[cols],
+                    larguras=[160 - 30 * (len(cols) - 1)] + [30] * (len(cols) - 1), tam=8)
+    pdf.secao_abnt("7.3", "Indicadores de viabilidade", 2)
+    ind = tabela_indicadores(res)
+    ci = ["Indicador", "Ano 1"] + ([f"Ano {N}"] if N > 1 and f"Ano {N}" in ind.columns else [])
+    pdf.tabela_abnt("Indicadores de viabilidade", ind[ci], larguras=[90] + [70 / (len(ci) - 1)] * (len(ci) - 1), tam=9)
+    pdf.texto(f"Com taxa mínima de atratividade de {pct(res['tma'])} ao ano, o valor presente líquido é de {brl(res['vpl'])}"
+              + (f" e a taxa interna de retorno, de {pct(res['tir'])}" if res["tir"] is not None and res["tir"] == res["tir"] else "")
+              + f". O payback descontado é {res['payback_desc']}.")
+    if a1["rec_bruta"] > 0:
+        mc = monte_carlo(res, faixas_mc(d))
+        pdf.texto(f"Na simulação de Monte Carlo, com {mc['n']} cenários, a probabilidade de VPL positivo é de "
+                  f"{pct(mc['p_vpl_pos'], 0)}, e em 5% dos cenários o VPL fica abaixo de {brl(mc['p5'])}.")
+        cen = cenarios(res, proj)
+        if cen is not None and not cen.empty:
+            cen = cen.copy()
+            for c in cen.columns[1:]:
+                cen[c] = cen[c].astype(str)
+            pdf.tabela_abnt("Cenários", cen.iloc[:, :4], larguras=[55] + [35] * 3, tam=9)
+    if proj.get("setor_referencia"):
+        try:
+            cs = comparar_setor(proj["setor_referencia"], proj, d, res)
+            fonte = ("IBGE (2026), Pesquisa Anual de " + ("Comércio" if proj["setor_referencia"].startswith("Comércio") else "Serviços")
+                     + " 2024; elaborada pelos autores.")
+            pdf.tabela_abnt(f"Comparação com a média do setor: {proj['setor_referencia'].split(' · ')[1]}", pd.DataFrame({
+                "Indicador": cs["Indicador"],
+                "Plano": [pct(v) if "÷" in i or "margem" in i.lower() else brl(v) for i, v in zip(cs["Indicador"], cs["Plano"])],
+                "Setor": [pct(v) if "÷" in i or "margem" in i.lower() else brl(v) for i, v in zip(cs["Indicador"], cs["Setor (Brasil)"])]}),
+                larguras=(90, 35, 35), fonte=fonte)
+        except Exception:
+            pass
+    vl = valuation(res, proj, d)
+    pdf.texto(f"Pelo método do fluxo de caixa descontado, o patrimônio dos sócios foi estimado em {brl(vl['equity_dcf'])}; "
+              f"os métodos por múltiplos resultam em valores entre {brl(vl['faixa'][0])} e {brl(vl['faixa'][1])}.")
+    # 8 RISCOS
+    ri = d["riscos"]
+    pdf.secao_abnt("8", "Riscos e contingência")
+    pdf.texto("De acordo com o Sebrae (2026), apenas 41,5% dos microempreendedores individuais e 76% das micro e pequenas empresas "
+              "continuam ativos após cinco anos, o que reforça a importância do planejamento de riscos.")
+    usadas.append("sebrae")
+    if not ri.empty:
+        pdf.tabela_abnt("Matriz de riscos", pd.DataFrame({"Risco": ri["risco"], "Prob.": ri["probabilidade"].map(lambda v: num_br(v, 0)),
+                                                          "Impacto": ri["impacto"].map(lambda v: num_br(v, 0)), "Mitigação": ri["mitigacao"]}),
+                        larguras=(52, 16, 22, 70), alinhar=("LEFT", "CENTER", "CENTER", "LEFT"))
+    # 9 CONSIDERAÇÕES
+    pdf.secao_abnt("9", "Considerações finais")
+    pdf.texto(proj.get("conclusao") or "Considerações finais a redigir pelo grupo.")
+    return usadas
+
+
+def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
+    autores = [a.strip() for a in str(proj.get("autores") or "").replace(",", ";").split(";") if a.strip()] or ["Autor(a)"]
+    titulo = f"Plano de negócio: {proj.get('nome_negocio') or 'empreendimento'}"
+    hoje = date.today()
+    meses = ["jan.", "fev.", "mar.", "abr.", "maio", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."]
+    acesso = f"{hoje.day} {meses[hoje.month - 1]} {hoje.year}"
+    toc_final = None
+    paginas_sumario = 1
+    for _ in range(2):   # 1ª passagem: descobre as páginas das seções; 2ª: escreve o sumário com os números certos
+        pdf = RelatorioABNT(proj.get("nome_negocio") or "")
+        _capa(pdf, proj, autores, titulo)
+        _folha_rosto(pdf, proj, autores, titulo)
+        if toc_final is not None:
+            _sumario(pdf, toc_final)
+            while pdf.page_no() < 2 + paginas_sumario:
+                pdf.add_page()
+        else:
+            pdf.add_page()   # reserva de uma página para o sumário na primeira passagem
+        usadas = _conteudo(pdf, proj, d, res, [])
+        # referências
+        pdf.add_page()
+        pdf.fonte("B", 12)
+        pdf.cell(0, ENTRELINHA, "REFERÊNCIAS" if pdf.unicode else "REFERENCIAS", align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.toc.append((1, "", "REFERÊNCIAS", pdf.page_no() - 1))
+        pdf.ln(4)
+        refs = [str(r) for r in d.get("referencias", pd.DataFrame(columns=["referencia"]))["referencia"] if str(r).strip()]
+        refs += [REFS_METODO[u].format(hoje=acesso) for u in dict.fromkeys(usadas)]
+        refs += referencias_abnt_dados(proj, d, acesso)
+        for r in sorted(set(refs), key=lambda s: s.upper()):
+            pdf.fonte("", 12)
+            pdf.multi_cell(0, 5, pdf.t(r), align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT, markdown=True)
+            pdf.ln(5)
+        if toc_final is None:
+            toc_final = pdf.toc
+            tmp = RelatorioABNT("")
+            _sumario(tmp, toc_final)
+            paginas_sumario = tmp.page_no()
+            if paginas_sumario > 1:   # sumário maior que uma página desloca as seções
+                toc_final = [(n, a, t, p + paginas_sumario - 1) for n, a, t, p in toc_final]
+    return bytes(pdf.output())
+
+# ##############################################################################
 # PARTE: pnbox_ui_base.py
 # ##############################################################################
 # ==============================================================================
@@ -6080,7 +7420,7 @@ def ficha_avaliacao_pdf(avaliacoes: list, rubrica=RUBRICA_PADRAO, professor="", 
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "7.2"
+VERSAO_PROGRAMA = "8.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -6219,6 +7559,8 @@ EMOCOES = {"Entusiasmado": "🤩", "Satisfeito": "🙂", "Neutro": "😐", "Insa
 # PÁGINAS (ferramentas) DO PLANO
 # ------------------------------------------------------------------------------
 PAGINAS = [
+    ("trilha", "Identificação", "🚦", "Trilha guiada e o que falta",
+     "A ordem recomendada de preenchimento, o próximo passo e tudo o que ainda falta, com atalho para cada ajuste."),
     ("projeto", "Identificação", "🏢", "Informações e sócios",
      "Dados do negócio, integrantes do grupo, premissas financeiras e quadro societário."),
     ("identidade", "Identificação", "🧭", "Missão, visão, valores e objetivos",
@@ -6233,6 +7575,8 @@ PAGINAS = [
      "Roteiro de entrevista de descoberta e registro das conversas: quais dores se repetem e quanto pagariam."),
     ("mercado", "Cliente e mercado", "📐", "Tamanho do mercado",
      "Estime o mercado total (TAM), o alcançável (SAM) e o conquistável (SOM) e confira se a meta de vendas é realista."),
+    ("dados_publicos", "Cliente e mercado", "🏙️", "Dados do município e das famílias (IBGE)",
+     "População, domicílios, PIB e empresas do município, e quanto as famílias gastam em cada categoria (POF)."),
     ("proposta", "Problema e solução", "❤️", "Proposta de valor",
      "Defina, para cada persona, os benefícios que o negócio entrega e o que o diferencia."),
     ("vpc", "Problema e solução", "🎁", "Canvas da proposta de valor",
@@ -6249,8 +7593,12 @@ PAGINAS = [
      "Fatores externos: tendências que ajudam e riscos que vêm do ambiente."),
     ("swot", "Estratégia", "🧩", "Análise SWOT",
      "Matriz SWOT gerada automaticamente e a estratégia indicada para o negócio."),
+    ("swot_cruzada", "Estratégia", "🔀", "SWOT cruzada",
+     "Transforme o diagnóstico em estratégias ofensivas, de confronto, de reforço e defensivas."),
     ("canvas", "Análise estratégica", "🗂️", "Business Model Canvas",
      "O modelo de negócio em uma página, montado com o que você já preencheu."),
+    ("lean", "Análise estratégica", "🪧", "Lean Canvas",
+     "A versão do Canvas para negócios novos: problema, solução, métricas-chave e vantagem injusta."),
     ("porter", "Análise estratégica", "⚔️", "Cinco Forças de Porter",
      "Pressão competitiva do setor: rivalidade, novos entrantes, substitutos, clientes e fornecedores."),
     ("ge", "Análise estratégica", "🧮", "Matriz GE / McKinsey",
@@ -6271,6 +7619,8 @@ PAGINAS = [
      "Quem fornece cada item, prazos de pagamento e de entrega."),
     ("investimentos", "Finanças", "💰", "Investimentos e fontes",
      "Investimentos fixos, pré-operacionais, capital de giro e de onde vem o dinheiro."),
+    ("financiamento", "Finanças", "🏦", "Financiamento (SAC, Price e carência)",
+     "Parcelas, juros e custo efetivo de cada empréstimo, e comparação entre propostas de crédito."),
     ("produtos", "Finanças", "📦", "Produtos e materiais",
      "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
     ("servicos", "Finanças", "🧑‍💻", "Serviços e custo da hora",
@@ -6291,6 +7641,8 @@ PAGINAS = [
      "Entradas e saídas de dinheiro em cada mês do Ano 1."),
     ("indicadores", "Finanças", "📊", "Indicadores financeiros",
      "Semáforo de saúde, VPL, TIR, payback, pontos de equilíbrio e checagens."),
+    ("referencias", "Finanças", "📏", "Referências do setor (IBGE e Sebrae)",
+     "Compare margem, peso da folha e produtividade com a média do setor e veja a taxa de sobrevivência das empresas."),
     ("graficos", "Finanças", "📈", "Gráficos",
      "Composição do investimento, dos custos e da receita, ponto de equilíbrio e payback."),
     ("simulador", "Ferramentas complementares", "🎚️", "Simulador de resultados",
@@ -6299,6 +7651,10 @@ PAGINAS = [
      "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
     ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
      "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
+    ("valuation", "Ferramentas complementares", "💎", "Valuation e rodada de investimento",
+     "Quanto vale o negócio por três métodos e quanto um investidor levaria em troca do aporte."),
+    ("impacto", "Ferramentas complementares", "🌍", "Impacto social e ODS",
+     "Teoria da mudança, indicadores de impacto e Objetivos de Desenvolvimento Sustentável."),
     ("experimentos", "Ferramentas complementares", "🧪", "Quadro de experimentação",
      "Hipóteses e testes para validar a ideia antes de investir."),
     ("riscos", "Ferramentas complementares", "⚠️", "Riscos e contingência",
@@ -6317,6 +7673,8 @@ PAGINAS = [
      "Perguntas difíceis geradas a partir dos pontos fracos do plano, para treinar a defesa."),
     ("formalizacao", "Validação e defesa", "📋", "Checklist de formalização",
      "Enquadramento (MEI, ME, EPP), registros, licenças, LGPD e marca."),
+    ("editais", "Validação e defesa", "📝", "Editais de fomento (modelo Centelha)",
+     "Rascunho da proposta para editais de inovação, com limite de caracteres e orçamento por rubrica."),
     ("sumario", "Conclusão e entrega", "📝", "Sumário executivo",
      "Resumo do plano gerado automaticamente, para revisar e completar."),
     ("apresentacao", "Conclusão e entrega", "🎤", "Modo apresentação",
@@ -6325,6 +7683,14 @@ PAGINAS = [
      "PDF completo, pitch deck, Word, Excel e arquivo do projeto."),
     ("professor", "Conclusão e entrega", "🎓", "Modo professor",
      "Compare os projetos da turma, aplique a rubrica e gere fichas de avaliação."),
+    ("glossario", "Conclusão e entrega", "📖", "Glossário e leitura dos números",
+     "O que significa cada termo e o que os números deste projeto querem dizer, em linguagem simples."),
+    ("planilha", "Conclusão e entrega", "📑", "Importar e exportar planilha",
+     "Traga produtos, custos, entrevistas e respostas de pesquisa de uma planilha e exporte tudo para o Excel."),
+    ("historico", "Conclusão e entrega", "🕑", "Histórico de versões do projeto",
+     "Salve versões, compare os indicadores entre elas e restaure uma versão anterior."),
+    ("novidades", "Conclusão e entrega", "🆕", "Novidades do programa",
+     "O que mudou em cada versão do ViabilizaLab."),
     ("config", "Conclusão e entrega", "⚙️", "Configurações e listas",
      "Listas personalizadas (unidades, categorias...), versões salvas e dados deste computador."),
 ]
@@ -6705,12 +8071,13 @@ def situacao(p: str) -> str:
         "sumario": (len(proj["sumario_executivo"]) > 200, bool(proj["sumario_executivo"])),
     }
     regras.update(regras_v71(proj, d))
+    regras.update(regras_v8(proj, d))
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -6858,6 +8225,7 @@ def cabecalho(p: str):
         if st.button("Entendi, ocultar aviso", key="ok_alerta"):
             ss.alerta = None
             st.rerun()
+    comentarios_da_pagina(p)
     st.write("")
 
 
@@ -6964,6 +8332,10 @@ se a ideia é **viável**. Como usar:
     with c1:
         st.markdown(f"**Plano {int(comp * 100)}% preenchido**")
         st.progress(comp)
+        prox = proximo_passo()
+        if prox and st.button(f"👉 Próximo passo: {PAG[prox][3]}", key="ini_prox"):
+            ir(prox)
+            st.rerun()
     if rx:
         c2.metric("Raio-X do plano", f"{rx['nota']}/100", help="Preenchimento (30) + checagens OK (30) + saúde financeira (40)")
         c3.metric("Investimento total", brl(res["investimento_total"]).split(",")[0],
@@ -7774,7 +9146,12 @@ def pg_investimentos():
         st.caption("O capital próprio vem dos sócios (Informações e sócios). Aqui você cadastra empréstimos e financiamentos.")
         editor("emprestimos", {"descricao": T("Descrição (banco, linha de crédito)", required=True, width="large"),
                                "valor": moeda("Valor (R$)"), "taxa_anual_pct": N("Juros (% ao ano)", min_value=0.0),
-                               "prazo_meses": N("Prazo (meses)", min_value=1, step=1)}, "descricao")
+                               "prazo_meses": N("Prazo (meses)", min_value=1, step=1),
+                               "carencia_meses": N("Carência (meses)", min_value=0, step=1),
+                               "sistema": S("Sistema", options=["Price", "SAC"])}, "descricao")
+        if st.button("🏦 Ver parcelas e comparar propostas de crédito", key="inv_fin"):
+            ir("financiamento")
+            st.rerun()
         r = R()
         it = r["investimento_total"]
         a, b = st.columns(2)
@@ -8099,6 +9476,9 @@ def pg_indicadores():
                 st.caption(s_["Leitura"])
                 with st.popover("🔎 Como foi calculado"):
                     st.write(s_["Como foi calculado"])
+    with st.expander("📖 O que significam estes números? (leitura em linguagem simples)"):
+        for nome, valor, leitura in explicar_indicadores(r):
+            st.markdown(f"**{nome}: {valor}**  \n{leitura}")
     st.subheader("Resumo financeiro (Ano 1, padrão Sebrae)")
     rs, a1 = r["resumo"], r["anos"][1]
     k = st.columns(4)
@@ -9802,6 +11182,700 @@ def pg_formalizacao():
     proxima("formalizacao")
 
 # ##############################################################################
+# PARTE: pnbox_ui_paginas7.py
+# ##############################################################################
+# ==============================================================================
+# VIABILIZALAB 8 - INTERFACE DAS NOVAS FERRAMENTAS
+# ==============================================================================
+
+
+# ------------------------------------------------------------------------------
+# TRILHA GUIADA E "O QUE FALTA"
+# ------------------------------------------------------------------------------
+def proximo_passo() -> str | None:
+    """Primeira ferramenta essencial que ainda não está concluída."""
+    for p in ESSENCIAIS:
+        if p in PAG and situacao(p) != "✅":
+            return p
+    for p in [x[0] for x in PAGINAS]:
+        if situacao(p) == "◐":
+            return p
+    return None
+
+
+def pg_trilha():
+    cabecalho("trilha")
+    st.caption("A trilha mostra a ordem recomendada de preenchimento. As ferramentas essenciais formam o plano mínimo; "
+               "as demais aprofundam a análise.")
+    prox = proximo_passo()
+    if prox:
+        with st.container(border=True):
+            st.markdown(f"### 👉 Próximo passo: {PAG[prox][2]} {PAG[prox][3]}")
+            st.caption(PAG[prox][4])
+            if st.button("Ir para esta ferramenta", type="primary", key="trilha_ir"):
+                ir(prox)
+                st.rerun()
+    else:
+        st.success("Todas as ferramentas essenciais estão concluídas. Agora vale aprofundar a validação e preparar a defesa.")
+    ess = [p for p in ESSENCIAIS if p in PAG]
+    feitos = sum(1 for p in ess if situacao(p) == "✅")
+    st.progress(feitos / len(ess), text=f"Plano mínimo: {feitos} de {len(ess)} ferramentas essenciais concluídas")
+    st.subheader("O que falta, por ordem de importância")
+    chk = CHK()
+    pend = chk[chk["Situação"] != "OK"]
+    n = 0
+    for i, r in pend.iterrows():
+        n += 1
+        a, b = st.columns([4, 1.2])
+        a.markdown(f"⚠️ **{r['Teste']}**: {r['Valor apurado']}  \n<small>{r['Como corrigir'] or r['Observação']}</small>",
+                   unsafe_allow_html=True)
+        if r["destino"] and b.button("Corrigir →", key=f"tri_chk_{i}", width="stretch"):
+            ir(r["destino"], f"{r['Teste']}: {r['Valor apurado']}. {r['Como corrigir'] or r['Observação']}")
+            st.rerun()
+    for p in ess:
+        s_ = situacao(p)
+        if s_ != "✅":
+            n += 1
+            a, b = st.columns([4, 1.2])
+            a.markdown(f"{'◐' if s_ == '◐' else '○'} **{PAG[p][3]}** ({'em andamento' if s_ == '◐' else 'não iniciada'})")
+            if b.button("Abrir →", key=f"tri_pg_{p}", width="stretch"):
+                ir(p)
+                st.rerun()
+    if n == 0:
+        st.success("Nada pendente nas ferramentas essenciais e nas checagens.")
+    st.subheader("Mapa completo")
+    for g in GRUPOS:
+        itens = [p for p in PAGINAS if p[1] == g]
+        st.markdown(f"**{g}**: " + " · ".join(f"{situacao(p[0]) or '·'} {p[3]}" for p in itens))
+
+
+# ------------------------------------------------------------------------------
+# GLOSSÁRIO
+# ------------------------------------------------------------------------------
+def pg_glossario():
+    cabecalho("glossario")
+    try:
+        st.subheader("📖 O que significam os números deste projeto")
+        for nome, valor, leitura in explicar_indicadores(R()):
+            with st.container(border=True):
+                st.markdown(f"**{nome}: {valor}**  \n{leitura}")
+    except Exception:
+        st.info("A leitura dos números aparece quando houver produtos, custos e investimentos.")
+    st.subheader("🔤 Termos")
+    busca = st.text_input("Procurar termo", key="glos_busca", placeholder="Ex.: VPL, markup, churn")
+    for termo, defi in sorted(GLOSSARIO.items(), key=lambda x: x[0].lower()):
+        if busca and busca.lower() not in (termo + defi).lower():
+            continue
+        st.markdown(f"**{termo}**: {defi}")
+    proxima("glossario")
+
+
+# ------------------------------------------------------------------------------
+# IMPORTAR E EXPORTAR PLANILHAS
+# ------------------------------------------------------------------------------
+TABELAS_IMPORTAVEIS = {
+    "catalogo": ("Produtos e serviços", {"categoria": "Categoria", "descricao": "Descrição", "preco_venda": "Preço de venda",
+                                         "custo_aquisicao": "Custo unitário", "qtd_mensal": "Quantidade por mês",
+                                         "qtd_estoque_inicial": "Estoque inicial", "horas_unit": "Horas por unidade"}),
+    "custos_fixos": ("Custos fixos", {"descricao": "Descrição", "classificacao": "Classificação", "valor_mensal": "Valor mensal"}),
+    "inv_fixos": ("Investimentos fixos", {"descricao": "Descrição", "quantidade": "Quantidade", "valor_unitario": "Valor unitário",
+                                          "vida_util_anos": "Vida útil (anos)", "valor_residual_pct": "Valor residual (%)"}),
+    "materiais": ("Materiais", {"nome": "Material", "categoria": "Categoria", "unidade": "Unidade", "valor_unitario": "Valor unitário"}),
+    "pessoal": ("Equipe", {"cargo": "Cargo", "area": "Área", "num_empregados": "Pessoas", "salario_mensal": "Salário",
+                           "encargos_pct": "Encargos (%)", "beneficios_unit": "Benefícios", "mes_inicio": "Mês de início"}),
+    "entrevistas": ("Entrevistas", {"data": "Data", "entrevistado": "Entrevistado", "perfil": "Perfil", "dores": "Dores",
+                                    "solucao_atual": "Solução atual", "pagaria": "Pagaria", "valor_pagaria": "Valor que pagaria",
+                                    "aprendizado": "Aprendizado"}),
+    "precos_vw": ("Teste de preço (Van Westendorp)", {"respondente": "Respondente", "muito_barato": "Barato demais",
+                                                      "barato": "Barato", "caro": "Caro", "muito_caro": "Caro demais"}),
+    "concorrentes": ("Concorrentes", {"nome": "Nome"}),
+    "riscos": ("Riscos", {"risco": "Risco", "probabilidade": "Probabilidade", "impacto": "Impacto", "mitigacao": "Mitigação",
+                          "responsavel": "Responsável"}),
+}
+
+
+def pg_planilha():
+    cabecalho("planilha")
+    t1, t2 = st.tabs(["⬆️ Importar de planilha", "⬇️ Exportar para Excel"])
+    with t1:
+        st.caption("Traga listas grandes de uma planilha em vez de digitar linha a linha. A primeira linha da planilha precisa ter "
+                   "os nomes das colunas; o programa reconhece os nomes do modelo, com ou sem acentos.")
+        tab = st.selectbox("Para qual ferramenta?", list(TABELAS_IMPORTAVEIS), format_func=lambda k: TABELAS_IMPORTAVEIS[k][0],
+                           key="imp_tab")
+        nome_t, rot = TABELAS_IMPORTAVEIS[tab]
+        modelo = pd.DataFrame(columns=list(rot.values()))
+        b = io.BytesIO()
+        with pd.ExcelWriter(b, engine="openpyxl") as w:
+            modelo.to_excel(w, index=False, sheet_name=nome_t[:31])
+        st.download_button(f"📄 Baixar planilha-modelo de {nome_t}", b.getvalue(), f"modelo_{tab}.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        arq = st.file_uploader("Planilha preenchida (.xlsx ou .csv)", type=["xlsx", "csv"], key=wk(f"imp_up_{tab}"))
+        if arq:
+            try:
+                bruto = ler_planilha(arq.name, arq.getvalue())
+            except Exception as e:
+                st.error(f"Não foi possível ler a planilha: {e}")
+                return proxima("planilha")
+            mapa = mapear_colunas(bruto, colunas_de(tab), rot)
+            if not mapa:
+                st.error("Nenhuma coluna reconhecida. Use os nomes da planilha-modelo.")
+                return proxima("planilha")
+            novo = bruto[list(mapa)].rename(columns=mapa)
+            for c in colunas_de(tab):
+                if c not in novo:
+                    novo[c] = None
+            tipos = dict(SCHEMA[tab])
+            for c in novo.columns:
+                if tipos.get(c) in ("REAL", "INTEGER"):
+                    novo[c] = novo[c].map(converter_numero)
+            novo = limpar(novo[colunas_de(tab)].dropna(how="all"), tab)
+            st.write(f"**{len(novo)} linha(s)** reconhecida(s). Colunas usadas: " + ", ".join(f"{a} → {rot.get(b_, b_)}"
+                                                                                              for a, b_ in mapa.items()))
+            st.dataframe(novo.head(20), hide_index=True, width="stretch")
+            modo = st.radio("Como incluir", ["Acrescentar às linhas atuais", "Substituir as linhas atuais"], horizontal=True,
+                            key="imp_modo")
+            if st.button("✅ Importar", type="primary", key="imp_ok"):
+                base = novo if modo.startswith("Substituir") else pd.concat([d[tab], novo], ignore_index=True)
+                recarregar_tabela(tab, base, colunas_de(tab)[0])
+                st.success(f"{len(novo)} linha(s) importada(s) em {nome_t}.")
+    with t2:
+        st.caption("Uma pasta de trabalho com todas as tabelas do projeto, a DRE, o fluxo de caixa e os indicadores.")
+        if st.button("Gerar planilha", key="exp_xlsx"):
+            ss.xlsx_v8 = planilha_excel(R())
+        if ss.get("xlsx_v8"):
+            st.download_button("⬇️ Baixar planilha (Excel)", ss.xlsx_v8, f"{proj['nome_negocio'] or 'projeto'}.xlsx",
+                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+    proxima("planilha")
+
+
+# ------------------------------------------------------------------------------
+# HISTÓRICO DE VERSÕES DO PROJETO (com comparação de indicadores)
+# ------------------------------------------------------------------------------
+def indicadores_de_versao(vid: int) -> dict | None:
+    linha = conn.execute("SELECT dados FROM versoes WHERE id=?", (vid,)).fetchone()
+    if not linha:
+        return None
+    dados = json.loads(linha[0])
+    p_ = dados.get("projeto", [{}])[0] if dados.get("projeto") else {}
+    p_ = {**PROJETO_PADRAO, **{k: v for k, v in p_.items() if v is not None}}
+    d_ = {}
+    for t in SCHEMA:
+        if t in ("projeto", "versoes"):
+            continue
+        cols = colunas_de(t)
+        df = pd.DataFrame(dados.get(t, []))
+        for c in cols:
+            if c not in df:
+                df[c] = None
+        d_[t] = limpar(df[cols] if len(df) else pd.DataFrame(columns=cols), t)
+    pv = dados.get("proposta_valor")
+    d_["proposta_valor"] = pd.DataFrame(pv) if pv else d_.get("proposta_valor", pd.DataFrame())
+    r_ = executar_motor(p_, d_)
+    return {"Receita Ano 1": r_["anos"][1]["rec_bruta"], "Lucro Ano 1": r_["anos"][1]["resultado"],
+            "Investimento": r_["investimento_total"], "VPL": r_["vpl"], "TIR": r_["tir"]}
+
+
+def pg_historico():
+    cabecalho("historico")
+    st.caption("Cada versão guarda uma foto completa do projeto. Compare os indicadores para ver o efeito de cada mudança e "
+               "restaure uma versão anterior se precisar. O programa também cria cópias automáticas a cada 10 minutos.")
+    a, b = st.columns([3, 1])
+    nome_v = a.text_input("Nome da versão", placeholder="Ex.: Depois de testar o preço", label_visibility="collapsed", key="hist_nome")
+    if b.button("💾 Salvar versão agora", width="stretch", key="hist_salvar"):
+        salvar_versao(nome_v.strip() or "Versão manual")
+        st.rerun()
+    vs = pd.read_sql("SELECT id, nome, data FROM versoes ORDER BY id DESC", conn)
+    if vs.empty:
+        st.info("Nenhuma versão salva ainda.")
+        return proxima("historico")
+    if st.button("📊 Comparar os indicadores de todas as versões", key="hist_comp"):
+        linhas_ = []
+        for _, v in vs.iterrows():
+            try:
+                ind = indicadores_de_versao(int(v["id"]))
+            except Exception:
+                ind = None
+            if ind:
+                linhas_.append({"Versão": v["nome"], "Data": v["data"], **ind})
+        r_ = R()
+        linhas_.insert(0, {"Versão": "▶ Projeto atual", "Data": "agora", "Receita Ano 1": r_["anos"][1]["rec_bruta"],
+                           "Lucro Ano 1": r_["anos"][1]["resultado"], "Investimento": r_["investimento_total"],
+                           "VPL": r_["vpl"], "TIR": r_["tir"]})
+        ss.hist_comp = pd.DataFrame(linhas_)
+    if ss.get("hist_comp") is not None:
+        st.dataframe(ss.hist_comp, hide_index=True, width="stretch", column_config={
+            c: N(format="R$ %.0f") for c in ("Receita Ano 1", "Lucro Ano 1", "Investimento", "VPL")} | {"TIR": N(format="percent")})
+    for _, v in vs.iterrows():
+        a, b, c = st.columns([4, 1, 1])
+        a.markdown(f"**{v['nome']}** · {v['data']}")
+        if b.button("Restaurar", key=f"hrest_{v['id']}", width="stretch"):
+            restaurar_versao(int(v["id"]))
+            ss.hist_comp = None
+            st.toast("Versão restaurada. Uma cópia do estado anterior foi guardada.")
+            st.rerun()
+        if c.button("Apagar", key=f"hapv_{v['id']}", width="stretch"):
+            conn.execute("DELETE FROM versoes WHERE id=?", (int(v["id"]),))
+            conn.commit()
+            ss.hist_comp = None
+            st.rerun()
+    proxima("historico")
+
+
+# ------------------------------------------------------------------------------
+# FINANCIAMENTO: SAC, PRICE, CARÊNCIA E COMPARAÇÃO DE PROPOSTAS
+# ------------------------------------------------------------------------------
+def pg_financiamento():
+    cabecalho("financiamento")
+    t1, t2 = st.tabs(["🏦 Empréstimos do plano", "⚖️ Comparar propostas de crédito"])
+    with t1:
+        st.caption("Estes empréstimos entram no investimento, no fluxo de caixa e na DRE. Escolha o sistema de amortização e a "
+                   "carência (meses em que se paga só os juros).")
+        editor("emprestimos", {"descricao": T("Linha de crédito", required=True, width="large"), "valor": moeda("Valor (R$)"),
+                               "taxa_anual_pct": N("Juros (% ao ano)", min_value=0.0), "prazo_meses": N("Prazo total (meses)", min_value=1, step=1),
+                               "carencia_meses": N("Carência (meses)", min_value=0, step=1),
+                               "sistema": S("Sistema", options=["Price", "SAC"])}, "descricao")
+        emp = d["emprestimos"]
+        for _, r in emp.iterrows():
+            if float(r["valor"] or 0) <= 0:
+                continue
+            rs = resumo_emprestimo(r["valor"], r["taxa_anual_pct"], r["prazo_meses"], r["carencia_meses"], r["sistema"])
+            with st.expander(f"📄 {r['descricao']}: parcela de {brl(rs['primeira'])} a {brl(rs['menor'])} · juros totais {brl(rs['juros'])}"):
+                k = st.columns(4)
+                k[0].metric("Total pago", brl(rs["total_pago"]))
+                k[1].metric("Juros totais", brl(rs["juros"]))
+                k[2].metric("Maior parcela", brl(rs["maior"]))
+                k[3].metric("CET (a.a.)", pct(rs["cet"]))
+                g = rs["tabela"].melt(id_vars="Mês", value_vars=["Juros", "Amortização"], var_name="Parte", value_name="R$")
+                st.altair_chart(alt.Chart(g).mark_bar().encode(x="Mês:O", y="R$:Q", color=alt.Color("Parte:N", legend=alt.Legend(orient="bottom")))
+                                .properties(height=220), width="stretch")
+                st.dataframe(rs["tabela"], hide_index=True, width="stretch", height=240,
+                             column_config={c: N(format="R$ %.2f") for c in ("Juros", "Amortização", "Parcela", "Saldo devedor")})
+    with t2:
+        st.caption("Compare propostas antes de decidir. As taxas mudam com frequência: use as condições informadas pelo banco "
+                   "ou pela cooperativa na data da simulação.")
+        base = ss.setdefault("propostas_credito", pd.DataFrame([
+            {"Proposta": "Proposta A (exemplo)", "Valor": 30000.0, "Juros (% a.a.)": 18.0, "Prazo (meses)": 36, "Carência (meses)": 6, "Sistema": "Price"},
+            {"Proposta": "Proposta B (exemplo)", "Valor": 30000.0, "Juros (% a.a.)": 22.0, "Prazo (meses)": 24, "Carência (meses)": 0, "Sistema": "SAC"}]))
+        ed = st.data_editor(base, num_rows="dynamic", hide_index=True, width="stretch", key="ed_propostas",
+                            column_config={"Sistema": S(options=["Price", "SAC"]), "Valor": N(format="R$ %.2f")})
+        ss.propostas_credito = ed
+        linhas_ = []
+        for _, r in ed.dropna(subset=["Valor"]).iterrows():
+            try:
+                rs = resumo_emprestimo(r["Valor"], r["Juros (% a.a.)"], r["Prazo (meses)"], r["Carência (meses)"], r["Sistema"])
+            except Exception:
+                continue
+            linhas_.append({"Proposta": r["Proposta"], "Primeira parcela": rs["primeira"], "Maior parcela": rs["maior"],
+                            "Total pago": rs["total_pago"], "Juros totais": rs["juros"], "CET (a.a.)": rs["cet"]})
+        if linhas_:
+            cmp_ = pd.DataFrame(linhas_)
+            st.dataframe(cmp_, hide_index=True, width="stretch", column_config={
+                c: N(format="R$ %.2f") for c in ("Primeira parcela", "Maior parcela", "Total pago", "Juros totais")} | {"CET (a.a.)": N(format="percent")})
+            mel = cmp_.sort_values("CET (a.a.)").iloc[0]
+            st.info(f"Menor custo efetivo: **{mel['Proposta']}** ({pct(mel['CET (a.a.)'])} ao ano). Confira também se a parcela cabe "
+                    "no fluxo de caixa dos primeiros meses.")
+    proxima("financiamento")
+
+
+# ------------------------------------------------------------------------------
+# DADOS PÚBLICOS DO MUNICÍPIO (IBGE) E POF
+# ------------------------------------------------------------------------------
+def _gravar_dado(chave, rotulo, valor, periodo, fonte):
+    dp = d["dados_publicos"]
+    dp = dp[dp["chave"] != chave]
+    dp = pd.concat([dp, pd.DataFrame([{"chave": chave, "rotulo": rotulo, "valor": valor, "periodo": periodo, "fonte": fonte}])],
+                   ignore_index=True)
+    salvar(conn, "dados_publicos", dp, "chave")
+    d["dados_publicos"] = limpar(dp.reset_index(drop=True), "dados_publicos")
+
+
+def pg_dados_publicos():
+    cabecalho("dados_publicos")
+    st.caption("Busca dados oficiais do IBGE pela internet (gratuito) para dimensionar o mercado com números verificáveis. "
+               "Os valores ficam guardados no projeto e entram no relatório com a fonte.")
+    t1, t2 = st.tabs(["🏙️ Município (Censo 2022, PIB, empresas)", "🛒 Gastos das famílias (POF 2017-2018)"])
+    with t1:
+        c = st.columns([1, 3])
+        ufs = list(UFS)
+        uf = c[0].selectbox("UF", ufs, index=ufs.index(proj["uf_sigla"]) if proj["uf_sigla"] in ufs else ufs.index("MG"), key=wk("dp_uf"))
+        chave_m = f"mun_{uf}"
+        if chave_m not in ss:
+            try:
+                ss[chave_m] = municipios_da_uf(uf)
+            except Exception as e:
+                ss[chave_m] = []
+                st.warning(f"Não foi possível consultar a lista de municípios do IBGE agora ({e}). Verifique a internet.")
+        lista = ss[chave_m]
+        nomes = [n for _, n in lista]
+        idx = nomes.index(proj["municipio_nome"]) if proj["municipio_nome"] in nomes else 0
+        nome = c[1].selectbox("Município", nomes, index=idx, key=wk("dp_mun")) if nomes else None
+        if nome and st.button("🔎 Buscar dados do IBGE", type="primary", key="dp_buscar"):
+            cod = dict((n, i) for i, n in lista)[nome]
+            with st.spinner("Consultando a API do IBGE..."):
+                dados = dados_municipio(cod)
+            if not dados:
+                st.error("O IBGE não respondeu. Tente de novo em alguns minutos.")
+            else:
+                for ch, rot, v, per, fonte in dados:
+                    _gravar_dado(ch, rot, v, per, fonte)
+                auto_unica("projeto", {"uf_sigla": uf, "municipio_nome": nome, "municipio_ibge": cod})
+                st.rerun()
+        dp = d["dados_publicos"]
+        mun = dp[~dp["chave"].astype(str).str.startswith("pof")]
+        if not mun.empty:
+            st.markdown(f"**{proj['municipio_nome'] or ''} ({proj['uf_sigla'] or ''})**")
+            cols = st.columns(3)
+            for i, (_, r) in enumerate(mun.iterrows()):
+                v = r["valor"]
+                txt = brl(v) if "R$" in r["rotulo"] and "mil" not in r["rotulo"] else num_br(v, 1 if v < 100 else 0)
+                cols[i % 3].metric(f"{r['rotulo']} ({r['periodo']})", txt, help=r["fonte"])
+            m = {r["chave"]: r["valor"] for _, r in mun.iterrows()}
+            st.markdown("**Usar no Tamanho do mercado (TAM)**")
+            b = st.columns(3)
+            if "populacao" in m and b[0].button(f"TAM = população ({num_br(m['populacao'], 0)})", key="dp_tam_pop"):
+                auto_unica("projeto", {"tam_clientes": m["populacao"], "tam_desc": f"População de {proj['municipio_nome']} (Censo 2022, IBGE)"})
+                st.toast("TAM atualizado.")
+            if "domicilios" in m and b[1].button(f"TAM = domicílios ({num_br(m['domicilios'], 0)})", key="dp_tam_dom"):
+                auto_unica("projeto", {"tam_clientes": m["domicilios"], "tam_desc": f"Domicílios de {proj['municipio_nome']} (Censo 2022, IBGE)"})
+                st.toast("TAM atualizado.")
+            if "unidades_locais" in m and b[2].button(f"TAM = empresas ({num_br(m['unidades_locais'], 0)})", key="dp_tam_emp"):
+                auto_unica("projeto", {"tam_clientes": m["unidades_locais"],
+                                       "tam_desc": f"Unidades locais de empresas em {proj['municipio_nome']} (Cempre, IBGE)"})
+                st.toast("TAM atualizado.")
+    with t2:
+        uf2 = proj["uf_sigla"] or "MG"
+        st.caption(f"Despesa média mensal das famílias por tipo de gasto em {UFS.get(uf2, (0, 'Brasil'))[1]} (POF 2017-2018). "
+                   "Útil para estimar quanto um domicílio gasta por ano na categoria do seu negócio.")
+        if st.button("Carregar gastos das famílias", key="dp_pof"):
+            with st.spinner("Consultando a POF no IBGE..."):
+                ss.pof_df, ss.pof_origem = pof_uf(uf2)
+        if ss.get("pof_df") is not None:
+            pof = ss.pof_df
+            st.caption(f"Origem: {ss.pof_origem}. Valores de 2018, sem correção pela inflação.")
+            esc = st.selectbox("Categoria de gasto do seu negócio", list(pof["Tipo de despesa"]), key="dp_pof_cat")
+            v = float(pof.loc[pof["Tipo de despesa"] == esc, "R$ por mês por família"].iloc[0])
+            k = st.columns(2)
+            k[0].metric("Por mês, por família", brl(v))
+            k[1].metric("Por ano, por família", brl(v * 12))
+            if st.button("Guardar e usar como gasto anual por cliente", key="dp_pof_usar"):
+                _gravar_dado("pof_" + _norm(esc)[:30], esc.split(" ", 1)[-1], v, "2017-2018",
+                             f"IBGE. Pesquisa de Orçamentos Familiares 2017-2018, tabela 6715 ({UFS.get(uf2, (0, 'Brasil'))[1]}).")
+                auto_unica("projeto", {"gasto_anual_cliente": round(v * 12, 2)})
+                st.toast("Gasto anual por cliente atualizado.")
+            st.dataframe(pof, hide_index=True, width="stretch", height=300, column_config={"R$ por mês por família": N(format="R$ %.2f")})
+    proxima("dados_publicos")
+
+
+# ------------------------------------------------------------------------------
+# REFERÊNCIAS DO SETOR E SOBREVIVÊNCIA
+# ------------------------------------------------------------------------------
+def pg_referencias():
+    cabecalho("referencias")
+    res = R()
+    st.caption("Compare os números do plano com a média das empresas brasileiras da mesma atividade, segundo o IBGE. Diferenças "
+               "grandes não são erro por si só, mas precisam de explicação.")
+    ops = atividades_referencia()
+    atual = proj["setor_referencia"] if proj["setor_referencia"] in ops else ops[0]
+    esc = st.selectbox("Atividade mais parecida com o seu negócio", ops, index=ops.index(atual), key=wk("ref_set"))
+    auto_unica("projeto", {"setor_referencia": esc})
+    if res["anos"][1]["rec_bruta"] > 0:
+        cs = comparar_setor(esc, proj, d, res)
+        vis = cs.copy()
+        for c in ("Plano", "Setor (Brasil)"):
+            vis[c] = [pct(v) if ("÷" in i or "margem" in i.lower()) else brl(v) for i, v in zip(cs["Indicador"], cs[c])]
+        vis["Plano ÷ setor"] = cs["Plano ÷ setor"].map(lambda v: f"{num_br(v, 2)}x" if v == v else "n.a.")
+        st.dataframe(vis, hide_index=True, width="stretch")
+        for a in leitura_setor(cs):
+            st.warning(a)
+        st.caption(FONTE_PAC if esc.startswith("Comércio") else FONTE_PAS)
+    st.subheader("Quantas empresas sobrevivem")
+    k = st.columns(3)
+    for col, (rot, v) in zip(k, SOBREVIVENCIA_5A.items()):
+        col.metric(rot, pct(v, 1), help="Percentual de empresas ainda ativas cinco anos depois de abertas.")
+    st.caption("Fonte: Sebrae, seminário DataSebrae \"Aplicações de análise de sobrevivência\" (jul. 2026), com dados da Receita Federal.")
+    st.markdown("**Causas mais citadas por quem fechou** (pesquisa Sobrevivência de Empresas, Sebrae): " +
+                "; ".join(f"{c} ({pct(v, 0)})" for c, v in CAUSAS_FECHAMENTO) + ".")
+    a1 = res["anos"][1]
+    minimo = float(res["fluxo_mensal"]["Saldo final"].min())
+    if minimo < res["reserva"] * 0.5:
+        st.warning(f"Atenção ao capital de giro: o menor saldo de caixa do Ano 1 é {brl(minimo)}. É a principal causa de fechamento.")
+    if a1["rec_bruta"] and a1["rec_bruta"] < a1["pe_contabil"] * 1.2:
+        st.warning("A receita prevista está a menos de 20% do ponto de equilíbrio: pouca folga se as vendas vierem abaixo do esperado.")
+    proxima("referencias")
+
+
+# ------------------------------------------------------------------------------
+# SWOT CRUZADA
+# ------------------------------------------------------------------------------
+def pg_swot_cruzada():
+    cabecalho("swot_cruzada")
+    st.caption("A SWOT só vale se virar estratégia (Wright; Kroll; Parnell, 2000). Cruze os fatores priorizados e escreva o que a "
+               "empresa vai fazer em cada combinação.")
+    sug = sugestoes_cruzada(d)
+    cols = st.columns(2)
+    for i, (q, s_) in enumerate(sug.items()):
+        with cols[i % 2].container(border=True):
+            st.markdown(f"**{q}**  \n<small>{s_['dica']}</small>", unsafe_allow_html=True)
+            st.caption(("Fatores: " + "; ".join(s_["a"][:3]) + "  ×  " + "; ".join(s_["b"][:3])) if s_["a"] and s_["b"]
+                       else "Cadastre os fatores na análise SWOT.")
+            n = int((d["swot_estrategias"]["quadrante"] == q).sum())
+            st.caption(f"{n} estratégia(s) registrada(s)")
+    if d["swot_estrategias"].empty and any(s_["pares"] for s_ in sug.values()):
+        if st.button("Criar uma linha para cada combinação de fatores priorizados", key="swc_seed"):
+            linhas_ = [{"quadrante": q, "estrategia": f"[{p}] ", "acao": "", "prazo_meses": 6.0}
+                       for q, s_ in sug.items() for p in s_["pares"][:2]]
+            recarregar_tabela("swot_estrategias", pd.DataFrame(linhas_), "estrategia")
+            st.rerun()
+    editor("swot_estrategias", {"quadrante": S("Tipo de estratégia", options=list(QUADRANTES_CRUZADA), required=True, width="medium"),
+                                "estrategia": T("Estratégia", required=True, width="large"), "acao": T("Ação concreta", width="large"),
+                                "prazo_meses": N("Prazo (meses)", min_value=1, step=1)}, "estrategia")
+    proxima("swot_cruzada")
+
+
+# ------------------------------------------------------------------------------
+# LEAN CANVAS
+# ------------------------------------------------------------------------------
+def html_lean(bl: dict) -> str:
+    cores = {"Problema": "#c0392b", "Alternativas existentes": "#c0392b", "Solução": "#2c7fb8", "Métricas-chave": "#2c7fb8",
+             "Proposta única de valor": "#44923a", "Vantagem injusta": "#7b3fe4", "Canais": "#14a49a",
+             "Segmentos de clientes": "#1592c4", "Primeiros clientes (early adopters)": "#1592c4",
+             "Estrutura de custos": "#4456a0", "Fontes de receita": "#22617a"}
+    areas = {"Problema": "pr", "Alternativas existentes": "al", "Solução": "so", "Métricas-chave": "me",
+             "Proposta única de valor": "pv", "Vantagem injusta": "va", "Canais": "ca", "Segmentos de clientes": "se",
+             "Primeiros clientes (early adopters)": "ea", "Estrutura de custos": "cu", "Fontes de receita": "re"}
+
+    def caixa(nome):
+        itens = "".join(f"<li>{_esc(x)}</li>" for x in bl.get(nome, [])) or "<li><i>a preencher</i></li>"
+        return (f"<div class='lc-b' style='grid-area:{areas[nome]};background:{cores[nome]}'><div class='lc-t'>{nome.upper()}</div>"
+                f"<ul>{itens}</ul></div>")
+    css = """<style>
+    .lc{display:grid;gap:8px;grid-template-columns:repeat(10,1fr);grid-template-areas:
+      "pr pr so so pv pv va va se se" "pr pr so so pv pv va va se se" "al al me me pv pv ca ca ea ea" "cu cu cu cu cu re re re re re";}
+    .lc-b{border-radius:12px;padding:12px;color:#fff;font-size:.83rem;min-height:110px}
+    .lc-t{font-weight:800;font-size:.9rem;margin-bottom:6px} .lc-b ul{margin:0;padding-left:18px}
+    @media (max-width:700px){.lc{grid-template-columns:1fr;grid-template-areas:"pr" "al" "se" "ea" "pv" "so" "ca" "re" "cu" "me" "va";}}
+    </style>"""
+    return css + "<div class='lc'>" + "".join(caixa(n) for n in areas) + "</div>"
+
+
+def pg_lean():
+    cabecalho("lean")
+    st.caption("O Lean Canvas (Maurya, 2012) adapta o Business Model Canvas para negócios novos e incertos: começa pelo problema e "
+               "pelas métricas que mostram se a solução funciona. Ele é montado com o que você já preencheu; complete os três campos abaixo.")
+    c = st.columns(3)
+    v = {"lean_alternativas": c[0].text_area("Alternativas existentes (uma por linha)", proj["lean_alternativas"], height=110,
+                                             key=wk("lean_alt"), help="Como os clientes resolvem o problema hoje."),
+         "lean_metricas": c[1].text_area("Métricas-chave (uma por linha)", proj["lean_metricas"], height=110, key=wk("lean_met"),
+                                         help="Os poucos números que mostram se o negócio está funcionando."),
+         "lean_vantagem": c[2].text_area("Vantagem injusta (uma por linha)", proj["lean_vantagem"], height=110, key=wk("lean_van"),
+                                         help="Algo que não pode ser copiado ou comprado com facilidade.")}
+    auto_unica("projeto", v)
+    st.markdown(html_lean(lean_canvas(proj, d, R())), unsafe_allow_html=True)
+    proxima("lean")
+
+
+# ------------------------------------------------------------------------------
+# VALUATION E RODADA DE INVESTIMENTO
+# ------------------------------------------------------------------------------
+def pg_valuation():
+    cabecalho("valuation")
+    res = R()
+    st.caption("Quanto vale o negócio? Três métodos dão uma faixa de valor, não um número exato. A rodada mostra quanto da empresa "
+               "um investidor levaria em troca do dinheiro.")
+    c = st.columns(3)
+    g = c[0].number_input("Crescimento na perpetuidade (% a.a.)", -5.0, 15.0, float(proj["val_crescimento_perp_pct"] or 3), 0.5, key=wk("val_g"),
+                          help="Quanto o fluxo cresce por ano depois do horizonte. Deve ser menor que a TMA.")
+    meb = c[1].number_input("Múltiplo de EBITDA", 0.5, 20.0, float(proj["val_multiplo_ebitda"] or 4), 0.5, key=wk("val_meb"))
+    mrec = c[2].number_input("Múltiplo de receita", 0.1, 10.0, float(proj["val_multiplo_receita"] or 1), 0.1, key=wk("val_mrec"))
+    auto_unica("projeto", {"val_crescimento_perp_pct": g, "val_multiplo_ebitda": meb, "val_multiplo_receita": mrec})
+    vl = valuation(res, proj, d)
+    st.dataframe(vl["metodos"], hide_index=True, width="stretch", column_config={"Valor do patrimônio dos sócios": N(format="R$ %.0f")})
+    k = st.columns(3)
+    k[0].metric("Valor presente dos fluxos do horizonte", brl(vl["vp_fluxos"]))
+    k[1].metric("Valor presente da perpetuidade", brl(vl["vp_terminal"]))
+    k[2].metric("Dívida (empréstimos)", brl(vl["divida"]))
+    if vl["vp_terminal"] > vl["vp_fluxos"]:
+        st.info("Mais da metade do valor vem da perpetuidade, ou seja, de depois do horizonte do plano. Isso é comum, mas torna o "
+                "valor muito sensível à taxa de crescimento escolhida.")
+    st.caption("Múltiplos usados em pequenos negócios costumam ser baixos e variam muito por setor; trate-os como referência didática.")
+    st.subheader("Rodada de investimento")
+    c = st.columns(2)
+    pre = c[0].number_input("Valor da empresa antes do aporte (pre-money, R$)", 0.0, 1e10,
+                            float(proj["rodada_pre_money"] or max(vl["equity_dcf"], 0.0)), 1000.0, key=wk("rod_pre"))
+    inv = c[1].number_input("Valor do aporte do investidor (R$)", 0.0, 1e10, float(proj["rodada_investimento"] or 0), 1000.0, key=wk("rod_inv"))
+    auto_unica("projeto", {"rodada_pre_money": pre, "rodada_investimento": inv})
+    ct = cap_table(d, pre, inv)
+    st.dataframe(ct, hide_index=True, width="stretch", column_config={
+        "Participação antes": N(format="percent"), "Participação depois": N(format="percent"), "Valor da participação": N(format="R$ %.0f")})
+    if inv > 0 and pre > 0:
+        st.markdown(f"Com post-money de **{brl(pre + inv)}**, o investidor fica com **{pct(inv / (pre + inv))}** da empresa e cada 1% "
+                    f"vale **{brl((pre + inv) / 100)}**.")
+    proxima("valuation")
+
+
+# ------------------------------------------------------------------------------
+# IMPACTO SOCIAL E ODS
+# ------------------------------------------------------------------------------
+def pg_impacto():
+    cabecalho("impacto")
+    st.caption("Para negócios de impacto, editais e projetos de extensão: a teoria da mudança liga o que a empresa faz às "
+               "transformações que pretende causar, e os indicadores mostram se isso está acontecendo.")
+    v = {}
+    cols = st.columns(3)
+    for i, (k_, rot, ajuda) in enumerate(ETAPAS_MUDANCA):
+        v[k_] = cols[i % 3].text_area(f"{i + 1}. {rot}", proj[k_], height=110, key=wk(k_), help=ajuda)
+    ods_atual = [o for o in str(proj["ods"] or "").split(";") if o in ODS]
+    sel = st.multiselect("Objetivos de Desenvolvimento Sustentável (ODS) relacionados", ODS, default=ods_atual, key=wk("ods"))
+    v["ods"] = ";".join(sel)
+    auto_unica("projeto", v)
+    if any(proj[k_] for k_, _, _ in ETAPAS_MUDANCA):
+        st.markdown(" ➜ ".join(f"**{rot}**: {proj[k_]}" for k_, rot, _ in ETAPAS_MUDANCA if proj[k_]))
+    st.subheader("Indicadores de impacto")
+    editor("impacto_indicadores", {"indicador": T("Indicador", required=True, width="large"),
+                                   "tipo": S("Tipo", options=TIPOS_INDICADOR_IMPACTO), "linha_base": T("Situação atual"),
+                                   "meta": T("Meta"), "ods": S("ODS", options=sel or ODS)}, "indicador")
+    proxima("impacto")
+
+
+# ------------------------------------------------------------------------------
+# EDITAIS DE FOMENTO
+# ------------------------------------------------------------------------------
+def pg_editais():
+    cabecalho("editais")
+    st.warning("Estrutura baseada nas seções usuais de editais de inovação, como o Programa Centelha. Cada edital tem campos e "
+               "limites próprios: ajuste os limites de caracteres conforme o edital vigente antes de enviar.")
+    res = R()
+    trl = st.select_slider("Nível de maturidade tecnológica (TRL)", options=list(TRL), value=int(proj["edital_trl"] or 3),
+                           format_func=lambda n: f"{n}: {TRL[n]}", key=wk("trl"))
+    auto_unica("projeto", {"edital_trl": trl})
+    ed = d["edital_textos"]
+    if ed.empty or st.button("🔄 Refazer o rascunho a partir do plano (substitui os textos)", key="edt_refazer"):
+        ras = rascunho_edital(proj, d, res)
+        base = pd.DataFrame([{"secao": s_, "texto": ras.get(s_, ""), "limite": float(lim)} for s_, lim in SECOES_EDITAL])
+        recarregar_tabela("edital_textos", base, "secao")
+        st.rerun()
+    novos = []
+    mudou = False
+    for i, r in ed.iterrows():
+        lim = int(r["limite"] or 2000)
+        with st.container(border=True):
+            c1, c2 = st.columns([4, 1])
+            c1.markdown(f"**{r['secao']}**")
+            nl = c2.number_input("Limite", 50, 20000, lim, 50, key=wk(f"edl_{i}"), label_visibility="collapsed")
+            txt = st.text_area(r["secao"], r["texto"], height=120, key=wk(f"edt_{i}"), label_visibility="collapsed")
+            n = len(txt)
+            st.caption(("🔴 " if n > nl else "🟢 ") + f"{n} de {nl} caracteres")
+            novos.append({"secao": r["secao"], "texto": txt, "limite": float(nl)})
+            mudou = mudou or txt != r["texto"] or nl != lim
+    if mudou:
+        df = pd.DataFrame(novos)
+        salvar(conn, "edital_textos", df, "secao")
+        d["edital_textos"] = limpar(df, "edital_textos")
+        marcar_salvo()
+    st.subheader("Orçamento do projeto")
+    editor("edital_orcamento", {"rubrica": S("Rubrica", options=RUBRICAS_EDITAL, required=True), "item": T("Item", width="large"),
+                                "valor": moeda("Valor (R$)")}, "item")
+    orc = d["edital_orcamento"]
+    if not orc.empty:
+        st.dataframe(orc.groupby("rubrica", as_index=False)["valor"].sum().rename(columns={"rubrica": "Rubrica", "valor": "Total"}),
+                     hide_index=True, column_config={"Total": N(format="R$ %.2f")})
+        st.metric("Total solicitado", brl(orc["valor"].sum()))
+    texto = "\n\n".join(f"{r['secao'].upper()}\n{r['texto']}" for _, r in d["edital_textos"].iterrows())
+    if not orc.empty:
+        texto += "\n\nORÇAMENTO\n" + "\n".join(f"{r['rubrica']} - {r['item']}: {brl(r['valor'])}" for _, r in orc.iterrows())
+    st.download_button("⬇️ Baixar texto da proposta (.txt)", texto.encode("utf-8"), "proposta_edital.txt", "text/plain")
+    proxima("editais")
+
+
+# ------------------------------------------------------------------------------
+# NOVIDADES DO PROGRAMA (histórico de versões do ViabilizaLab)
+# ------------------------------------------------------------------------------
+def pg_novidades():
+    cabecalho("novidades")
+    st.caption(f"Você está usando a versão **{VERSAO_PROGRAMA}**. O histórico completo também está no arquivo CHANGELOG.md do "
+               "repositório no GitHub.")
+    st.markdown(NOVIDADES_MD)
+
+
+# ------------------------------------------------------------------------------
+# COMENTÁRIOS DO PROFESSOR (aparecem no topo de cada ferramenta)
+# ------------------------------------------------------------------------------
+def comentarios_da_pagina(p: str):
+    cm = d.get("comentarios")
+    if cm is None:
+        return
+    da_pag = cm[(cm["pagina"] == p) & (cm["resolvido"].fillna(0).astype(int) == 0)]
+    for i, r in da_pag.iterrows():
+        with st.container(border=True):
+            a, b = st.columns([5, 1])
+            a.markdown(f"💬 **Comentário de {r['autor'] or 'professor(a)'}** ({r['data']}): {r['comentario']}")
+            if b.button("Resolvido ✓", key=f"cm_ok_{p}_{i}"):
+                cm.loc[i, "resolvido"] = 1
+                salvar(conn, "comentarios", cm, "comentario")
+                d["comentarios"] = limpar(cm.reset_index(drop=True), "comentarios")
+                st.rerun()
+    if ss.get("modo_correcao"):
+        with st.expander("✍️ Escrever comentário nesta ferramenta (modo de correção)"):
+            txt = st.text_area("Comentário", key=f"cm_txt_{p}")
+            if st.button("Adicionar comentário", key=f"cm_add_{p}") and txt.strip():
+                novo = pd.DataFrame([{"pagina": p, "comentario": txt.strip(), "autor": ss.get("prof_nome") or "Professor(a)",
+                                      "data": datetime.now().strftime("%d/%m/%Y"), "resolvido": 0}])
+                cm2 = pd.concat([cm, novo], ignore_index=True)
+                salvar(conn, "comentarios", cm2, "comentario")
+                d["comentarios"] = limpar(cm2, "comentarios")
+                st.rerun()
+
+
+# ------------------------------------------------------------------------------
+# MODO PROFESSOR: SEMELHANÇA ENTRE PLANOS E RODADA DE INVESTIMENTO DA TURMA
+# ------------------------------------------------------------------------------
+def professor_extras(projetos: list):
+    """projetos: lista de (rotulo, proj, d) já carregados no modo professor."""
+    st.subheader("🧭 Prontidão e evidências da turma")
+    linhas_ = []
+    for rot, p_, d_ in projetos:
+        try:
+            r_ = executar_motor(p_, d_)
+            pl = placar_evidencias(p_, d_, r_)
+            mc = monte_carlo(r_, faixas_mc(d_), n=800) if r_["anos"][1]["rec_bruta"] > 0 else None
+            pr = avaliar_prontidao(p_, d_, r_, mc, preco_referencia(p_, r_))
+            linhas_.append({"Projeto": rot, "Prontidão (1-9)": pr["nivel"], "Placar de evidências": pl["score"],
+                            "Entrevistas": len(d_["entrevistas"]), "Chance de VPL > 0": mc["p_vpl_pos"] if mc else float("nan"),
+                            "Comentários abertos": int((d_["comentarios"]["resolvido"].fillna(0).astype(int) == 0).sum())})
+        except Exception:
+            continue
+    if linhas_:
+        st.dataframe(pd.DataFrame(linhas_), hide_index=True, width="stretch", column_config={
+            "Placar de evidências": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
+            "Chance de VPL > 0": N(format="percent")})
+    if len(projetos) >= 2:
+        st.subheader("🔁 Planos parecidos entre si")
+        st.caption("Compara trechos de texto (sequências de três palavras) e valores numéricos. Semelhança alta pede uma conversa "
+                   "com os grupos; não é prova de cópia.")
+        sm = semelhanca_planos(projetos)
+        st.dataframe(sm, hide_index=True, width="stretch", column_config={
+            "Textos em comum": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1),
+            "Números em comum": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1)})
+        alto = sm[(sm["Textos em comum"] > 0.35) | (sm["Números em comum"] > 0.5)]
+        if not alto.empty:
+            st.warning(f"{len(alto)} par(es) com semelhança alta.")
+        st.subheader("💰 Rodada de investimento da turma")
+        st.caption("Cada grupo recebe um capital fictício e distribui entre os planos dos colegas (o próprio plano não conta). "
+                   "Lance os valores combinados em sala.")
+        cap = st.number_input("Capital fictício por grupo (R$)", 1000.0, 1e9, 100000.0, 10000.0, key="rod_cap")
+        nomes = [r for r, _, _ in projetos]
+        if ss.get("rodada_nomes") != nomes:
+            ss.rodada_df = pd.DataFrame(0.0, index=nomes, columns=nomes)
+            ss.rodada_nomes = nomes
+        ed = st.data_editor(ss.rodada_df, width="stretch", key="ed_rodada",
+                            column_config={c: N(format="R$ %.0f", min_value=0.0) for c in nomes})
+        ss.rodada_df = ed
+        excedeu = [i for i in ed.index if float(ed.loc[i].drop(i, errors="ignore").sum()) > cap]
+        if excedeu:
+            st.error("Passaram do capital disponível: " + ", ".join(excedeu))
+        st.dataframe(resultado_rodada(ed), hide_index=True, width="stretch", column_config={"Capital recebido": N(format="R$ %.0f")})
+
+# ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
 # ##############################################################################
 # ==============================================================================
@@ -10119,6 +12193,31 @@ def pg_relatorio():
                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", width="stretch")
             else:
                 st.warning("A biblioteca python-docx não está instalada neste computador.")
+    with st.container(border=True):
+        st.markdown("#### 🎓 Relatório acadêmico no padrão ABNT (PDF)")
+        st.caption("Capa, folha de rosto, sumário com páginas, seções numeradas, tabelas com título e fonte, citações e referências. "
+                   "Margens de 3 e 2 cm, fonte 12 e espaçamento 1,5.")
+        c = st.columns(3)
+        v = {"abnt_instituicao": c[0].text_input("Instituição", proj["abnt_instituicao"], key=wk("abnt_inst")),
+             "abnt_curso": c[1].text_input("Curso", proj["abnt_curso"], key=wk("abnt_curso")),
+             "abnt_disciplina": c[2].text_input("Disciplina", proj["abnt_disciplina"], key=wk("abnt_disc"))}
+        c = st.columns(3)
+        v["abnt_orientador"] = c[0].text_input("Professor(a) / orientador(a)", proj["abnt_orientador"], key=wk("abnt_ori"))
+        v["abnt_cidade"] = c[1].text_input("Cidade", proj["abnt_cidade"] or proj["cidade_uf"], key=wk("abnt_cid"))
+        v["abnt_ano"] = c[2].text_input("Ano", proj["abnt_ano"] or str(datetime.now().year), key=wk("abnt_ano"))
+        auto_unica("projeto", v)
+        st.caption("Os autores vêm do campo Autores (Informações e sócios), separados por ponto e vírgula.")
+        with st.expander("📚 Referências consultadas pelo grupo (NBR 6023)"):
+            st.caption("Uma referência por linha, já no formato ABNT. Use **negrito** com dois asteriscos, como no exemplo. As bases de dados "
+                       "usadas pelo programa (IBGE, Sebrae) entram sozinhas.")
+            editor("referencias", {"referencia": T("Referência", required=True, width="large")}, "referencia")
+            st.code("SOBRENOME, Nome. **Título do livro**: subtítulo. 2. ed. Cidade: Editora, 2020.", language=None)
+        if st.button("Gerar relatório ABNT", type="primary", key="b_abnt"):
+            with st.spinner("Montando o relatório acadêmico..."):
+                ss[f"abnt_{PID}"] = gerar_relatorio_abnt(proj, d, res)
+        if ss.get(f"abnt_{PID}"):
+            st.download_button("⬇️ Baixar relatório ABNT", ss[f"abnt_{PID}"], f"Relatorio_ABNT_{Path(ss.db).stem}.pdf",
+                               "application/pdf")
     k = st.columns(2)
     with k[0].container(border=True):
         st.markdown("#### 📊 Planilha (Excel)")
@@ -10178,6 +12277,10 @@ Os arquivos não são guardados; ficam só na memória desta sessão.
     disc, profn = st.columns(2)
     disciplina = disc.text_input("Disciplina", key="prof_disc")
     professor = profn.text_input("Professor(a)", key="prof_nome")
+    ss.modo_correcao = st.toggle("✍️ Modo de correção: escrever comentários dentro das ferramentas do projeto aberto",
+                                 value=bool(ss.get("modo_correcao")), key="tg_correcao",
+                                 help="Abra o .pnbox do grupo (menu lateral), ative este modo e navegue pelas ferramentas. Os "
+                                      "comentários ficam salvos no arquivo e aparecem para o grupo no topo de cada ferramenta.")
     arqs = st.file_uploader("Arquivos .pnbox dos grupos", type=["pnbox"], accept_multiple_files=True, key="prof_up")
     if not arqs:
         st.info("Nenhum arquivo enviado ainda.")
@@ -10234,6 +12337,16 @@ Os arquivos não são guardados; ficam só na memória desta sessão.
             st.write(f"**Pendências:** {av['Pendências'] or 'nenhuma'}")
             st.dataframe(pd.DataFrame({"Critério": [c_ for c_, _ in rubrica], "Peso": [p for _, p in rubrica],
                                        "Sugerida": av["notas"]}), hide_index=True, width="stretch")
+
+    carregados = []
+    for a_ in arqs:
+        try:
+            cam = tmp / a_.name
+            p_, d_ = carregar_projeto_arquivo(cam)
+            carregados.append((p_.get("nome_negocio") or a_.name, p_, d_))
+        except Exception:
+            pass
+    professor_extras(carregados)
 
     st.subheader("📦 Exportar")
     a, b = st.columns(2)
@@ -10310,7 +12423,10 @@ ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade
          "evidencias": pg_evidencias, "entrevistas": pg_entrevistas, "teste_preco": pg_teste_preco, "vpc": pg_vpc,
          "oceano": pg_oceano, "posicionamento": pg_posicionamento, "orcamento_mkt": pg_orcamento_mkt,
          "montecarlo": pg_montecarlo, "adocao": pg_adocao, "prontidao": pg_prontidao, "banca": pg_banca,
-         "formalizacao": pg_formalizacao}
+         "formalizacao": pg_formalizacao, "trilha": pg_trilha, "glossario": pg_glossario, "planilha": pg_planilha,
+         "historico": pg_historico, "financiamento": pg_financiamento, "dados_publicos": pg_dados_publicos,
+         "referencias": pg_referencias, "swot_cruzada": pg_swot_cruzada, "lean": pg_lean, "valuation": pg_valuation,
+         "impacto": pg_impacto, "editais": pg_editais, "novidades": pg_novidades}
 try:
     ROTAS.get(ss.pagina, pg_inicio)()
     copia_automatica()

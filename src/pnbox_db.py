@@ -78,6 +78,14 @@ SCHEMA = {
         ("posic_beneficio", "TEXT"), ("posic_concorrente", "TEXT"), ("posic_diferencial", "TEXT"),
         ("mapa_eixo_x", "TEXT"), ("mapa_eixo_y", "TEXT"), ("nps_meta", "REAL"),
         ("bass_mercado", "REAL"), ("bass_p", "REAL"), ("bass_q", "REAL"), ("revenda_ativos_pct", "REAL"),
+        # v8: relatório ABNT, dados públicos, Lean Canvas, valuation, impacto e edital
+        ("abnt_instituicao", "TEXT"), ("abnt_curso", "TEXT"), ("abnt_disciplina", "TEXT"), ("abnt_orientador", "TEXT"),
+        ("abnt_cidade", "TEXT"), ("abnt_ano", "TEXT"), ("municipio_ibge", "TEXT"), ("municipio_nome", "TEXT"),
+        ("uf_sigla", "TEXT"), ("setor_referencia", "TEXT"), ("lean_vantagem", "TEXT"), ("lean_alternativas", "TEXT"),
+        ("lean_metricas", "TEXT"), ("val_crescimento_perp_pct", "REAL"), ("val_multiplo_ebitda", "REAL"),
+        ("val_multiplo_receita", "REAL"), ("rodada_investimento", "REAL"), ("rodada_pre_money", "REAL"),
+        ("imp_problema", "TEXT"), ("imp_publico", "TEXT"), ("imp_atividades", "TEXT"), ("imp_produtos", "TEXT"),
+        ("imp_resultados", "TEXT"), ("imp_impacto", "TEXT"), ("ods", "TEXT"), ("edital_trl", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -113,7 +121,7 @@ SCHEMA = {
                   ("vida_util_anos", "REAL"), ("valor_residual_pct", "REAL")],
     "inv_pre": [("descricao", "TEXT"), ("valor", "REAL")],
     "emprestimos": [("descricao", "TEXT"), ("valor", "REAL"), ("taxa_anual_pct", "REAL"),
-                    ("prazo_meses", "REAL")],
+                    ("prazo_meses", "REAL"), ("carencia_meses", "REAL"), ("sistema", "TEXT")],
     "capital_giro_prazos": [("tipo", "TEXT"), ("prazo_dias", "REAL"), ("percentual", "REAL")],
     "materiais": [("nome", "TEXT"), ("categoria", "TEXT"), ("unidade", "TEXT"), ("valor_unitario", "REAL"),
                   ("qtd_estoque_inicial", "REAL")],
@@ -169,6 +177,14 @@ SCHEMA = {
     "mc_faixas": [("variavel", "TEXT"), ("minimo_pct", "REAL"), ("maximo_pct", "REAL")],
     "formalizacao": [("item", "TEXT"), ("status", "TEXT"), ("observacao", "TEXT")],
     "banca_respostas": [("pergunta", "TEXT"), ("resposta", "TEXT")],
+    # --- v8 ---
+    "referencias": [("referencia", "TEXT")],
+    "swot_estrategias": [("quadrante", "TEXT"), ("estrategia", "TEXT"), ("acao", "TEXT"), ("prazo_meses", "REAL")],
+    "impacto_indicadores": [("indicador", "TEXT"), ("tipo", "TEXT"), ("linha_base", "TEXT"), ("meta", "TEXT"), ("ods", "TEXT")],
+    "edital_textos": [("secao", "TEXT"), ("texto", "TEXT"), ("limite", "REAL")],
+    "edital_orcamento": [("rubrica", "TEXT"), ("item", "TEXT"), ("valor", "REAL")],
+    "comentarios": [("pagina", "TEXT"), ("comentario", "TEXT"), ("autor", "TEXT"), ("data", "TEXT"), ("resolvido", "INTEGER")],
+    "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 
 # Valores-padrão de um projeto em branco
@@ -189,6 +205,8 @@ PROJETO_PADRAO = {
     "intencao_certamente_pct": 0.0, "intencao_provavel_pct": 0.0, "fator_certamente_pct": 70.0, "fator_provavel_pct": 30.0,
     "nps_meta": 50.0, "bass_mercado": 0.0, "bass_p": 0.03, "bass_q": 0.38, "revenda_ativos_pct": 40.0,
     "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
+    "val_crescimento_perp_pct": 3.0, "val_multiplo_ebitda": 4.0, "val_multiplo_receita": 1.0,
+    "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -254,6 +272,8 @@ def _migrar_versao_anterior(conn):
     conn.execute("UPDATE pessoal SET area='Produção / operação' WHERE area IS NULL OR area=''")
     conn.execute("UPDATE catalogo SET horas_unit=0 WHERE horas_unit IS NULL")
     conn.execute("UPDATE pessoal SET mes_inicio=1 WHERE mes_inicio IS NULL OR mes_inicio<1")
+    conn.execute("UPDATE emprestimos SET carencia_meses=0 WHERE carencia_meses IS NULL")
+    conn.execute("UPDATE emprestimos SET sistema='Price' WHERE sistema IS NULL OR sistema=''")
     conn.execute("UPDATE assinaturas SET ciclo_meses=1 WHERE ciclo_meses IS NULL OR ciclo_meses<1")
     # Proposta de valor única (v1-v4) -> lista de propostas
     if conn.execute("SELECT COUNT(*) FROM propostas").fetchone()[0] == 0:

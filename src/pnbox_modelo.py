@@ -1081,6 +1081,76 @@ _VALIDACAO = {
 }
 
 
+# Dados reais de Teófilo Otoni (MG) consultados na API do IBGE em 25/11/2026
+_DADOS_TEOFILO_OTONI = [
+    ("populacao", "População residente (Censo 2022)", 137418, "2022", "IBGE. Censo Demográfico 2022, tabela 4709 (Sidra)."),
+    ("domicilios", "Domicílios particulares permanentes ocupados (Censo 2022)", 49858, "2022", "IBGE. Censo Demográfico 2022, tabela 4712 (Sidra)."),
+    ("pib", "PIB a preços correntes (mil R$)", 3540248, "2023", "IBGE. Produto Interno Bruto dos Municípios, tabela 5938 (Sidra)."),
+    ("unidades_locais", "Unidades locais de empresas e organizações", 3880, "2021", "IBGE. Cadastro Central de Empresas (Cempre), tabela 1685 (Sidra)."),
+    ("pib_per_capita", "PIB per capita (R$)", 3540248 * 1000 / 137418, "2023", "Calculado: PIB ÷ população do Censo 2022 (IBGE)."),
+    ("moradores_dom", "Moradores por domicílio", 137418 / 49858, "2022", "Calculado com o Censo 2022 (IBGE)."),
+]
+_V8 = {
+    "fitbox": {"setor": "Serviços · Serviços de alimentação (restaurantes, lanchonetes)",
+               "pof": ("pof_alimentacao", "Alimentação", 688.51),
+               "swot": [("Ofensiva (forças × oportunidades)", "Usar o cardápio planejado por nutricionista para atender a procura por alimentação saudável",
+                         "Parceria com 5 academias no primeiro trimestre", 3),
+                        ("Confronto (forças × ameaças)", "Destacar a tabela nutricional para se diferenciar das marmitarias comuns",
+                         "Selo de informação nutricional em todas as embalagens", 2),
+                        ("Reforço (fraquezas × oportunidades)", "Reduzir a dependência de um só canal com vendas por assinatura",
+                         "Lançar o plano mensal com desconto", 6),
+                        ("Defensiva (fraquezas × ameaças)", "Proteger o caixa contra a alta dos insumos", "Contrato de preço com dois fornecedores", 4)],
+               "lean": ("Marmita feita em casa; restaurante a quilo; aplicativos de delivery",
+                        "Assinantes ativos; renovação mensal; custo por refeição; avaliação semanal",
+                        "Nutricionista parceira e base de clientes das academias da cidade"),
+               "imp": None, "ods": "3 Saúde e bem-estar", "rodada": (0, 0), "emp": None},
+    "cafe": {"setor": "Comércio · Produtos alimentícios, bebidas e fumo (varejo)", "pof": ("pof_alimentacao", "Alimentação", 688.51),
+             "swot": [("Ofensiva (forças × oportunidades)", "Valorizar os produtos da região para atrair quem busca experiência", "Cardápio com origem dos grãos", 3),
+                      ("Defensiva (fraquezas × ameaças)", "Evitar falta de caixa nos meses fracos", "Reserva equivalente a dois meses de custos fixos", 6)],
+             "lean": ("Padarias do centro; café em casa", "Ticket médio; clientes por dia; recompra no cartão fidelidade",
+                      "Relação com produtores de café da região"),
+             "imp": None, "ods": "8 Trabalho decente e crescimento econômico", "rodada": (0, 0), "emp": None},
+    "assinatura": {"setor": "Serviços · Tecnologia da informação", "pof": None,
+                   "swot": [("Ofensiva (forças × oportunidades)", "Ser a agenda oficial de eventos do Vale", "Parceria com a secretaria de cultura", 6)],
+                   "lean": ("Perfis locais no Instagram; grupos de WhatsApp", "Parceiros pagantes; churn; usuários ativos por mês",
+                            "Base de eventos locais que nenhum concorrente nacional cobre"),
+                   "imp": ("Pouca divulgação da cultura e do comércio local", "Produtores culturais e pequenos comerciantes do Vale do Mucuri",
+                           "Agenda gratuita de eventos e planos de divulgação", "Eventos divulgados por mês",
+                           "Mais público nos eventos locais e mais renda para os produtores", "Economia criativa mais forte no Vale do Mucuri"),
+                   "ods": "8 Trabalho decente e crescimento econômico;11 Cidades e comunidades sustentáveis", "rodada": (300000, 60000), "emp": None},
+    "servico": {"setor": "Serviços · Manutenção e reparação de informática e comunicação", "pof": None,
+                "swot": [("Confronto (forças × ameaças)", "Vender garantia e prazo contra a concorrência por preço dos técnicos informais",
+                          "Garantia por escrito de 90 dias", 1),
+                         ("Reforço (fraquezas × oportunidades)", "Aumentar a receita previsível com contratos para clínicas que precisam se adequar à LGPD",
+                          "Pacote de backup e segurança", 6)],
+                "lean": ("Sobrinho que entende de computador; técnico avulso; loja de informática",
+                         "Contratos ativos; horas vendidas; tempo de resposta", "Atendimento no mesmo dia na cidade"),
+                "imp": None, "ods": "", "rodada": (0, 0), "emp": ("Pronampe", 6, "SAC")},
+}
+
+
+def popular_v8(conn, qual: str) -> None:
+    v = _V8[qual]
+    conn.execute("UPDATE projeto SET setor_referencia=?, municipio_nome='Teófilo Otoni', municipio_ibge='3168606', uf_sigla='MG', "
+                 "lean_alternativas=?, lean_metricas=?, lean_vantagem=?, ods=?, rodada_pre_money=?, rodada_investimento=? WHERE id=1",
+                 (v["setor"], v["lean"][0].replace("; ", "\n"), v["lean"][1].replace("; ", "\n"), v["lean"][2], v["ods"], *v["rodada"]))
+    dados = list(_DADOS_TEOFILO_OTONI)
+    if v["pof"]:
+        dados.append((v["pof"][0], v["pof"][1], v["pof"][2], "2017-2018",
+                      "IBGE. Pesquisa de Orçamentos Familiares 2017-2018, tabela 6715 (Minas Gerais)."))
+    conn.executemany("INSERT INTO dados_publicos (chave, rotulo, valor, periodo, fonte) VALUES (?,?,?,?,?)", dados)
+    conn.executemany("INSERT INTO swot_estrategias (quadrante, estrategia, acao, prazo_meses) VALUES (?,?,?,?)", v["swot"])
+    if v["imp"]:
+        conn.execute("UPDATE projeto SET imp_problema=?, imp_publico=?, imp_atividades=?, imp_produtos=?, imp_resultados=?, imp_impacto=? "
+                     "WHERE id=1", v["imp"])
+        conn.execute("INSERT INTO impacto_indicadores (indicador, tipo, linha_base, meta, ods) VALUES (?,?,?,?,?)",
+                     ("Eventos locais divulgados por mês", "Produto (output)", "0", "60", "11 Cidades e comunidades sustentáveis"))
+    if v["emp"]:
+        conn.execute("UPDATE emprestimos SET carencia_meses=?, sistema=? WHERE descricao=?", (v["emp"][1], v["emp"][2], v["emp"][0]))
+    conn.execute("UPDATE emprestimos SET carencia_meses=0 WHERE carencia_meses IS NULL")
+    conn.execute("UPDATE emprestimos SET sistema='Price' WHERE sistema IS NULL OR sistema=''")
+
+
 def popular_validacao(conn, qual: str) -> None:
     v = _VALIDACAO[qual]
     vpc = v["vpc"]
@@ -1106,3 +1176,4 @@ def popular_validacao(conn, qual: str) -> None:
     conn.executemany("UPDATE socios SET perda_aceitavel=? WHERE id=?", list(zip(v["perda"], ids)))
     conn.executemany("INSERT INTO formalizacao (item, status, observacao) VALUES (?,?,'')", list(v["formal"].items()))
     conn.executemany("INSERT INTO banca_respostas (pergunta, resposta) VALUES (?,?)", v["banca"])
+    popular_v8(conn, qual)

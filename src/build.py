@@ -1,8 +1,8 @@
 import re
-partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_estrategia.py","pnbox_validacao.py","pnbox_pdf.py","pnbox_extras.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas4.py","pnbox_ui_paginas5.py","pnbox_ui_paginas6.py","pnbox_ui_paginas3.py"]
+partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_estrategia.py","pnbox_validacao.py","pnbox_v8.py","pnbox_pdf.py","pnbox_extras.py","pnbox_abnt.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas4.py","pnbox_ui_paginas5.py","pnbox_ui_paginas6.py","pnbox_ui_paginas7.py","pnbox_ui_paginas3.py"]
 cab='''"""
 ================================================================================
-VIABILIZALAB v7.2 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.0 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -41,6 +41,11 @@ for p in partes:
         out.append(l)
     corpo.append(f"\n\n# {'#'*78}\n# PARTE: {p}\n# {'#'*78}\n"+"\n".join(out))
 BOOT=open('boot.py',encoding='utf-8').read()
+try:
+    _chg = open('../CHANGELOG.md', encoding='utf-8').read().replace("'" * 3, '"' * 3)
+except OSError:
+    _chg = "Historico de versoes indisponivel."
+corpo.insert(0, "\n\n# Historico de versoes (tela Novidades), gerado de CHANGELOG.md\nNOVIDADES_MD = r" + "'" * 3 + _chg + "'" * 3 + "\n")
 open('app_pnbox.py','w',encoding='utf-8').write(cab+BOOT+"\n".join(sorted(imports))+"\n"+"".join(corpo)+"\n")
 
 import shutil; shutil.copy('app_pnbox.py','../app_pnbox.py'); print('ok')

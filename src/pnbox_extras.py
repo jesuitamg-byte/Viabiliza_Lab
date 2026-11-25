@@ -21,6 +21,7 @@ from pnbox_motor import (brl, num_br, pct, div, QUADRANTES, pontuacao_swot, merc
 from pnbox_db import SCHEMA, conectar, ler, ler_unica
 from pnbox_estrategia import (checar_smart, PERSPECTIVAS, canvas_blocos, bcg_tabela, ge_tabela, porter_tabela,
 from pnbox_validacao import *  # noqa
+from pnbox_v8 import *  # noqa
                               porter_leitura, bsc_indicadores_plano, simular_reforma, frase_smart)
 from pnbox_pdf import Relatorio, graficos_png, AZUL, FONTES_CANDIDATAS
 
@@ -78,6 +79,7 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "realizado": (tem("realizado"), tem("realizado")),
         "sumario": (len(str(proj["sumario_executivo"])) > 200, bool(proj["sumario_executivo"])),
         **regras_v71(proj, d),
+        **regras_v8(proj, d),
     }
 
 
@@ -85,7 +87,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao"}
+    fora = {"realizado", "adocao"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -175,6 +177,9 @@ TAREFAS_IA = {
     "coerencia": "Coerência entre as ferramentas (mercado x vendas x capacidade x equipe x finanças)",
     "reforma": "Efeito da reforma tributária e escolha entre Simples puro e híbrido",
     "posicionamento": "Proposta de valor, posicionamento, curva de valor (ERRC) e orçamento de marketing por canal",
+    "setor": "Comparação com a média do setor (IBGE) e com os dados do município e das famílias",
+    "investidor": "Valuation, rodada de investimento e financiamento do ponto de vista de um investidor",
+    "impacto": "Impacto social, ODS e adequação a editais de fomento",
 }
 
 
@@ -278,6 +283,65 @@ def _prompt_v71(proj: dict, d: dict, res: dict) -> list:
     b.append(f"\n## 12. Formalização\n- Enquadramento sugerido pela receita do Ano 1: {ps['porte']}.")
     if not d["formalizacao"].empty:
         b.append(_md_tabela(d["formalizacao"][["item", "status"]]))
+    return b
+
+
+def _prompt_v8(proj: dict, d: dict, res: dict) -> list:
+    """Seções do prompt com as ferramentas da versão 8."""
+    b = []
+    dp = d.get("dados_publicos", pd.DataFrame())
+    if not dp.empty:
+        b.append(f"\n## 12. Dados públicos ({proj.get('municipio_nome') or ''} - {proj.get('uf_sigla') or ''})")
+        for _, r in dp.iterrows():
+            b.append(f"- {r['rotulo']} ({r['periodo']}): {num_br(r['valor'], 2)}. Fonte: {r['fonte']}")
+    if proj.get("setor_referencia") and res["anos"][1]["rec_bruta"] > 0:
+        try:
+            cs = comparar_setor(proj["setor_referencia"], proj, d, res)
+            b.append(f"\n## 12. Comparação com o setor: {proj['setor_referencia']} (média Brasil, IBGE 2024)")
+            b.append(_md_tabela(cs.assign(**{c: cs[c].map(lambda v: num_br(v, 3)) for c in ("Plano", "Setor (Brasil)", "Plano ÷ setor")})))
+        except Exception:
+            pass
+    b.append("- Sobrevivência em 5 anos (Sebrae, 2026): " + "; ".join(f"{k}: {pct(v, 1)}" for k, v in SOBREVIVENCIA_5A.items()) + ".")
+    est = d.get("swot_estrategias", pd.DataFrame())
+    if not est.empty:
+        b.append("\n## 12. SWOT cruzada (estratégias)")
+        b.append(_md_tabela(est))
+    lc = lean_canvas(proj, d, res)
+    b.append("\n## 12. Lean Canvas")
+    for k_, v_ in lc.items():
+        if v_:
+            b.append(f"- {k_}: " + "; ".join(str(x) for x in v_))
+    emp = d["emprestimos"]
+    if not emp.empty:
+        b.append("\n## 12. Financiamento")
+        for _, r in emp.iterrows():
+            if float(r["valor"] or 0) > 0:
+                rs = resumo_emprestimo(r["valor"], r["taxa_anual_pct"], r["prazo_meses"], r["carencia_meses"], r["sistema"])
+                b.append(f"- {r['descricao']}: {brl(r['valor'])}, {num_br(r['taxa_anual_pct'], 2)}% a.a., {num_br(r['prazo_meses'], 0)} meses, "
+                         f"carência de {num_br(r['carencia_meses'] or 0, 0)} meses, sistema {r['sistema'] or 'Price'}; juros totais {brl(rs['juros'])}; "
+                         f"CET {pct(rs['cet'])} a.a.")
+    vl = valuation(res, proj, d)
+    b.append(f"\n## 12. Valuation\n- Fluxo de caixa descontado: {brl(vl['equity_dcf'])} (perpetuidade com crescimento de "
+             f"{pct(vl['g'])}); faixa entre métodos: {brl(vl['faixa'][0])} a {brl(vl['faixa'][1])}.")
+    if float(proj.get("rodada_investimento") or 0) > 0:
+        pre, inv = float(proj.get("rodada_pre_money") or 0), float(proj["rodada_investimento"])
+        b.append(f"- Rodada: aporte de {brl(inv)} com pre-money de {brl(pre)}; investidor fica com {pct(div(inv, pre + inv))}.")
+    imp = [(rot, proj.get(k_)) for k_, rot, _ in ETAPAS_MUDANCA if proj.get(k_)]
+    if imp or proj.get("ods"):
+        b.append("\n## 12. Impacto social")
+        for rot, v_ in imp:
+            b.append(f"- {rot}: {v_}")
+        if proj.get("ods"):
+            b.append(f"- ODS: {str(proj['ods']).replace(';', '; ')}")
+        if not d["impacto_indicadores"].empty:
+            b.append(_md_tabela(d["impacto_indicadores"]))
+    cm = d.get("comentarios", pd.DataFrame())
+    if not cm.empty:
+        abertos = cm[cm["resolvido"].fillna(0).astype(int) == 0]
+        if not abertos.empty:
+            b.append("\n## 12. Comentários do professor ainda não resolvidos")
+            for _, r in abertos.iterrows():
+                b.append(f"- [{r['pagina']}] {r['comentario']}")
     return b
 
 
@@ -473,6 +537,7 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
         if str(proj.get(k_) or "").strip():
             b.append(f"\n## 12. {tit}\n{proj[k_]}")
     b.extend(_prompt_v71(proj, d, res))
+    b.extend(_prompt_v8(proj, d, res))
     pend = chk[chk["Situação"] != "OK"]
     if not pend.empty:
         b.append("\n## 13. Inconsistências apontadas pelo programa")
@@ -538,6 +603,15 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                      "(veja o Placar de evidências). Para cada uma: experimento barato (entrevista, página de pré-cadastro, pré-venda, "
                      "piloto, venda manual antes de automatizar), métrica, critério de sucesso definido antes do teste, custo, prazo e o "
                      "que fazer se o resultado for ruim.",
+        "setor": "Compare as premissas do plano com a média do setor (tabela de referências do IBGE) e com os dados do município e da "
+                 "POF. Aponte o que está fora da curva, explique se a diferença é plausível para um pequeno negócio local e "
+                 "sugira valores mais realistas quando for o caso.",
+        "investidor": "Avalie o plano como um investidor-anjo: o valuation é coerente com o risco e com o estágio do negócio? A "
+                      "participação oferecida na rodada é razoável? O financiamento escolhido (sistema, carência, custo efetivo) cabe "
+                      "no caixa? Diga o que faria você investir ou recusar.",
+        "impacto": "Avalie a teoria da mudança (as atividades levam mesmo aos resultados e ao impacto declarados?), os indicadores de "
+                   "impacto e a ligação com os ODS. Sugira como fortalecer a proposta para um edital de inovação ou de negócios de "
+                   "impacto, sem exagerar os efeitos.",
         "posicionamento": "Avalie o Canvas da proposta de valor (as dores mais importantes têm resposta?), a declaração de posicionamento "
                           "(é específica e defensável?), a curva de valor e a matriz ERRC (há diferenciação real ou só mais custo?) e o "
                           "orçamento por canal (CAC, retorno e coerência com o gasto comercial da DRE). Proponha uma versão melhor do "

@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "7.2"
+VERSAO_PROGRAMA = "8.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -167,6 +167,8 @@ EMOCOES = {"Entusiasmado": "🤩", "Satisfeito": "🙂", "Neutro": "😐", "Insa
 # PÁGINAS (ferramentas) DO PLANO
 # ------------------------------------------------------------------------------
 PAGINAS = [
+    ("trilha", "Identificação", "🚦", "Trilha guiada e o que falta",
+     "A ordem recomendada de preenchimento, o próximo passo e tudo o que ainda falta, com atalho para cada ajuste."),
     ("projeto", "Identificação", "🏢", "Informações e sócios",
      "Dados do negócio, integrantes do grupo, premissas financeiras e quadro societário."),
     ("identidade", "Identificação", "🧭", "Missão, visão, valores e objetivos",
@@ -181,6 +183,8 @@ PAGINAS = [
      "Roteiro de entrevista de descoberta e registro das conversas: quais dores se repetem e quanto pagariam."),
     ("mercado", "Cliente e mercado", "📐", "Tamanho do mercado",
      "Estime o mercado total (TAM), o alcançável (SAM) e o conquistável (SOM) e confira se a meta de vendas é realista."),
+    ("dados_publicos", "Cliente e mercado", "🏙️", "Dados do município e das famílias (IBGE)",
+     "População, domicílios, PIB e empresas do município, e quanto as famílias gastam em cada categoria (POF)."),
     ("proposta", "Problema e solução", "❤️", "Proposta de valor",
      "Defina, para cada persona, os benefícios que o negócio entrega e o que o diferencia."),
     ("vpc", "Problema e solução", "🎁", "Canvas da proposta de valor",
@@ -197,8 +201,12 @@ PAGINAS = [
      "Fatores externos: tendências que ajudam e riscos que vêm do ambiente."),
     ("swot", "Estratégia", "🧩", "Análise SWOT",
      "Matriz SWOT gerada automaticamente e a estratégia indicada para o negócio."),
+    ("swot_cruzada", "Estratégia", "🔀", "SWOT cruzada",
+     "Transforme o diagnóstico em estratégias ofensivas, de confronto, de reforço e defensivas."),
     ("canvas", "Análise estratégica", "🗂️", "Business Model Canvas",
      "O modelo de negócio em uma página, montado com o que você já preencheu."),
+    ("lean", "Análise estratégica", "🪧", "Lean Canvas",
+     "A versão do Canvas para negócios novos: problema, solução, métricas-chave e vantagem injusta."),
     ("porter", "Análise estratégica", "⚔️", "Cinco Forças de Porter",
      "Pressão competitiva do setor: rivalidade, novos entrantes, substitutos, clientes e fornecedores."),
     ("ge", "Análise estratégica", "🧮", "Matriz GE / McKinsey",
@@ -219,6 +227,8 @@ PAGINAS = [
      "Quem fornece cada item, prazos de pagamento e de entrega."),
     ("investimentos", "Finanças", "💰", "Investimentos e fontes",
      "Investimentos fixos, pré-operacionais, capital de giro e de onde vem o dinheiro."),
+    ("financiamento", "Finanças", "🏦", "Financiamento (SAC, Price e carência)",
+     "Parcelas, juros e custo efetivo de cada empréstimo, e comparação entre propostas de crédito."),
     ("produtos", "Finanças", "📦", "Produtos e materiais",
      "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
     ("servicos", "Finanças", "🧑‍💻", "Serviços e custo da hora",
@@ -239,6 +249,8 @@ PAGINAS = [
      "Entradas e saídas de dinheiro em cada mês do Ano 1."),
     ("indicadores", "Finanças", "📊", "Indicadores financeiros",
      "Semáforo de saúde, VPL, TIR, payback, pontos de equilíbrio e checagens."),
+    ("referencias", "Finanças", "📏", "Referências do setor (IBGE e Sebrae)",
+     "Compare margem, peso da folha e produtividade com a média do setor e veja a taxa de sobrevivência das empresas."),
     ("graficos", "Finanças", "📈", "Gráficos",
      "Composição do investimento, dos custos e da receita, ponto de equilíbrio e payback."),
     ("simulador", "Ferramentas complementares", "🎚️", "Simulador de resultados",
@@ -247,6 +259,10 @@ PAGINAS = [
      "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
     ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
      "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
+    ("valuation", "Ferramentas complementares", "💎", "Valuation e rodada de investimento",
+     "Quanto vale o negócio por três métodos e quanto um investidor levaria em troca do aporte."),
+    ("impacto", "Ferramentas complementares", "🌍", "Impacto social e ODS",
+     "Teoria da mudança, indicadores de impacto e Objetivos de Desenvolvimento Sustentável."),
     ("experimentos", "Ferramentas complementares", "🧪", "Quadro de experimentação",
      "Hipóteses e testes para validar a ideia antes de investir."),
     ("riscos", "Ferramentas complementares", "⚠️", "Riscos e contingência",
@@ -265,6 +281,8 @@ PAGINAS = [
      "Perguntas difíceis geradas a partir dos pontos fracos do plano, para treinar a defesa."),
     ("formalizacao", "Validação e defesa", "📋", "Checklist de formalização",
      "Enquadramento (MEI, ME, EPP), registros, licenças, LGPD e marca."),
+    ("editais", "Validação e defesa", "📝", "Editais de fomento (modelo Centelha)",
+     "Rascunho da proposta para editais de inovação, com limite de caracteres e orçamento por rubrica."),
     ("sumario", "Conclusão e entrega", "📝", "Sumário executivo",
      "Resumo do plano gerado automaticamente, para revisar e completar."),
     ("apresentacao", "Conclusão e entrega", "🎤", "Modo apresentação",
@@ -273,6 +291,14 @@ PAGINAS = [
      "PDF completo, pitch deck, Word, Excel e arquivo do projeto."),
     ("professor", "Conclusão e entrega", "🎓", "Modo professor",
      "Compare os projetos da turma, aplique a rubrica e gere fichas de avaliação."),
+    ("glossario", "Conclusão e entrega", "📖", "Glossário e leitura dos números",
+     "O que significa cada termo e o que os números deste projeto querem dizer, em linguagem simples."),
+    ("planilha", "Conclusão e entrega", "📑", "Importar e exportar planilha",
+     "Traga produtos, custos, entrevistas e respostas de pesquisa de uma planilha e exporte tudo para o Excel."),
+    ("historico", "Conclusão e entrega", "🕑", "Histórico de versões do projeto",
+     "Salve versões, compare os indicadores entre elas e restaure uma versão anterior."),
+    ("novidades", "Conclusão e entrega", "🆕", "Novidades do programa",
+     "O que mudou em cada versão do ViabilizaLab."),
     ("config", "Conclusão e entrega", "⚙️", "Configurações e listas",
      "Listas personalizadas (unidades, categorias...), versões salvas e dados deste computador."),
 ]
@@ -653,12 +679,13 @@ def situacao(p: str) -> str:
         "sumario": (len(proj["sumario_executivo"]) > 200, bool(proj["sumario_executivo"])),
     }
     regras.update(regras_v71(proj, d))
+    regras.update(regras_v8(proj, d))
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -806,6 +833,7 @@ def cabecalho(p: str):
         if st.button("Entendi, ocultar aviso", key="ok_alerta"):
             ss.alerta = None
             st.rerun()
+    comentarios_da_pagina(p)
     st.write("")
 
 

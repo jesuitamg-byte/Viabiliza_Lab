@@ -83,6 +83,10 @@ se a ideia é **viável**. Como usar:
     with c1:
         st.markdown(f"**Plano {int(comp * 100)}% preenchido**")
         st.progress(comp)
+        prox = proximo_passo()
+        if prox and st.button(f"👉 Próximo passo: {PAG[prox][3]}", key="ini_prox"):
+            ir(prox)
+            st.rerun()
     if rx:
         c2.metric("Raio-X do plano", f"{rx['nota']}/100", help="Preenchimento (30) + checagens OK (30) + saúde financeira (40)")
         c3.metric("Investimento total", brl(res["investimento_total"]).split(",")[0],

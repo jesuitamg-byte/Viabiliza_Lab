@@ -315,6 +315,31 @@ def pg_relatorio():
                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", width="stretch")
             else:
                 st.warning("A biblioteca python-docx não está instalada neste computador.")
+    with st.container(border=True):
+        st.markdown("#### 🎓 Relatório acadêmico no padrão ABNT (PDF)")
+        st.caption("Capa, folha de rosto, sumário com páginas, seções numeradas, tabelas com título e fonte, citações e referências. "
+                   "Margens de 3 e 2 cm, fonte 12 e espaçamento 1,5.")
+        c = st.columns(3)
+        v = {"abnt_instituicao": c[0].text_input("Instituição", proj["abnt_instituicao"], key=wk("abnt_inst")),
+             "abnt_curso": c[1].text_input("Curso", proj["abnt_curso"], key=wk("abnt_curso")),
+             "abnt_disciplina": c[2].text_input("Disciplina", proj["abnt_disciplina"], key=wk("abnt_disc"))}
+        c = st.columns(3)
+        v["abnt_orientador"] = c[0].text_input("Professor(a) / orientador(a)", proj["abnt_orientador"], key=wk("abnt_ori"))
+        v["abnt_cidade"] = c[1].text_input("Cidade", proj["abnt_cidade"] or proj["cidade_uf"], key=wk("abnt_cid"))
+        v["abnt_ano"] = c[2].text_input("Ano", proj["abnt_ano"] or str(datetime.now().year), key=wk("abnt_ano"))
+        auto_unica("projeto", v)
+        st.caption("Os autores vêm do campo Autores (Informações e sócios), separados por ponto e vírgula.")
+        with st.expander("📚 Referências consultadas pelo grupo (NBR 6023)"):
+            st.caption("Uma referência por linha, já no formato ABNT. Use **negrito** com dois asteriscos, como no exemplo. As bases de dados "
+                       "usadas pelo programa (IBGE, Sebrae) entram sozinhas.")
+            editor("referencias", {"referencia": T("Referência", required=True, width="large")}, "referencia")
+            st.code("SOBRENOME, Nome. **Título do livro**: subtítulo. 2. ed. Cidade: Editora, 2020.", language=None)
+        if st.button("Gerar relatório ABNT", type="primary", key="b_abnt"):
+            with st.spinner("Montando o relatório acadêmico..."):
+                ss[f"abnt_{PID}"] = gerar_relatorio_abnt(proj, d, res)
+        if ss.get(f"abnt_{PID}"):
+            st.download_button("⬇️ Baixar relatório ABNT", ss[f"abnt_{PID}"], f"Relatorio_ABNT_{Path(ss.db).stem}.pdf",
+                               "application/pdf")
     k = st.columns(2)
     with k[0].container(border=True):
         st.markdown("#### 📊 Planilha (Excel)")
@@ -374,6 +399,10 @@ Os arquivos não são guardados; ficam só na memória desta sessão.
     disc, profn = st.columns(2)
     disciplina = disc.text_input("Disciplina", key="prof_disc")
     professor = profn.text_input("Professor(a)", key="prof_nome")
+    ss.modo_correcao = st.toggle("✍️ Modo de correção: escrever comentários dentro das ferramentas do projeto aberto",
+                                 value=bool(ss.get("modo_correcao")), key="tg_correcao",
+                                 help="Abra o .pnbox do grupo (menu lateral), ative este modo e navegue pelas ferramentas. Os "
+                                      "comentários ficam salvos no arquivo e aparecem para o grupo no topo de cada ferramenta.")
     arqs = st.file_uploader("Arquivos .pnbox dos grupos", type=["pnbox"], accept_multiple_files=True, key="prof_up")
     if not arqs:
         st.info("Nenhum arquivo enviado ainda.")
@@ -430,6 +459,16 @@ Os arquivos não são guardados; ficam só na memória desta sessão.
             st.write(f"**Pendências:** {av['Pendências'] or 'nenhuma'}")
             st.dataframe(pd.DataFrame({"Critério": [c_ for c_, _ in rubrica], "Peso": [p for _, p in rubrica],
                                        "Sugerida": av["notas"]}), hide_index=True, width="stretch")
+
+    carregados = []
+    for a_ in arqs:
+        try:
+            cam = tmp / a_.name
+            p_, d_ = carregar_projeto_arquivo(cam)
+            carregados.append((p_.get("nome_negocio") or a_.name, p_, d_))
+        except Exception:
+            pass
+    professor_extras(carregados)
 
     st.subheader("📦 Exportar")
     a, b = st.columns(2)
@@ -506,7 +545,10 @@ ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade
          "evidencias": pg_evidencias, "entrevistas": pg_entrevistas, "teste_preco": pg_teste_preco, "vpc": pg_vpc,
          "oceano": pg_oceano, "posicionamento": pg_posicionamento, "orcamento_mkt": pg_orcamento_mkt,
          "montecarlo": pg_montecarlo, "adocao": pg_adocao, "prontidao": pg_prontidao, "banca": pg_banca,
-         "formalizacao": pg_formalizacao}
+         "formalizacao": pg_formalizacao, "trilha": pg_trilha, "glossario": pg_glossario, "planilha": pg_planilha,
+         "historico": pg_historico, "financiamento": pg_financiamento, "dados_publicos": pg_dados_publicos,
+         "referencias": pg_referencias, "swot_cruzada": pg_swot_cruzada, "lean": pg_lean, "valuation": pg_valuation,
+         "impacto": pg_impacto, "editais": pg_editais, "novidades": pg_novidades}
 try:
     ROTAS.get(ss.pagina, pg_inicio)()
     copia_automatica()

@@ -81,6 +81,40 @@ def custos_unitarios(cat: pd.DataFrame, mat: pd.DataFrame, ficha: pd.DataFrame) 
 # ------------------------------------------------------------------------------
 # 2. CRONOGRAMA DOS EMPRÉSTIMOS (TABELA PRICE, PARCELAS MENSAIS)
 # ------------------------------------------------------------------------------
+def parcelas_emprestimo(pv: float, taxa_anual_pct: float, n: int, carencia: int = 0, sistema: str = "Price",
+                        meses: int | None = None) -> pd.DataFrame:
+    """
+    Tabela mês a mês de um empréstimo.
+    Price: parcelas iguais após a carência. SAC: amortização constante (parcelas decrescentes).
+    Carência: nos primeiros meses paga-se só os juros; o prazo total inclui a carência.
+    """
+    n = max(int(round(n)), 1)
+    carencia = 0 if carencia is None or carencia != carencia else carencia
+    sistema = "Price" if not isinstance(sistema, str) or not sistema.strip() else sistema
+    carencia = int(min(max(round(carencia), 0), n - 1))
+    i = (1 + float(taxa_anual_pct or 0) / 100.0) ** (1 / 12) - 1
+    na = n - carencia
+    sac = str(sistema or "Price").upper().startswith("SAC")
+    pmt = (pv / na if i == 0 else pv * i / (1 - (1 + i) ** (-na))) if not sac else 0.0
+    amort_sac = pv / na
+    saldo = pv
+    linhas = []
+    for m in range(meses if meses is not None else n):
+        if m < n and saldo > 1e-9:
+            j = saldo * i
+            if m < carencia:
+                a = 0.0
+            elif sac:
+                a = min(amort_sac, saldo)
+            else:
+                a = min(pmt - j, saldo)
+            saldo -= a
+        else:
+            j = a = 0.0
+        linhas.append((m + 1, j, a, j + a, max(saldo, 0.0)))
+    return pd.DataFrame(linhas, columns=["Mês", "Juros", "Amortização", "Parcela", "Saldo devedor"])
+
+
 def cronograma_emprestimos(emp: pd.DataFrame, anos: int = 4) -> dict:
     juros = [0.0] * anos
     amort = [0.0] * anos
@@ -91,22 +125,16 @@ def cronograma_emprestimos(emp: pd.DataFrame, anos: int = 4) -> dict:
         pv, n = float(r["valor"]), int(round(r["prazo_meses"]))
         if pv <= 0:
             continue
-        n = max(n, 1)
-        i = (1 + r["taxa_anual_pct"] / 100.0) ** (1 / 12) - 1
-        pmt = pv / n if i == 0 else pv * i / (1 - (1 + i) ** (-n))
-        saldo = pv
-        for m in range(anos * 12):
+        tab = parcelas_emprestimo(pv, r["taxa_anual_pct"], n, r.get("carencia_meses", 0) or 0, r.get("sistema", "Price") or "Price",
+                                  meses=anos * 12)
+        for m, (j, a, s) in enumerate(zip(tab["Juros"], tab["Amortização"], tab["Saldo devedor"])):
             ano = m // 12
-            if m < n and saldo > 1e-9:
-                j = saldo * i
-                a = min(pmt - j, saldo)
-                saldo -= a
-                juros[ano] += j
-                amort[ano] += a
-                juros_m[m] += j
-                amort_m[m] += a
+            juros[ano] += j
+            amort[ano] += a
+            juros_m[m] += j
+            amort_m[m] += a
             if m % 12 == 11:
-                saldo_fim[ano] += max(saldo, 0.0)
+                saldo_fim[ano] += s
     return {"juros": juros, "amort": amort, "saldo_fim": saldo_fim, "juros_m": juros_m, "amort_m": amort_m}
 
 

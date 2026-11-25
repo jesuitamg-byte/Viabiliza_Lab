@@ -17,6 +17,7 @@ from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 
 from pnbox_validacao import *  # noqa
+from pnbox_v8 import *  # noqa
 
 AZUL = (28, 49, 80)
 def _fontes_matplotlib():
@@ -364,7 +365,7 @@ def png_bsc(ob: pd.DataFrame) -> bytes | None:
         ax.text(Rm * np.cos(am), Rm * np.sin(am), f"{tit}\n\n{desc}\n{n} objetivo{'s' if n != 1 else ''}", ha="center",
                 va="center", color="white", fontsize=6.8, fontweight="bold", linespacing=1.15)
     ax.add_patch(plt.Circle((0, 0), R0 - 0.03, color="white"))
-    ax.text(0, 0, "BSC", ha="center", va="center", fontsize=34, fontweight="black", color="#333")
+    ax.text(0, 0, "BSC", ha="center", va="center", fontsize=34, fontweight="bold", color="#333")
     ax.set_xlim(-1.08, 1.08)
     ax.set_ylim(-1.08, 1.08)
     ax.set_aspect("equal")
@@ -590,6 +591,75 @@ def secoes_v71(pdf, proj, d, res):
     if not d["formalizacao"].empty:
         pdf.tabela(d["formalizacao"].rename(columns={"item": "Item", "status": "Situação", "observacao": "Observação"}),
                    larguras=(100, 26, 54), alinhar=("LEFT", "CENTER", "LEFT"), tam=7.5)
+
+
+def secoes_v8(pdf, proj, d, res):
+    """Seções da versão 8 no relatório completo."""
+    est = d.get("swot_estrategias", pd.DataFrame())
+    if not est.empty:
+        pdf.secao("SWOT CRUZADA: ESTRATÉGIAS", nova_pagina=True)
+        pdf.tabela(est.rename(columns={"quadrante": "Tipo", "estrategia": "Estratégia", "acao": "Ação", "prazo_meses": "Prazo (meses)"})
+                   .assign(**{"Prazo (meses)": est["prazo_meses"].map(lambda v: num_br(v, 0))}),
+                   larguras=(44, 60, 60, 16), alinhar=("LEFT", "LEFT", "LEFT", "CENTER"), tam=7.5)
+    lc = lean_canvas(proj, d, res)
+    pdf.secao("LEAN CANVAS", nova_pagina=True)
+    pdf.tabela(pd.DataFrame([(k, "; ".join(str(x) for x in v) or "-") for k, v in lc.items()], columns=["Bloco", "Conteúdo"]),
+               larguras=(45, 135), alinhar=("LEFT", "LEFT"), tam=7.8)
+    dp = d.get("dados_publicos", pd.DataFrame())
+    if not dp.empty or proj.get("setor_referencia"):
+        pdf.secao("DADOS PÚBLICOS E REFERÊNCIAS DO SETOR", nova_pagina=True)
+        if not dp.empty:
+            pdf.subtitulo(f"{proj.get('municipio_nome') or ''} ({proj.get('uf_sigla') or ''})")
+            pdf.tabela(pd.DataFrame({"Indicador": dp["rotulo"], "Valor": dp["valor"].map(lambda v: num_br(v, 2)), "Período": dp["periodo"],
+                                     "Fonte": dp["fonte"]}), larguras=(55, 28, 20, 77), alinhar=("LEFT", "RIGHT", "CENTER", "LEFT"), tam=7.5)
+        if proj.get("setor_referencia") and res["anos"][1]["rec_bruta"] > 0:
+            try:
+                cs = comparar_setor(proj["setor_referencia"], proj, d, res)
+                pdf.subtitulo(f"Comparação com a média do setor: {proj['setor_referencia'].split(' · ')[1]}")
+                fm = lambda i, v: pct(v) if ("÷" in i or "margem" in i.lower()) else brl(v)
+                pdf.tabela(pd.DataFrame({"Indicador": cs["Indicador"], "Plano": [fm(i, v) for i, v in zip(cs["Indicador"], cs["Plano"])],
+                                         "Setor (Brasil)": [fm(i, v) for i, v in zip(cs["Indicador"], cs["Setor (Brasil)"])],
+                                         "Plano ÷ setor": cs["Plano ÷ setor"].map(lambda v: f"{num_br(v, 2)}x" if v == v else "n.a.")}),
+                           larguras=(80, 35, 35, 30), tam=7.8)
+                for a in leitura_setor(cs):
+                    pdf.paragrafo(a, "I", 8)
+                pdf.paragrafo(FONTE_PAC if proj["setor_referencia"].startswith("Comércio") else FONTE_PAS, "I", 7.5)
+            except Exception:
+                pass
+        pdf.paragrafo("Sobrevivência em 5 anos (Sebrae, 2026): " + "; ".join(f"{k}: {pct(v, 1)}" for k, v in SOBREVIVENCIA_5A.items()) + ".",
+                      "", 8.5)
+    emp = d["emprestimos"]
+    if not emp.empty and float(emp["valor"].sum()) > 0:
+        pdf.secao("FINANCIAMENTO", nova_pagina=True)
+        linhas_ = []
+        for _, r in emp.iterrows():
+            if float(r["valor"] or 0) > 0:
+                rs = resumo_emprestimo(r["valor"], r["taxa_anual_pct"], r["prazo_meses"], r["carencia_meses"], r["sistema"])
+                linhas_.append((r["descricao"], brl(r["valor"]), f"{num_br(r['taxa_anual_pct'], 2)}%", num_br(r["prazo_meses"], 0),
+                                num_br(r["carencia_meses"] or 0, 0), r["sistema"] or "Price", brl(rs["juros"]), pct(rs["cet"])))
+        pdf.tabela(pd.DataFrame(linhas_, columns=["Linha", "Valor", "Juros a.a.", "Prazo", "Carência", "Sistema", "Juros totais", "CET a.a."]),
+                   larguras=(38, 22, 16, 13, 15, 16, 24, 18), tam=7.3)
+    vl = valuation(res, proj, d)
+    pdf.secao("VALUATION E RODADA DE INVESTIMENTO", nova_pagina=True)
+    pdf.tabela(vl["metodos"].assign(**{"Valor do patrimônio dos sócios": vl["metodos"]["Valor do patrimônio dos sócios"].map(brl)}),
+               larguras=(130, 50), alinhar=("LEFT", "RIGHT"))
+    pre, inv = float(proj.get("rodada_pre_money") or 0), float(proj.get("rodada_investimento") or 0)
+    if inv > 0 and pre > 0:
+        ct = cap_table(d, pre, inv)
+        pdf.subtitulo(f"Rodada: aporte de {brl(inv)} com pre-money de {brl(pre)}")
+        pdf.tabela(ct.assign(**{"Participação antes": ct["Participação antes"].map(pct), "Participação depois": ct["Participação depois"].map(pct),
+                                "Valor da participação": ct["Valor da participação"].map(brl)}), larguras=(60, 40, 40, 40))
+    imp = [(rot, proj.get(k_)) for k_, rot, _ in ETAPAS_MUDANCA if proj.get(k_)]
+    if imp or not d["impacto_indicadores"].empty:
+        pdf.secao("IMPACTO SOCIAL E ODS", nova_pagina=True)
+        for rot, v_ in imp:
+            pdf.campo(rot, v_)
+        if proj.get("ods"):
+            pdf.campo("ODS", str(proj["ods"]).replace(";", "; "))
+        ii = d["impacto_indicadores"]
+        if not ii.empty:
+            pdf.tabela(ii.rename(columns={"indicador": "Indicador", "tipo": "Tipo", "linha_base": "Situação atual", "meta": "Meta", "ods": "ODS"}),
+                       larguras=(55, 28, 30, 30, 37), alinhar=("LEFT",) * 5, tam=7.5)
 
 
 def graficos_png(comp: dict) -> list:
@@ -1341,6 +1411,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                       "referência de 11,3% para 2027 calculada pelo TCU, sujeita à definição do Senado. Confirme com um contador.", "I", 7.5)
 
     secoes_v71(pdf, proj, d, res)
+    secoes_v8(pdf, proj, d, res)
 
     if str(proj.get("conclusao") or "").strip():
         pdf.secao("CONCLUSÃO E PARECER FINAL", nova_pagina=True)

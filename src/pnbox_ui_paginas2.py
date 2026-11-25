@@ -79,7 +79,12 @@ def pg_investimentos():
         st.caption("O capital próprio vem dos sócios (Informações e sócios). Aqui você cadastra empréstimos e financiamentos.")
         editor("emprestimos", {"descricao": T("Descrição (banco, linha de crédito)", required=True, width="large"),
                                "valor": moeda("Valor (R$)"), "taxa_anual_pct": N("Juros (% ao ano)", min_value=0.0),
-                               "prazo_meses": N("Prazo (meses)", min_value=1, step=1)}, "descricao")
+                               "prazo_meses": N("Prazo (meses)", min_value=1, step=1),
+                               "carencia_meses": N("Carência (meses)", min_value=0, step=1),
+                               "sistema": S("Sistema", options=["Price", "SAC"])}, "descricao")
+        if st.button("🏦 Ver parcelas e comparar propostas de crédito", key="inv_fin"):
+            ir("financiamento")
+            st.rerun()
         r = R()
         it = r["investimento_total"]
         a, b = st.columns(2)
@@ -404,6 +409,9 @@ def pg_indicadores():
                 st.caption(s_["Leitura"])
                 with st.popover("🔎 Como foi calculado"):
                     st.write(s_["Como foi calculado"])
+    with st.expander("📖 O que significam estes números? (leitura em linguagem simples)"):
+        for nome, valor, leitura in explicar_indicadores(r):
+            st.markdown(f"**{nome}: {valor}**  \n{leitura}")
     st.subheader("Resumo financeiro (Ano 1, padrão Sebrae)")
     rs, a1 = r["resumo"], r["anos"][1]
     k = st.columns(4)
