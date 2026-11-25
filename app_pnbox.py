@@ -9927,10 +9927,12 @@ def pg_sumario():
         novo = gerar_sumario(proj, d, res)
         proj["sumario_executivo"] = novo
         salvar_unica(conn, "projeto", {"sumario_executivo": novo})
-        ss.pop(wk("sumario_txt"), None)
+        # chave nova = caixa de texto nova (o navegador não reaproveita o valor antigo do componente)
+        ss["sumario_versao"] = ss.get("sumario_versao", 0) + 1
         marcar_salvo()
         st.rerun()
-    txt = st.text_area("Sumário executivo", proj["sumario_executivo"], height=360, key=wk("sumario_txt"),
+    txt = st.text_area("Sumário executivo", proj["sumario_executivo"], height=360,
+                       key=wk(f"sumario_txt_{ss.get('sumario_versao', 0)}"),
                        placeholder="Clique no botão acima para gerar um rascunho, ou escreva aqui.")
     st.caption(f"{len(txt.split())} palavras. Recomenda-se entre 250 e 500.")
     st.divider()
