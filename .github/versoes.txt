@@ -1,0 +1,10 @@
+# versão | commit | título  (uma linha por versão publicada; a automação cria a etiqueta e a página de release)
+v4.1 | 2a3e1d7 | primeira versão publicada
+v5.0 | 91059f1 | plano completo
+v5.0.1 | 434d89e | ajustes
+v6.0 | 0e9e4b1 | serviços e assinaturas
+v7.0 | 960e5f3 | ViabilizaLab
+v7.1 | 91cb58e | validação, marketing, incerteza e defesa
+v7.2 | a3c003b | novo visual das matrizes e modelo de serviços
+v7.2.1 | b8febfc | correção do sumário executivo
+v8.0 | a83049f | dados públicos, ABNT, financiamento e modo professor

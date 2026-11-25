@@ -1,0 +1,46 @@
+name: Registrar versões (etiquetas e releases)
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/versoes.txt", "CHANGELOG.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  versoes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Criar etiquetas e releases que ainda não existem
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import re, subprocess
+          log = open("CHANGELOG.md", encoding="utf-8").read()
+          secoes = {}
+          for bloco in re.split(r"\n(?=## v)", log)[1:]:
+              m = re.match(r"## (v[\d.]+)", bloco)
+              if m:
+                  corpo = "\n".join(bloco.splitlines()[1:]).strip().rstrip("-").strip()
+                  secoes[m.group(1)] = corpo
+          for linha in open(".github/versoes.txt", encoding="utf-8"):
+              if not linha.strip() or linha.startswith("#"):
+                  continue
+              versao, commit, titulo = [x.strip() for x in linha.split("|", 2)]
+              existe = subprocess.run(["gh", "release", "view", versao], capture_output=True).returncode == 0
+              if existe:
+                  print(f"{versao}: já existe")
+                  continue
+              sha = subprocess.run(["git", "rev-parse", commit], capture_output=True, text=True, check=True).stdout.strip()
+              notas = secoes.get(versao, "") + "\n\nHistórico completo: [CHANGELOG.md](../../blob/main/CHANGELOG.md)\n"
+              open("/tmp/notas.md", "w", encoding="utf-8").write(notas)
+              subprocess.run(["gh", "release", "create", versao, "--target", sha, "--title", f"{versao}: {titulo}",
+                              "--notes-file", "/tmp/notas.md", "--latest=false"], check=True)
+              print(f"{versao}: criada em {sha[:7]}")
+          PY
