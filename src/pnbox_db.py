@@ -69,9 +69,18 @@ SCHEMA = {
         # Reforma tributária (simulação)
         ("reforma_b2b_pct", "REAL"), ("reforma_cbs_pct", "REAL"), ("reforma_ibs_pct", "REAL"),
         ("reforma_ano", "REAL"), ("reforma_compras_credito", "REAL"),
+        # Validação, marketing e incerteza (v7.1)
+        ("intencao_certamente_pct", "REAL"), ("intencao_provavel_pct", "REAL"),
+        ("fator_certamente_pct", "REAL"), ("fator_provavel_pct", "REAL"), ("vw_produto", "TEXT"),
+        ("vpc_job", "TEXT"), ("vpc_tarefas", "TEXT"), ("vpc_dores", "TEXT"), ("vpc_ganhos", "TEXT"),
+        ("vpc_produtos", "TEXT"), ("vpc_aliviadores", "TEXT"), ("vpc_criadores", "TEXT"),
+        ("posic_segmento", "TEXT"), ("posic_necessidade", "TEXT"), ("posic_marca", "TEXT"), ("posic_categoria", "TEXT"),
+        ("posic_beneficio", "TEXT"), ("posic_concorrente", "TEXT"), ("posic_diferencial", "TEXT"),
+        ("mapa_eixo_x", "TEXT"), ("mapa_eixo_y", "TEXT"), ("nps_meta", "REAL"),
+        ("bass_mercado", "REAL"), ("bass_p", "REAL"), ("bass_q", "REAL"), ("revenda_ativos_pct", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
-               ("perfil", "TEXT"), ("capital_integralizado", "REAL")],
+               ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
     "segmentos": [("nome", "TEXT"), ("descricao", "TEXT"), ("nota_tamanho", "REAL"),
                   ("nota_lucro", "REAL"), ("nota_longevidade", "REAL"),
                   ("nota_concorrencia", "REAL"), ("nota_aderencia", "REAL")],
@@ -145,6 +154,21 @@ SCHEMA = {
     "bcg": [("produto", "TEXT"), ("crescimento_mercado_pct", "REAL"), ("participacao_relativa", "REAL")],
     "ge": [("unidade", "TEXT"), ("forca", "REAL"), ("justificativa", "TEXT")],
     "porter": [("forca", "TEXT"), ("intensidade", "REAL"), ("justificativa", "TEXT"), ("estrategia", "TEXT")],
+    # --- v7.1: validação, marketing, incerteza e defesa ---
+    "evidencias": [("premissa", "TEXT"), ("status", "TEXT"), ("fonte", "TEXT"), ("observacao", "TEXT")],
+    "entrevistas": [("data", "TEXT"), ("entrevistado", "TEXT"), ("perfil", "TEXT"), ("dores", "TEXT"),
+                    ("solucao_atual", "TEXT"), ("pagaria", "TEXT"), ("valor_pagaria", "REAL"), ("aprendizado", "TEXT")],
+    "precos_vw": [("respondente", "TEXT"), ("muito_barato", "REAL"), ("barato", "REAL"), ("caro", "REAL"),
+                  ("muito_caro", "REAL")],
+    "vpc_encaixe": [("item", "TEXT"), ("tipo", "TEXT"), ("resposta", "TEXT")],
+    "errc": [("atributo", "TEXT"), ("acao", "TEXT"), ("nova_nota", "REAL"), ("justificativa", "TEXT")],
+    "mapa_perceptual": [("marca", "TEXT"), ("eixo_x", "REAL"), ("eixo_y", "REAL")],
+    "orcamento_canais": [("canal", "TEXT"), ("gasto_mensal", "REAL"), ("clientes_mes", "REAL"), ("observacao", "TEXT")],
+    "aarrr": [("etapa", "TEXT"), ("metrica", "TEXT"), ("meta", "TEXT"), ("acao", "TEXT")],
+    "calendario_mkt": [("mes", "REAL"), ("acao", "TEXT"), ("canal", "TEXT"), ("custo", "REAL")],
+    "mc_faixas": [("variavel", "TEXT"), ("minimo_pct", "REAL"), ("maximo_pct", "REAL")],
+    "formalizacao": [("item", "TEXT"), ("status", "TEXT"), ("observacao", "TEXT")],
+    "banca_respostas": [("pergunta", "TEXT"), ("resposta", "TEXT")],
 }
 
 # Valores-padrão de um projeto em branco
@@ -162,6 +186,9 @@ PROJETO_PADRAO = {
     "verba_aquisicao_mensal": 0.0, "bcg_limite_crescimento_pct": 10.0,
     "reforma_b2b_pct": 0.0, "reforma_cbs_pct": 11.3, "reforma_ibs_pct": 0.1, "reforma_ano": 2027.0,
     "reforma_compras_credito": -1.0,
+    "intencao_certamente_pct": 0.0, "intencao_provavel_pct": 0.0, "fator_certamente_pct": 70.0, "fator_provavel_pct": 30.0,
+    "nps_meta": 50.0, "bass_mercado": 0.0, "bass_p": 0.03, "bass_q": 0.38, "revenda_ativos_pct": 40.0,
+    "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)

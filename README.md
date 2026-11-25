@@ -4,19 +4,22 @@
 
 Programa gratuito para elaborar **plano de negócio e análise de viabilidade econômico-financeira**, com estrutura inspirada no plano de negócio do Sebrae e voltado ao ensino de Administração.
 
-**Versão 7.** São 42 ferramentas em cartões grandes, organizadas na sequência de um plano de negócio, para negócios de **produtos, serviços e assinaturas**:
+**Versão 7.1.** São 54 ferramentas em cartões grandes, organizadas na sequência de um plano de negócio, para negócios de **produtos, serviços e assinaturas**:
 
 - **Cliente e mercado:** segmentos, personas, jornada do cliente, tamanho do mercado (TAM/SAM/SOM).
 - **Identidade:** missão, visão e valores; objetivos estratégicos com checagem automática dos critérios SMART.
 - **Estratégia:** propostas de valor, concorrência, forças e fraquezas, oportunidades e ameaças, matriz SWOT.
 - **Análise estratégica:** *Business Model Canvas* montado a partir do que já foi preenchido, cinco forças de Porter (com radar), matriz GE/McKinsey, matriz BCG (com a receita de cada produto) e *Balanced Scorecard* com mapa estratégico.
+- **Validação:** placar de evidências (quanto do resultado se apoia em premissas testadas com clientes, com pesos pela sensibilidade), roteiro e registro de entrevistas, teste de preço de Van Westendorp e intenção de compra ajustada.
+- **Marketing estratégico:** Canvas da proposta de valor com *jobs to be done*, curva de valor e matriz ERRC (oceano azul), declaração de posicionamento e mapa perceptual, orçamento e CAC por canal, funil AARRR, calendário de ações e meta de NPS.
 - **Marketing e operação:** 4Ps, canais e funil, localização, layout, capacidade x demanda, organograma e plano de contratações mês a mês, fornecedores.
-- **Finanças:** investimentos e fontes, produtos e fichas técnicas, custos classificados (MOD, CIF, despesas), formação de preço por *markup* e custeio por absorção, DRE com horizonte escolhido pelo grupo (1 a 10 anos), fluxo de caixa mensal, indicadores com semáforo, gráficos, simulador "e se...?", sensibilidade e cenários.
+- **Finanças:** investimentos e fontes, produtos e fichas técnicas, custos classificados (MOD, CIF, despesas), formação de preço por *markup* e custeio por absorção, DRE com horizonte escolhido pelo grupo (1 a 10 anos), fluxo de caixa mensal, indicadores com semáforo, gráficos, simulador "e se...?", sensibilidade, cenários, simulação de Monte Carlo (chance de VPL positivo e de caixa negativo), perda aceitável dos sócios e curva de adoção de Bass.
 - **Serviços:** custo da hora produtiva (equipe, horas contratadas e taxa de utilização), custo pleno e preço sugerido de cada serviço, ocupação da equipe.
 - **Assinaturas e receita recorrente:** planos mensais, trimestrais ou anuais projetados por safras de assinantes, com churn, MRR, ARR, ARPU, CAC, LTV, LTV/CAC (CAC pela verba de aquisição ou pelos custos de marketing), receita antecipada no balanço e custos de tecnologia (nuvem, APIs, lojas de aplicativos, meio de pagamento).
 - **Tributos:** calculadora do Simples Nacional (anexos I a V e fator R) e simulação da reforma tributária: Simples puro x IBS/CBS recolhidos por fora (LC 214/2025), com o efeito do crédito para clientes empresas.
+- **Defesa:** régua de prontidão de 1 a 9, banca simulada com perguntas geradas a partir das fragilidades do plano e checklist de formalização (MEI, ME, EPP, licenças, LGPD, marca).
 - **Complementares:** quadro de experimentação, riscos, cronograma de implantação, orçado x realizado.
-- **Entrega:** texto pronto para análise com IA gratuita (cobre todas as ferramentas), sumário executivo automático, modo apresentação, relatório PDF, *pitch deck*, Word, Excel e modo professor.
+- **Entrega:** texto pronto para análise com IA gratuita (cobre todas as ferramentas e tem o **teste de viabilidade real**: a IA compara as premissas com o mercado, refaz as contas num cenário realista, dá o veredito e propõe ajustes), sumário executivo automático, modo apresentação, relatório PDF, *pitch deck*, Word, Excel e modo professor.
 
 Também tem: salvamento automático a cada alteração, ponto de restauração automático a cada 10 minutos, tema claro/escuro, listas personalizáveis (categorias, unidades, áreas) três casos de exemplo (FitBox, Café Mucuri e Conecta Vale, um aplicativo por assinatura) e layout adaptado para celular.
 

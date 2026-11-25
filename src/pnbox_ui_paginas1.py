@@ -237,8 +237,11 @@ def pg_projeto():
     st.subheader("👥 Sócios")
     editor("socios", {"nome": T("Nome", required=True), "funcao": T("Função"), "contato": T("Contato"),
                       "perfil": T("Minicurrículo / atribuições", width="large"),
-                      "capital_integralizado": moeda("Capital investido (R$)")}, "nome")
-    st.caption(f"Capital próprio total: **{brl(d['socios']['capital_integralizado'].sum())}**")
+                      "capital_integralizado": moeda("Capital investido (R$)"),
+                      "perda_aceitavel": moeda("Perda aceitável (R$)", help="Quanto este sócio aceita perder se o negócio não "
+                                               "der certo, sem comprometer a vida pessoal (Sarasvathy, 2001).")}, "nome")
+    st.caption(f"Capital próprio total: **{brl(d['socios']['capital_integralizado'].sum())}** · perda aceitável somada: "
+               f"**{brl(d['socios']['perda_aceitavel'].sum())}** (usada em Monte Carlo e perda aceitável)")
     proxima("projeto")
 
 

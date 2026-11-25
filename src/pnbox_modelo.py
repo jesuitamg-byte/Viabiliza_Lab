@@ -769,3 +769,150 @@ def popular_estrategia(conn, qual: str) -> None:
               "Poder de barganha dos clientes", "Poder de barganha dos fornecedores"]
     conn.executemany("INSERT INTO porter (forca, intensidade, justificativa, estrategia) VALUES (?,?,?,?)",
                      [(f, *v) for f, v in zip(forcas, e["porter"])])
+    popular_validacao(conn, qual)
+
+
+# ------------------------------------------------------------------------------
+# DADOS DE EXEMPLO DAS FERRAMENTAS DE VALIDAÇÃO E MARKETING (v7.1) - fictícios
+# ------------------------------------------------------------------------------
+def _respostas_vw(preco: float, n: int, semente: int) -> list:
+    """Respostas fictícias e coerentes do teste de Van Westendorp em torno de um preço."""
+    import random
+    rnd = random.Random(semente)
+    linhas = []
+    for i in range(n):
+        base = preco * rnd.uniform(0.75, 1.25)
+        mb = round(base * rnd.uniform(0.45, 0.65), 0)
+        ba = round(base * rnd.uniform(0.75, 0.9), 0)
+        ca = round(base * rnd.uniform(1.05, 1.25), 0)
+        mc = round(base * rnd.uniform(1.35, 1.7), 0)
+        linhas.append((f"R{i + 1:02d}", mb, max(ba, mb), max(ca, ba), max(mc, ca)))
+    return linhas
+
+
+_VALIDACAO = {
+    "fitbox": {
+        "vw_produto": "Assinatura semanal - 5 marmitas tradicionais", "vw_preco": 129.9, "vw_n": 32,
+        "intencao": (18.0, 31.0),
+        "entrevistas": [
+            ("03/02", "E01", "Trabalhadora de escritório", "falta de tempo; comida pouco saudável perto do trabalho", "marmita de casa", "Sim", 130, "Quer variar o cardápio na semana"),
+            ("03/02", "E02", "Praticante de academia", "dificuldade de controlar macros; falta de tempo", "prepara no domingo", "Sim", 150, "Valoriza tabela nutricional"),
+            ("04/02", "E03", "Estudante universitário", "preço alto; comida pouco saudável perto do trabalho", "restaurante a quilo", "Talvez", 90, "Sensível a preço"),
+            ("04/02", "E04", "Profissional liberal", "falta de tempo; enjoa da mesma comida", "aplicativo de delivery", "Sim", 140, "Pediu entrega até 11h"),
+            ("05/02", "E05", "Mãe que trabalha fora", "falta de tempo; dificuldade de controlar macros", "congela comida", "Sim", 120, "Quer opção para a família"),
+            ("05/02", "E06", "Praticante de corrida", "dificuldade de controlar macros", "marmitaria fitness", "Talvez", 110, "Já usa concorrente"),
+            ("06/02", "E07", "Servidor público", "comida pouco saudável perto do trabalho; falta de tempo", "restaurante a quilo", "Sim", 130, "Almoça no trabalho"),
+            ("06/02", "E08", "Estudante universitário", "preço alto", "lanche", "Não", 60, "Não é o público prioritário"),
+            ("07/02", "E09", "Trabalhadora de escritório", "falta de tempo; enjoa da mesma comida", "marmita de casa", "Sim", 125, "Indicaria a colegas"),
+            ("07/02", "E10", "Personal trainer", "dificuldade de controlar macros", "prepara em casa", "Talvez", 140, "Possível parceiro de indicação"),
+            ("08/02", "E11", "Profissional de saúde", "falta de tempo; comida pouco saudável perto do trabalho", "aplicativo de delivery", "Sim", 135, "Plantões longos"),
+            ("08/02", "E12", "Praticante de academia", "falta de tempo; dificuldade de controlar macros", "marmitaria fitness", "Sim", 145, "Quer suplementos junto"),
+        ],
+        "evidencias": {"Preço de venda": ("Testada com clientes (entrevista, pré-venda, piloto)", "32 respostas do teste de preço e 12 entrevistas (fev.)"),
+                       "Custo de materiais e mercadorias": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Orçamentos de 3 fornecedores"),
+                       "Salários e encargos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Piso da categoria e tabela do contador"),
+                       "Demais custos fixos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Aluguel e contas cotados")},
+        "vpc": ("Quando tenho pouco tempo no almoço, quero comer algo saudável e saboroso, para manter a dieta sem perder o horário.",
+                "Almoçar em pouco tempo\nSeguir a dieta da nutricionista\nPlanejar a alimentação da semana",
+                "Falta de tempo\nComida pouco saudável perto do trabalho\nDificuldade de controlar macros\nEnjoa da mesma comida",
+                "Sentir mais disposição\nVer resultado no treino\nEconomizar com delivery caro",
+                "Marmitas fitness\nAssinatura semanal e mensal\nCoffee break saudável",
+                "Entrega no trabalho até 11h\nTabela nutricional em cada marmita\nCardápio que muda toda semana",
+                "Acompanhamento com nutricionista parceira\nPreço de assinatura menor que o delivery"),
+        "encaixe": [("Falta de tempo", "Dor", "Entrega no trabalho até 11h"),
+                    ("Comida pouco saudável perto do trabalho", "Dor", "Tabela nutricional em cada marmita"),
+                    ("Dificuldade de controlar macros", "Dor", "Tabela nutricional em cada marmita"),
+                    ("Enjoa da mesma comida", "Dor", "Cardápio que muda toda semana"),
+                    ("Ver resultado no treino", "Ganho", "Acompanhamento com nutricionista parceira"),
+                    ("Economizar com delivery caro", "Ganho", "Preço de assinatura menor que o delivery")],
+        "errc": [("Variedade", "Reduzir", 6, "Cardápio enxuto e rotativo reduz custo e desperdício"),
+                 ("Design", "Reduzir", 5, "Embalagem simples e reciclável"),
+                 ("Transparência nutricional", "Elevar", 10, "Tabela completa e macros em cada marmita"),
+                 ("Conveniência", "Elevar", 9, "Entrega programada no trabalho"),
+                 ("Personalização", "Criar", 8, "Ajuste de porções conforme o objetivo do cliente")],
+        "posic": ("trabalhadores e praticantes de atividade física de Teófilo Otoni", "não têm tempo de preparar refeições saudáveis",
+                  "FitBox", "uma assinatura de refeições saudáveis", "entrega no trabalho refeições balanceadas com controle de macros",
+                  "marmitarias comuns e aplicativos de delivery", "cada marmita traz a tabela nutricional e o cardápio é planejado por nutricionista"),
+        "mapa": ("Preço (baixo → alto)", "Saudabilidade (baixa → alta)",
+                 [("FitBox", 6, 9), ("Concorrente A (marmitaria fitness)", 7, 7), ("Concorrente B (restaurante natural)", 8, 8),
+                  ("Concorrente C (loja de suplementos)", 5, 6), ("Restaurante a quilo", 4, 4)]),
+        "orc": [("Publicidade em Redes Sociais", 1500, 45, "Cupom por anúncio"), ("Acordos e Parcerias", 600, 25, "Código de academia parceira"),
+                ("Marketing de Conteúdo", 400, 12, "Link na bio"), ("Eventos", 800, 10, "Inscrições no estande")],
+        "aarrr": [("Aquisição", "Visitas ao perfil e cadastros", "300 cadastros/mês", "Anúncios e parcerias com academias"),
+                  ("Ativação", "Primeiro pedido em 7 dias", "40% dos cadastros", "Cupom de primeira semana"),
+                  ("Retenção", "Assinantes que renovam no mês", "75%", "Cardápio rotativo e avaliação semanal"),
+                  ("Receita", "Ticket médio mensal", "R$ 450", "Upgrade para plano mensal"),
+                  ("Indicação", "Clientes vindos de indicação", "20%", "Uma marmita grátis por indicação")],
+        "cal": [(1, "Lançamento com degustação em academias", "Eventos", 1200), (1, "Campanha de anúncios de abertura", "Redes sociais", 1500),
+                (3, "Parceria com nutricionistas", "Parcerias", 600), (6, "Campanha de indicação", "Indicação", 500)],
+        "perda": [40000, 30000, 25000, 15000],
+        "formal": {"Contratar contador ou escritório contábil": "Concluído",
+                   "Consultar a viabilidade do endereço na prefeitura (zoneamento)": "Em andamento",
+                   "Escolher a natureza jurídica (MEI, empresário individual, SLU ou LTDA)": "Concluído"},
+        "banca": [("Por que este é o momento certo para abrir este negócio?",
+                   "A procura por alimentação saudável cresce na cidade e nenhum concorrente entrega no local de trabalho com controle de macros. "
+                   "As 12 entrevistas mostraram que falta de tempo é a dor mais citada.")],
+    },
+    "cafe": {
+        "vw_produto": "Cappuccino", "vw_preco": 11.0, "vw_n": 20, "intencao": (12.0, 25.0), "entrevistas": [],
+        "evidencias": {"Demais custos fixos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Aluguel cotado")},
+        "vpc": ("Quando quero uma pausa no meio da tarde, quero um café de qualidade num lugar agradável, para descansar e encontrar amigos.",
+                "Fazer uma pausa no trabalho\nEncontrar amigos\nComprar pão para casa",
+                "Café fraco ou requentado\nFila na padaria\nPoucos lugares para sentar", "Ambiente acolhedor\nProdutos artesanais",
+                "Cafés especiais\nPães de fermentação natural\nBolos caseiros", "Café moído na hora\nAtendimento rápido no balcão",
+                "Ambiente com mesas e Wi-Fi\nProdutos da região"),
+        "errc": [("Rapidez", "Manter", 0, ""), ("Ambiente", "Elevar", 9, "Mesas, tomadas e Wi-Fi"),
+                 ("Presença digital", "Elevar", 8, "Encomendas pelo WhatsApp")],
+        "posic": ("moradores e trabalhadores do centro", "querem um café de qualidade sem pagar preço de rede", "Café Mucuri",
+                  "uma cafeteria de bairro", "serve café especial e pães artesanais com preço justo",
+                  "padarias tradicionais e redes de cafeteria", "usamos grãos e farinhas de produtores da região"),
+        "mapa": ("Preço (baixo → alto)", "Qualidade do café (baixa → alta)",
+                 [("Café Mucuri", 5, 8), ("Padaria tradicional do centro", 3, 4), ("Rede de cafeteria", 8, 8)]),
+        "orc": [("Instagram", 600, 30, "Cupom do perfil"), ("Indicação (boca a boca)", 200, 20, "Cartão fidelidade")],
+        "aarrr": [], "cal": [], "perda": [35000, 25000], "formal": {}, "banca": [],
+    },
+    "assinatura": {
+        "vw_produto": "Assinatura (ticket médio)", "vw_preco": 0, "vw_n": 0, "intencao": (8.0, 20.0), "entrevistas": [],
+        "evidencias": {"Cancelamento mensal (churn)": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Referências de SaaS para pequenas empresas")},
+        "vpc": ("Quando organizo um evento na cidade, quero que o público certo saiba dele, para encher o evento sem gastar muito com anúncios.",
+                "Divulgar eventos\nAtrair público local\nMedir o resultado da divulgação",
+                "Anúncio caro e pouco segmentado\nNão sabe se a divulgação deu resultado", "Público certo no evento\nRelatório para os patrocinadores",
+                "Aplicativo de agenda local\nPlanos de parceiro\nCobertura de eventos", "Público segmentado por cidade e interesse\nRelatório mensal de visualizações",
+                "Selo de parceiro destaque\nCobertura em vídeo"),
+        "errc": [("Conteúdo local", "Elevar", 10, "Agenda completa do Vale"), ("Relatórios de resultado", "Criar", 8, "Relatório mensal ao parceiro")],
+        "posic": ("produtores de eventos e pequenos comércios do Vale do Mucuri", "querem divulgar para o público local", "Conecta Vale",
+                  "um aplicativo de agenda e divulgação local", "leva o evento ao público certo com relatório de resultado",
+                  "perfis locais no Instagram", "o parceiro recebe todo mês o relatório de visualizações e cliques"),
+        "mapa": ("Preço (baixo → alto)", "Alcance local (baixo → alto)",
+                 [("Conecta Vale", 4, 8), ("Plataforma nacional de eventos", 7, 4), ("Perfis locais no Instagram", 3, 6)]),
+        "orc": [("Venda consultiva às empresas", 1200, 8, "Contratos fechados"), ("Instagram", 500, 4, "Cadastros pelo link")],
+        "aarrr": [], "cal": [], "perda": [30000, 30000], "formal": {}, "banca": [],
+    },
+}
+
+
+def popular_validacao(conn, qual: str) -> None:
+    v = _VALIDACAO[qual]
+    vpc = v["vpc"]
+    conn.execute("""UPDATE projeto SET vw_produto=?, intencao_certamente_pct=?, intencao_provavel_pct=?, vpc_job=?, vpc_tarefas=?,
+                    vpc_dores=?, vpc_ganhos=?, vpc_produtos=?, vpc_aliviadores=?, vpc_criadores=?, posic_segmento=?,
+                    posic_necessidade=?, posic_marca=?, posic_categoria=?, posic_beneficio=?, posic_concorrente=?,
+                    posic_diferencial=?, mapa_eixo_x=?, mapa_eixo_y=? WHERE id=1""",
+                 (v["vw_produto"], *v["intencao"], *vpc, *v["posic"], v["mapa"][0], v["mapa"][1]))
+    if v["vw_n"]:
+        conn.executemany("INSERT INTO precos_vw (respondente, muito_barato, barato, caro, muito_caro) VALUES (?,?,?,?,?)",
+                         _respostas_vw(v["vw_preco"], v["vw_n"], 7))
+    conn.executemany("""INSERT INTO entrevistas (data, entrevistado, perfil, dores, solucao_atual, pagaria, valor_pagaria, aprendizado)
+                        VALUES (?,?,?,?,?,?,?,?)""", v["entrevistas"])
+    conn.executemany("INSERT INTO evidencias (premissa, status, fonte, observacao) VALUES (?,?,?,'')",
+                     [(k, s, f) for k, (s, f) in v["evidencias"].items()])
+    conn.executemany("INSERT INTO vpc_encaixe (item, tipo, resposta) VALUES (?,?,?)", v.get("encaixe", []))
+    conn.executemany("INSERT INTO errc (atributo, acao, nova_nota, justificativa) VALUES (?,?,?,?)", v["errc"])
+    conn.executemany("INSERT INTO mapa_perceptual (marca, eixo_x, eixo_y) VALUES (?,?,?)", v["mapa"][2])
+    conn.executemany("INSERT INTO orcamento_canais (canal, gasto_mensal, clientes_mes, observacao) VALUES (?,?,?,?)", v["orc"])
+    conn.executemany("INSERT INTO aarrr (etapa, metrica, meta, acao) VALUES (?,?,?,?)", v["aarrr"])
+    conn.executemany("INSERT INTO calendario_mkt (mes, acao, canal, custo) VALUES (?,?,?,?)", v["cal"])
+    ids = [r[0] for r in conn.execute("SELECT id FROM socios ORDER BY id")]
+    conn.executemany("UPDATE socios SET perda_aceitavel=? WHERE id=?", list(zip(v["perda"], ids)))
+    conn.executemany("INSERT INTO formalizacao (item, status, observacao) VALUES (?,?,'')", list(v["formal"].items()))
+    conn.executemany("INSERT INTO banca_respostas (pergunta, resposta) VALUES (?,?)", v["banca"])

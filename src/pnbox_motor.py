@@ -553,6 +553,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         payback_simples=payback_simples, payback_desc=payback_desc, resumo=resumo, tma=tma,
         ass=ass_df, ass_planos=ass_planos, recorrencia=rec_ind, g_a=g_a, inf=inf,
         N=N, ANOS=ANOS, MESES=MESES, pes_serie=pes_serie, folha_ano1=sum(sal_enc_serie[:12]),
+        recupera_giro=bool(proj.get("recuperar_giro")),
     )
 
 
