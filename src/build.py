@@ -1,8 +1,8 @@
 import re
-partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_pdf.py","pnbox_extras.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas3.py"]
+partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_pdf.py","pnbox_extras.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas4.py","pnbox_ui_paginas3.py"]
 cab='''"""
 ================================================================================
-PNBOX ACADÊMICO v5 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+PNBOX ACADÊMICO v6 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir PNBOX.bat" (na mesma pasta); ou

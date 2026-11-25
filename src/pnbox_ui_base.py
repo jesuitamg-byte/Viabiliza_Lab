@@ -26,9 +26,9 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
                          tabela_checagens_v5, raio_x)
 
 st.set_page_config(page_title="PNBOX Acadêmico - Plano de Negócio", page_icon="📊", layout="wide",
-                   initial_sidebar_state="expanded")
+                   initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "5.0"
+VERSAO_PROGRAMA = "6.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -74,19 +74,19 @@ MODO_WEB = NAVEGADOR or Path("/mount/src").exists() or os.environ.get("PNBOX_WEB
 
 
 def _versao_inicial() -> str:
-    """'modelo' abre com o exemplo FitBox; 'branco' abre com um projeto vazio."""
+    """'modelo' abre com o FitBox; 'branco', com um projeto vazio; 'assinatura', com o Conecta Vale."""
     try:
         q = st.query_params.get("versao", "")
     except Exception:
         q = ""
-    if q in ("modelo", "branco"):
+    if q in ("modelo", "branco", "assinatura"):
         return q
-    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco"):
+    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco", "assinatura"):
         return os.environ["PNBOX_VERSAO"]
     arq = APP_DIR / "versao.txt"
     if arq.exists():
         v = arq.read_text(encoding="utf-8").strip().lower()
-        if v in ("modelo", "branco"):
+        if v in ("modelo", "branco", "assinatura"):
             return v
     return "modelo"
 
@@ -132,8 +132,8 @@ LISTAS_PADRAO = {
                        "Realização pessoal", "Sustentabilidade", "Confiança", "Desempenho", "Simplicidade",
                        "Aprendizado e autodesenvolvimento", "Integração de produtos"],
     "area_pessoal": ["Produção / operação", "Administrativo", "Comercial / vendas"],
-    "classe_custo_fixo": ["Custo indireto de produção", "Despesa administrativa", "Despesa comercial",
-                          "Despesa financeira"],
+    "classe_custo_fixo": ["Custo indireto de produção", "Custo de tecnologia / infraestrutura",
+                          "Despesa administrativa", "Despesa comercial", "Despesa financeira"],
     "setor": ["Comércio", "Serviço", "Indústria", "Agronegócio", "Alimentos e bebidas", "Bares e restaurantes",
               "Varejo", "Moda", "Saúde e bem-estar", "Tecnologia", "Educação", "Turismo", "Beleza e estética"],
     "canal": ["Marketing de Conteúdo", "Publicidade em Redes Sociais", "Marketing Viral", "Comunidade",
@@ -192,6 +192,10 @@ PAGINAS = [
      "Investimentos fixos, pré-operacionais, capital de giro e de onde vem o dinheiro."),
     ("produtos", "Finanças", "📦", "Produtos e materiais",
      "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
+    ("servicos", "Finanças", "🧑‍💻", "Serviços e custo da hora",
+     "Para quem vende tempo e conhecimento: custo da hora produtiva, horas da equipe e preço de cada serviço."),
+    ("assinaturas", "Finanças", "💳", "Assinaturas e receita recorrente",
+     "Planos mensais, trimestrais ou anuais: assinantes, cancelamentos (churn), MRR, CAC, LTV e custos de tecnologia."),
     ("custos", "Finanças", "🧾", "Custos e despesas",
      "Custos variáveis, mão de obra (produção e administrativa) e custos fixos classificados."),
     ("preco", "Finanças", "🏷️", "Formação de preço",
@@ -281,6 +285,33 @@ def aplicar_tema():
       .pn-card-info {{ border: 1px solid #dfe5ee; border-radius: 12px; padding: 14px 16px; background: #f7f9fc; }}
       .pn-face {{ font-size: 1.8rem; line-height: 1; }}
       .pn-etapa {{ border-left: 4px solid #2f6fd0; padding: 6px 12px; margin: 8px 0; }}
+      [data-testid="stAppDeployButton"] {{ display: none; }}
+      /* ---------- Celular e telas estreitas ---------- */
+      @media (max-width: 700px) {{
+        [data-testid="stMainBlockContainer"], .block-container {{ padding: 2.6rem .7rem 5rem .7rem !important; }}
+        h1 {{ font-size: 1.55rem !important; }}
+        h2 {{ font-size: 1.3rem !important; }}
+        h3 {{ font-size: 1.12rem !important; }}
+        /* grade de cartões: 2 por linha, compactos */
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-card_"]) {{ flex-wrap: wrap !important; gap: .55rem !important; }}
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-card_"]) > [data-testid="stColumn"] {{
+          flex: 1 1 calc(50% - .55rem) !important; min-width: calc(50% - .55rem) !important; width: calc(50% - .55rem) !important; }}
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-card_"]) > [data-testid="stColumn"]:not(:has([class*="st-key-card_"])) {{
+          display: none !important; }}
+        [class*="st-key-card_"] {{ min-height: 118px; padding: 11px 12px 10px 12px; border-radius: 14px; }}
+        [class*="st-key-card_"] .pn-ic {{ font-size: 1.6rem; }}
+        [class*="st-key-card_"] .pn-tit {{ font-size: .92rem; margin-top: .2rem; }}
+        [class*="st-key-card_"] .pn-desc {{ display: none; }}
+        [class*="st-key-card_"] .pn-selo {{ font-size: .72rem; margin-top: .3rem; }}
+        .pn-grupo {{ font-size: 1.02rem; margin: .9rem 0 .3rem 0; }}
+        /* números e botões maiores para o dedo */
+        [data-testid="stMetricValue"] {{ font-size: 1.25rem !important; }}
+        [data-testid="stMetricLabel"] p {{ font-size: .8rem !important; }}
+        .stButton button, .stDownloadButton button {{ min-height: 44px; }}
+        [data-baseweb="tab-list"] {{ overflow-x: auto; scrollbar-width: none; }}
+        [data-baseweb="tab"] {{ padding-left: .55rem !important; padding-right: .55rem !important; white-space: nowrap; }}
+        .pn-card-info {{ padding: 11px 12px; font-size: .92rem; }}
+      }}
       {css_escuro}
     </style>""", unsafe_allow_html=True)
 
@@ -318,6 +349,8 @@ if not listar_projetos():
         shutil.copy(antigo, PASTA / "Projeto da versão anterior.pnbox")
     if VERSAO == "branco":
         criar_projeto_em_branco(PASTA / "Meu Projeto.pnbox", "Meu Projeto")
+    elif VERSAO == "assinatura":
+        criar_projeto_assinatura(PASTA / "Conecta Vale (modelo assinatura).pnbox")
     else:
         criar_projeto_modelo(PASTA / "FitBox (modelo).pnbox")
 
@@ -519,6 +552,10 @@ def _tem(tab, minimo=1):
     return len(d[tab]) >= minimo
 
 
+def _receita() -> bool:
+    return _tem("catalogo") or _tem("assinaturas")
+
+
 def situacao(p: str) -> str:
     """✅ completo · ◐ em andamento · ○ não iniciado"""
     sw = d["swot"]
@@ -544,12 +581,15 @@ def situacao(p: str) -> str:
         "investimentos": (_tem("inv_fixos") and (_tem("socios") or _tem("emprestimos")), _tem("inv_fixos")),
         "produtos": (_tem("catalogo") and _tem("materiais"), _tem("catalogo") or _tem("materiais")),
         "custos": (_tem("pessoal") and _tem("custos_fixos"), _tem("pessoal") or _tem("custos_fixos")),
+        "servicos": (bool((d["catalogo"]["horas_unit"] > 0).any()) and float(proj["utilizacao_pct"]) > 0,
+                     bool((d["catalogo"]["horas_unit"] > 0).any())),
+        "assinaturas": (_tem("assinaturas") and bool((d["assinaturas"]["churn_mensal_pct"] > 0).all()), _tem("assinaturas")),
         "preco": (_tem("catalogo"), _tem("catalogo")),
-        "dre": (_tem("catalogo") and _tem("custos_fixos"), _tem("catalogo")),
-        "fluxo": (_tem("catalogo") and _tem("capital_giro_prazos"), _tem("catalogo")),
-        "indicadores": (_tem("catalogo") and _tem("inv_fixos"), _tem("catalogo")),
-        "graficos": (_tem("catalogo"), _tem("catalogo")),
-        "simulador": (_tem("catalogo"), _tem("catalogo")),
+        "dre": (_receita() and _tem("custos_fixos"), _receita()),
+        "fluxo": (_receita() and _tem("capital_giro_prazos"), _receita()),
+        "indicadores": (_receita() and _tem("inv_fixos"), _receita()),
+        "graficos": (_receita(), _receita()),
+        "simulador": (_receita(), _receita()),
         "experimentos": (_tem("experimentos"), _tem("experimentos")),
         "riscos": (_tem("riscos", 3), _tem("riscos")),
         "cronograma": (_tem("cronograma", 3), _tem("cronograma")),
@@ -559,12 +599,16 @@ def situacao(p: str) -> str:
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
+    tipo = str(proj.get("tipo_negocio") or "Produtos")
+    opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto")))
+    if opcional and not iniciado:
+        return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
 
 
 def completude() -> float:
-    sts = [situacao(p[0]) for p in PAGINAS if situacao(p[0])]
-    return sum(1 if s == "✅" else (0.5 if s == "◐" else 0) for s in sts) / max(len(sts), 1)
+    return completude_de(proj, d)
 
 
 # ------------------------------------------------------------------------------
@@ -587,7 +631,8 @@ with st.sidebar:
     with st.expander("➕ Novo projeto"):
         novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")
         tipo = st.radio("Começar a partir de", ["Em branco (do zero)", "Modelo FitBox (alimentação saudável)",
-                                                "Modelo Café Mucuri (cafeteria e padaria)", "Cópia do projeto atual"])
+                                                "Modelo Café Mucuri (cafeteria e padaria)",
+                                                "Modelo Conecta Vale (aplicativo por assinatura)", "Cópia do projeto atual"])
         if st.button("Criar projeto", type="primary", width="stretch"):
             if not novo_nome.strip():
                 st.error("Informe um nome.")
@@ -599,6 +644,8 @@ with st.sidebar:
                     criar_projeto_modelo(destino)
                 elif tipo.startswith("Modelo Café"):
                     criar_projeto_cafe(destino)
+                elif tipo.startswith("Modelo Conecta"):
+                    criar_projeto_assinatura(destino)
                 else:
                     conn.commit()
                     shutil.copy(ss.db, destino)
@@ -664,8 +711,23 @@ with st.sidebar:
 # ------------------------------------------------------------------------------
 # CABEÇALHO DAS FERRAMENTAS
 # ------------------------------------------------------------------------------
+def rolar_para_topo():
+    """Ao trocar de página, volta a tela para o início (útil sobretudo no celular)."""
+    import streamlit.components.v1 as components
+    components.html("""<script>
+      try { const d = window.parent.document;
+        for (const s of ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main']) {
+          const el = d.querySelector(s); if (el) el.scrollTo({top: 0}); }
+        window.parent.scrollTo({top: 0});
+      } catch (e) {}
+    </script>""", height=0)
+
+
 def cabecalho(p: str):
     _, grupo, icone, titulo, descricao = PAG[p]
+    if ss.get("_pag_vista") != p:
+        ss["_pag_vista"] = p
+        rolar_para_topo()
     c1, c2 = st.columns([1, 5])
     if c1.button("← Voltar ao plano", key="voltar_" + p, width="stretch"):
         ir("inicio")

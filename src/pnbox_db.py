@@ -56,6 +56,11 @@ SCHEMA = {
         ("rateio_criterio", "TEXT"), ("margem_desejada_pct", "REAL"),
         # Textos finais
         ("sumario_executivo", "TEXT"), ("conclusao", "TEXT"),
+        # Serviços e assinaturas (v6)
+        ("tipo_negocio", "TEXT"),                  # Produtos | Serviços | Assinatura | Misto
+        ("horas_mes_pessoa", "REAL"),              # horas contratadas por pessoa da operação
+        ("utilizacao_pct", "REAL"),                # % dessas horas que viram trabalho cobrável
+        ("anexo_simples", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL")],
@@ -97,7 +102,7 @@ SCHEMA = {
                   ("qtd_estoque_inicial", "REAL")],
     "catalogo": [("categoria", "TEXT"), ("descricao", "TEXT"), ("preco_venda", "REAL"),
                  ("custo_aquisicao", "REAL"), ("qtd_mensal", "REAL"),
-                 ("qtd_estoque_inicial", "REAL")],
+                 ("qtd_estoque_inicial", "REAL"), ("horas_unit", "REAL")],
     "ficha_tecnica": [("produto", "TEXT"), ("material", "TEXT"), ("quantidade", "REAL")],
     "custos_variaveis": [("descricao", "TEXT"), ("percentual", "REAL")],
     "pessoal": [("cargo", "TEXT"), ("area", "TEXT"), ("num_empregados", "REAL"), ("salario_mensal", "REAL"),
@@ -119,6 +124,10 @@ SCHEMA = {
     "realizado": [("mes", "REAL"), ("receita_real", "REAL"), ("custos_variaveis_real", "REAL"),
                   ("custos_fixos_real", "REAL")],
     "listas": [("tipo", "TEXT"), ("valor", "TEXT")],
+    # --- v6: receita recorrente (planos de assinatura) ---
+    "assinaturas": [("plano", "TEXT"), ("publico", "TEXT"), ("preco_ciclo", "REAL"), ("ciclo_meses", "REAL"),
+                    ("novos_mes1", "REAL"), ("crescimento_novos_pct", "REAL"), ("churn_mensal_pct", "REAL"),
+                    ("custo_entrega_mensal", "REAL"), ("taxa_cobranca_pct", "REAL")],
     "versoes": [("nome", "TEXT"), ("data", "TEXT"), ("dados", "TEXT")],
 }
 
@@ -133,6 +142,7 @@ PROJETO_PADRAO = {
     "cen_otim_receita_pct": 10.0, "cen_otim_custo_pct": 5.0,
     "cen_pess_receita_pct": 15.0, "cen_pess_custo_pct": 5.0,
     "rateio_criterio": "Custo direto", "margem_desejada_pct": 15.0,
+    "tipo_negocio": "Produtos", "horas_mes_pessoa": 168.0, "utilizacao_pct": 75.0, "anexo_simples": "",
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -196,6 +206,8 @@ def _migrar_versao_anterior(conn):
     conn.execute("UPDATE custos_fixos SET classificacao='Despesa administrativa' "
                  "WHERE classificacao IS NULL OR classificacao=''")
     conn.execute("UPDATE pessoal SET area='Produção / operação' WHERE area IS NULL OR area=''")
+    conn.execute("UPDATE catalogo SET horas_unit=0 WHERE horas_unit IS NULL")
+    conn.execute("UPDATE assinaturas SET ciclo_meses=1 WHERE ciclo_meses IS NULL OR ciclo_meses<1")
     # Proposta de valor única (v1-v4) -> lista de propostas
     if conn.execute("SELECT COUNT(*) FROM propostas").fetchone()[0] == 0:
         pv = conn.execute("SELECT segmento_alvo, beneficios_desejados, meios_entrega, diferencial_competitivo, "
@@ -335,5 +347,13 @@ def criar_projeto_cafe(caminho: Path) -> None:
     """Cria o segundo estudo de caso: Café Mucuri (cafeteria e padaria artesanal)."""
     conn = conectar(caminho)
     popular_modelo_cafe(conn)
+    conn.commit()
+    conn.close()
+
+
+def criar_projeto_assinatura(caminho: Path) -> None:
+    """Cria o terceiro estudo de caso: Conecta Vale (aplicativo com planos de assinatura)."""
+    conn = conectar(caminho)
+    popular_modelo_assinatura(conn)
     conn.commit()
     conn.close()

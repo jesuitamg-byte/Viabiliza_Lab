@@ -307,7 +307,7 @@ def graficos_png(comp: dict) -> list:
 # ==============================================================================
 def gerar_pdf(proj, d, res, extras) -> bytes:
     """extras: dict com dre, indicadores, cenarios, checagens, swot_diag, quadrantes."""
-    from pnbox_motor import brl, num_br, pct, div, QUADRANTES, mercado, semaforo, capacidade_demanda  # noqa (removido no arquivo único)
+    from pnbox_motor import brl, num_br, pct, div, QUADRANTES, mercado, semaforo, capacidade_demanda, custo_hora  # noqa (removido no arquivo único)
     pdf = Relatorio(proj["nome_negocio"])
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -675,6 +675,63 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                              "Sugerido": cp["preco_sugerido"].map(brl), "Margem abs.": cp["margem_absorcao_pct"].map(pct),
                              "PE un./mês": cp["pe_unidades_mes"].map(lambda v: num_br(v, 0))}),
                larguras=(56, 21, 21, 20, 20, 21, 21), tam=7)
+
+    # ---------------- SERVIÇOS E ASSINATURAS ----------------
+    ch = custo_hora(res, d, proj)
+    if not ch["tabela"].empty:
+        pdf.secao("SERVIÇOS: CUSTO DA HORA E PREÇO", nova_pagina=True)
+        pdf.paragrafo(f"Equipe da operação: {num_br(ch['pessoas'], 0)} pessoa(s) x {num_br(ch['horas_mes_pessoa'], 0)} h/mês x "
+                      f"utilização de {pct(ch['utilizacao'], 0)} = {num_br(ch['horas_cobraveis'], 0)} horas cobráveis por mês. "
+                      f"Custo da hora produtiva = {brl(ch['custo_base'])} ÷ {num_br(ch['horas_cobraveis'], 0)} h = "
+                      f"{brl(ch['custo_hora'])}. Ocupação prevista: {pct(ch['ocupacao_m1'])} no Mês 1 e "
+                      f"{pct(ch['ocupacao_m12'])} no Mês 12.", "", 9)
+        t_ = ch["tabela"]
+        pdf.tabela(pd.DataFrame({"Serviço": t_["Serviço"], "Horas": t_["Horas por serviço"].map(lambda v: num_br(v, 1)),
+                                 "Insumos": t_["Insumos"].map(brl), "Mão de obra": t_["Mão de obra (horas x custo hora)"].map(brl),
+                                 "Custo pleno": t_["Custo pleno"].map(brl), "Preço": t_["Preço atual"].map(brl),
+                                 "Sugerido": t_["Preço sugerido"].map(lambda v: brl(v) if v == v else "n.c."),
+                                 "R$/hora": t_["Valor da hora cobrada"].map(brl)}),
+                   larguras=(52, 14, 19, 20, 20, 18, 19, 18), tam=7)
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        s_ = res["ass"]
+        pdf.secao("ASSINATURAS E RECEITA RECORRENTE", nova_pagina=True)
+        a_ = d["assinaturas"]
+        pdf.tabela(pd.DataFrame({"Plano": a_["plano"], "Preço/ciclo": a_["preco_ciclo"].map(brl),
+                                 "Ciclo": a_["ciclo_meses"].map(lambda v: f"{num_br(v, 0)} m"),
+                                 "Novos Mês 1": a_["novos_mes1"].map(lambda v: num_br(v, 0)),
+                                 "Cresc. novos": a_["crescimento_novos_pct"].map(lambda v: pct(v / 100)),
+                                 "Churn/mês": a_["churn_mensal_pct"].map(lambda v: pct(v / 100)),
+                                 "Custo entrega": a_["custo_entrega_mensal"].map(brl),
+                                 "Taxa": a_["taxa_cobranca_pct"].map(lambda v: pct(v / 100))}),
+                   larguras=(52, 20, 12, 18, 18, 18, 22, 20), tam=7)
+        pdf.subtitulo("Projeção por ano")
+        linhas = []
+        for k in (1, 2, 3):
+            b_ = s_.iloc[(k - 1) * 12:k * 12]
+            r_, c_ = float(b_["Receita reconhecida"].sum()), float(b_["Cobranças (caixa)"].sum())
+            ce, tx = float(b_["Custo de entrega"].sum()), float(b_["Taxas de cobrança"].sum())
+            linhas.append({"Ano": f"Ano {k}", "Novos": num_br(b_["Novos"].sum(), 0),
+                           "Cancelados": num_br(b_["Cancelamentos"].sum(), 0), "Ativos (fim)": num_br(b_["Ativos"].iloc[-1], 0),
+                           "Receita reconhecida": brl(r_), "Cobranças": brl(c_), "Margem bruta": pct(div(r_ - ce - tx, r_))})
+        pdf.tabela(pd.DataFrame(linhas), larguras=(14, 18, 22, 22, 38, 36, 30), tam=7.5)
+        pdf.subtitulo("Indicadores de recorrência")
+        pdf.tabela(pd.DataFrame({
+            "Indicador": ["MRR no Mês 12", "ARR (MRR x 12)", "Assinantes no Mês 12", "ARPU", "Churn mensal médio",
+                          "Margem bruta recorrente", "LTV", "CAC", "LTV/CAC", "Payback do CAC", "Receita antecipada (fim do Ano 1)"],
+            "Valor": [brl(rc["mrr12"]), brl(rc["arr12"]), num_br(rc["ativos12"], 0), brl(rc["arpu"]), pct(rc["churn"]),
+                      pct(rc["margem_bruta"]), brl(rc["ltv"]) if rc["ltv"] == rc["ltv"] else "n.a.",
+                      brl(rc["cac"]) if rc["cac"] == rc["cac"] else "n.a.",
+                      f"{num_br(rc['ltv_cac'], 1)}x" if rc["ltv_cac"] == rc["ltv_cac"] else "n.a.",
+                      f"{num_br(rc['payback_cac'], 1)} meses" if rc["payback_cac"] == rc["payback_cac"] else "n.a.",
+                      brl(rc["receita_diferida_a1"])],
+            "Como se calcula": ["Valor mensal equivalente dos assinantes ativos", "", "", "MRR ÷ assinantes",
+                                "Churn de cada plano ponderado pelos ativos", "(Receita − entrega − taxas) ÷ receita",
+                                "ARPU x margem bruta ÷ churn", "Gasto comercial do Mês 1 ÷ novos do Mês 1", "Referência: 3x ou mais",
+                                "CAC ÷ (ARPU x margem bruta)", "Cobrado e ainda não prestado (passivo)"]}),
+            larguras=(55, 35, 90), alinhar=("LEFT", "RIGHT", "LEFT"), tam=8)
+        pdf.paragrafo("A receita das assinaturas é reconhecida mês a mês; planos pagos por ciclo entram inteiros no caixa na "
+                      "cobrança, e a parte ainda não prestada aparece no balanço como receita antecipada.", "I", 8)
 
     pdf.secao("PROJEÇÃO DE RESULTADOS E DRE", nova_pagina=True)
     pdf.paragrafo(f"Premissas: crescimento de {num_br(proj['crescimento_mensal_ano1_pct'])}% ao mês no Ano 1 e "

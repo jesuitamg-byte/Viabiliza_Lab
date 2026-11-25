@@ -1,6 +1,6 @@
 """
 ================================================================================
-PNBOX ACADÊMICO v5 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+PNBOX ACADÊMICO v6 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir PNBOX.bat" (na mesma pasta); ou
@@ -140,6 +140,11 @@ SCHEMA = {
         ("rateio_criterio", "TEXT"), ("margem_desejada_pct", "REAL"),
         # Textos finais
         ("sumario_executivo", "TEXT"), ("conclusao", "TEXT"),
+        # Serviços e assinaturas (v6)
+        ("tipo_negocio", "TEXT"),                  # Produtos | Serviços | Assinatura | Misto
+        ("horas_mes_pessoa", "REAL"),              # horas contratadas por pessoa da operação
+        ("utilizacao_pct", "REAL"),                # % dessas horas que viram trabalho cobrável
+        ("anexo_simples", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL")],
@@ -181,7 +186,7 @@ SCHEMA = {
                   ("qtd_estoque_inicial", "REAL")],
     "catalogo": [("categoria", "TEXT"), ("descricao", "TEXT"), ("preco_venda", "REAL"),
                  ("custo_aquisicao", "REAL"), ("qtd_mensal", "REAL"),
-                 ("qtd_estoque_inicial", "REAL")],
+                 ("qtd_estoque_inicial", "REAL"), ("horas_unit", "REAL")],
     "ficha_tecnica": [("produto", "TEXT"), ("material", "TEXT"), ("quantidade", "REAL")],
     "custos_variaveis": [("descricao", "TEXT"), ("percentual", "REAL")],
     "pessoal": [("cargo", "TEXT"), ("area", "TEXT"), ("num_empregados", "REAL"), ("salario_mensal", "REAL"),
@@ -203,6 +208,10 @@ SCHEMA = {
     "realizado": [("mes", "REAL"), ("receita_real", "REAL"), ("custos_variaveis_real", "REAL"),
                   ("custos_fixos_real", "REAL")],
     "listas": [("tipo", "TEXT"), ("valor", "TEXT")],
+    # --- v6: receita recorrente (planos de assinatura) ---
+    "assinaturas": [("plano", "TEXT"), ("publico", "TEXT"), ("preco_ciclo", "REAL"), ("ciclo_meses", "REAL"),
+                    ("novos_mes1", "REAL"), ("crescimento_novos_pct", "REAL"), ("churn_mensal_pct", "REAL"),
+                    ("custo_entrega_mensal", "REAL"), ("taxa_cobranca_pct", "REAL")],
     "versoes": [("nome", "TEXT"), ("data", "TEXT"), ("dados", "TEXT")],
 }
 
@@ -217,6 +226,7 @@ PROJETO_PADRAO = {
     "cen_otim_receita_pct": 10.0, "cen_otim_custo_pct": 5.0,
     "cen_pess_receita_pct": 15.0, "cen_pess_custo_pct": 5.0,
     "rateio_criterio": "Custo direto", "margem_desejada_pct": 15.0,
+    "tipo_negocio": "Produtos", "horas_mes_pessoa": 168.0, "utilizacao_pct": 75.0, "anexo_simples": "",
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -280,6 +290,8 @@ def _migrar_versao_anterior(conn):
     conn.execute("UPDATE custos_fixos SET classificacao='Despesa administrativa' "
                  "WHERE classificacao IS NULL OR classificacao=''")
     conn.execute("UPDATE pessoal SET area='Produção / operação' WHERE area IS NULL OR area=''")
+    conn.execute("UPDATE catalogo SET horas_unit=0 WHERE horas_unit IS NULL")
+    conn.execute("UPDATE assinaturas SET ciclo_meses=1 WHERE ciclo_meses IS NULL OR ciclo_meses<1")
     # Proposta de valor única (v1-v4) -> lista de propostas
     if conn.execute("SELECT COUNT(*) FROM propostas").fetchone()[0] == 0:
         pv = conn.execute("SELECT segmento_alvo, beneficios_desejados, meios_entrega, diferencial_competitivo, "
@@ -419,6 +431,14 @@ def criar_projeto_cafe(caminho: Path) -> None:
     """Cria o segundo estudo de caso: Café Mucuri (cafeteria e padaria artesanal)."""
     conn = conectar(caminho)
     popular_modelo_cafe(conn)
+    conn.commit()
+    conn.close()
+
+
+def criar_projeto_assinatura(caminho: Path) -> None:
+    """Cria o terceiro estudo de caso: Conecta Vale (aplicativo com planos de assinatura)."""
+    conn = conectar(caminho)
+    popular_modelo_assinatura(conn)
     conn.commit()
     conn.close()
 
@@ -957,6 +977,132 @@ def popular_modelo_cafe(conn) -> None:
         ("Inauguração", 3, 1, "Todos", 5000),
     ])
 
+
+# ==============================================================================
+# TERCEIRO ESTUDO DE CASO: CONECTA VALE (aplicativo com planos de assinatura)
+# Negócio fictício, para ensinar receita recorrente, churn, CAC/LTV e custos de tecnologia.
+# ==============================================================================
+def popular_modelo_assinatura(conn) -> None:
+    ins = conn.executemany
+    conn.execute("""
+        UPDATE projeto SET nome_negocio='Conecta Vale', objetivo='Criar um novo negócio',
+            enquadramento='Simples Nacional', periodo_anos=3, porte='Microempresa (ME)',
+            setor_atuacao='Tecnologia e aplicativos; Turismo, cultura e lazer', cidade_uf='Teófilo Otoni - MG',
+            contatos='@conectavale', tipo_negocio='Assinatura (receita recorrente)',
+            horas_mes_pessoa=168, utilizacao_pct=70, anexo_simples='Anexo III - Serviços',
+            aliquota_imposto_pct=6.0, crescimento_mensal_ano1_pct=3.0, crescimento_anual_pct=10.0,
+            inflacao_custos_anual_pct=4.5, tma_anual_pct=14.0, pme_dias=0, reserva_caixa_extra=50000,
+            recuperar_giro=1, cen_otim_receita_pct=15, cen_otim_custo_pct=5, cen_pess_receita_pct=25,
+            cen_pess_custo_pct=10, autores='Integrante 1; Integrante 2', turma='Exemplo didático - negócio por assinatura',
+            tam_desc='Empresas de comércio, alimentação, cultura e turismo do Vale do Mucuri (estimativa ilustrativa)',
+            tam_clientes=6000, sam_desc='Empresas de Teófilo Otoni com presença digital', sam_clientes=2000, som_pct=8,
+            gasto_anual_cliente=2400,
+            mercado_fontes='Estimativas ilustrativas; substitua por dados da Junta Comercial, IBGE e pesquisa com empresas.',
+            mkt_produto='Aplicativo que reúne eventos, cultura, gastronomia e lazer da região. Empresas pagam planos para aparecer em  destaque; usuários usam grátis ou assinam o Premium com descontos.',
+            mkt_preco='Três planos para empresas (mensal, trimestral e anual, com desconto para quem paga adiantado) e um plano  Premium barato para usuários. Primeiro mês grátis para empresas.',
+            mkt_praca='Aplicativo nas lojas Google Play e App Store; venda consultiva às empresas, de porta em porta e pelo WhatsApp.',
+            mkt_promocao='Parcerias com secretarias de cultura e turismo, influenciadores locais e semana de descontos mensal.',
+            loc_endereco='Coworking no centro de Teófilo Otoni - MG (trabalho principalmente remoto)',
+            loc_justificativa='Custo baixo e perto das empresas clientes para reuniões presenciais.',
+            op_processos='Cadastro da empresa -> criação do perfil e das publicações -> aprovação -> divulgação no app ->  relatório mensal de visualizações -> renovação.',
+            op_horario='Atendimento às empresas em horário comercial; aplicativo disponível 24 horas.',
+            rateio_criterio='Receita', margem_desejada_pct=15
+        WHERE id=1""")
+    ins("INSERT INTO socios (nome, funcao, contato, perfil, capital_integralizado) VALUES (?,?,?,?,?)", [
+        ("Sócio(a) 1", "Produto e tecnologia", "", "Desenvolvimento de aplicativos e gestão do produto.", 50000.0),
+        ("Sócio(a) 2", "Comercial e marketing", "", "Vendas para empresas, parcerias e conteúdo.", 50000.0),
+    ])
+    ins("INSERT INTO emprestimos (descricao, valor, taxa_anual_pct, prazo_meses) VALUES (?,?,?,?)", [
+        ("Pronampe", 21200, 14.0, 36)])
+    ins("""INSERT INTO segmentos (nome, descricao, nota_tamanho, nota_lucro, nota_longevidade,
+           nota_concorrencia, nota_aderencia) VALUES (?,?,?,?,?,?,?)""", [
+        ("Bares, restaurantes e cafés", "Querem atrair clientes em dias de pouco movimento.", 9, 7, 8, 6, 9),
+        ("Produtores de eventos e cultura", "Precisam divulgar shows, peças e festas.", 6, 6, 7, 7, 10),
+        ("Hotéis e pousadas", "Buscam turistas e visitantes de negócios.", 4, 8, 8, 5, 7),
+        ("Moradores e turistas (usuários)", "Querem saber o que fazer na cidade.", 10, 3, 8, 6, 8),
+    ])
+    ins("""INSERT INTO personas (nome, idade, profissao, estado_civil, renda_mensal, escolaridade, cidade,
+           descricao, citacao, habitos, ganhos, desafios, duvidas_objecoes, experiencia_ideal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [
+        ("Marcos", 41, "Dono de restaurante", "Casado", 9000.0, "Ensino Médio", "Teófilo Otoni - MG",
+         "Tem um restaurante com música ao vivo e faz a própria divulgação no Instagram.",
+         "Eu pago impulsionamento, mas não sei se vem cliente por causa disso.",
+         "Usa WhatsApp o dia todo; pouco tempo para marketing.", "Mesas cheias às quartas e quintas.",
+         "Não sabe medir o retorno do marketing; caixa apertado.", "Vale a pena pagar todo mês?",
+         "Ver no relatório quantas pessoas abriram a oferta e usaram o cupom."),
+    ])
+    concs = ["Plataforma nacional de eventos", "Perfis locais no Instagram"]
+    ins("INSERT INTO concorrentes (nome) VALUES (?)", [(c,) for c in concs])
+    notas = {"Conteúdo local": (9, 4, 8), "Preço para pequenas empresas": (8, 5, 9), "Relatórios de resultado": (8, 7, 2),
+             "Alcance de público": (5, 9, 7), "Facilidade de uso": (8, 8, 7)}
+    ins("INSERT INTO concorrencia_notas (atributo, empresa, nota) VALUES (?,?,?)",
+        [(a, e, v) for a, vals in notas.items() for e, v in zip(["Nossa Empresa"] + concs, vals)])
+    ins("""INSERT INTO swot (ambiente, dimensao, fator, natureza, impacto, diagnostico, plano_acao, priorizado)
+           VALUES (?,?,?,?,?,?,?,?)""", [
+        ("Interno", "Operação", "Equipe técnica própria", "Força", "Alto", "Sócio desenvolvedor e equipe enxuta.", "Lançar melhorias a cada mês.", 1),
+        ("Interno", "Finanças", "Receita depende de renovações", "Fraqueza", "Alto", "Churn alto derruba a receita.", "Programa de sucesso do cliente.", 1),
+        ("Externo", "Social", "Crescimento do turismo regional", "Oportunidade", "Alto", "Mais visitantes buscando o que fazer.", "Parcerias com o poder público.", 1),
+        ("Externo", "Tecnológico", "Mudança nas taxas das lojas de aplicativos", "Ameaça", "Médio", "Comissões e regras mudam com frequência.", "Cobrar empresas fora da loja (boleto/Pix).", 1),
+    ])
+    ins("""INSERT INTO inv_fixos (descricao, quantidade, valor_unitario, vida_util_anos, valor_residual_pct)
+           VALUES (?,?,?,?,?)""", [
+        ("Notebooks para desenvolvimento", 4, 6500, 5, 10), ("Celulares para testes (Android e iPhone)", 2, 3000, 3, 10),
+        ("Mobiliário e equipamentos de escritório", 1, 3500, 10, 10),
+    ])
+    ins("INSERT INTO inv_pre (descricao, valor) VALUES (?,?)", [
+        ("Desenvolvimento da primeira versão do app (MVP)", 25000), ("Legalização e contratos", 2500),
+        ("Registro de marca", 1500), ("Marketing de lançamento", 6000), ("Contas de desenvolvedor nas lojas", 700),
+    ])
+    ins("INSERT INTO capital_giro_prazos (tipo, prazo_dias, percentual) VALUES (?,?,?)", [
+        ("Recebimento", 0, 100.0), ("Pagamento", 0, 100.0)])
+    ins("""INSERT INTO catalogo (categoria, descricao, preco_venda, custo_aquisicao, qtd_mensal, qtd_estoque_inicial, horas_unit)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Serviço", "Cobertura de evento patrocinado", 900, 120, 2, 0, 16),
+        ("Serviço", "Produção de conteúdo avulso (post e vídeo)", 180, 10, 8, 0, 3),
+    ])
+    ins("INSERT INTO custos_variaveis (descricao, percentual) VALUES (?,?)", [("Comissões de vendas", 5.0)])
+    P, A, C = "Produção / operação", "Administrativo", "Comercial / vendas"
+    ins("""INSERT INTO pessoal (cargo, area, num_empregados, salario_mensal, encargos_pct, beneficios_unit, atribuicoes)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Desenvolvedor(a)", P, 1, 5500, 28, 300, "Manter e evoluir o aplicativo, corrigir falhas."),
+        ("Atendimento e conteúdo", P, 1, 2300, 28, 300, "Montar publicações, cobrir eventos, suporte às empresas."),
+        ("Vendedor(a) externo(a)", C, 1, 2200, 28, 300, "Visitar empresas e fechar planos."),
+    ])
+    TEC, DA, DC, DF = "Custo de tecnologia / infraestrutura", "Despesa administrativa", "Despesa comercial", "Despesa financeira"
+    ins("INSERT INTO custos_fixos (descricao, classificacao, valor_mensal) VALUES (?,?,?)", [
+        ("Servidores em nuvem (base fixa)", TEC, 700), ("Ferramentas e licenças de software", TEC, 450),
+        ("Contas de desenvolvedor (rateio mensal)", TEC, 60), ("Coworking", DA, 900), ("Pró-labore", DA, 4000),
+        ("Contador", DA, 500), ("Internet e telefone", DA, 200), ("Marketing digital (anúncios)", DC, 2000),
+        ("Tarifas bancárias", DF, 80),
+    ])
+    ins("""INSERT INTO assinaturas (plano, publico, preco_ciclo, ciclo_meses, novos_mes1, crescimento_novos_pct,
+           churn_mensal_pct, custo_entrega_mensal, taxa_cobranca_pct) VALUES (?,?,?,?,?,?,?,?,?)""", [
+        ("Parceiro Essencial (mensal)", "Empresas (B2B)", 149, 1, 8, 4, 6, 10, 3.5),
+        ("Parceiro Destaque (trimestral)", "Empresas (B2B)", 600, 3, 5, 4, 4, 14, 3.5),
+        ("Parceiro Premium (anual)", "Empresas (B2B)", 3000, 12, 2, 4, 2, 18, 3.5),
+        ("Usuário Premium (no app)", "Consumidores (B2C)", 6.90, 1, 50, 5, 8, 0.6, 15),
+    ])
+    ins("""INSERT INTO propostas (persona_nome, valores, que_desejam, por_meio, diferentemente, oferecem)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Marcos", "Clientes novos; Resultado medido; Preço acessível",
+         "lotar o restaurante nos dias fracos sem perder tempo com marketing",
+         "divulgação no aplicativo da cidade, cupons e relatório mensal de resultados",
+         "impulsionamentos genéricos em redes sociais", "divulgação local com resultado que dá para medir"),
+    ])
+    ins("INSERT INTO riscos (risco, probabilidade, impacto, mitigacao, responsavel) VALUES (?,?,?,?,?)", [
+        ("Churn maior que o previsto", 4, 5, "Acompanhamento mensal das empresas e relatórios de resultado", "Sócio(a) 2"),
+        ("Falha ou queda do aplicativo", 2, 4, "Monitoramento, cópias de segurança e plano de contingência", "Sócio(a) 1"),
+        ("Aumento do custo de nuvem com o crescimento", 3, 3, "Otimizar o sistema e negociar créditos de nuvem", "Sócio(a) 1"),
+    ])
+    ins("""INSERT INTO experimentos (hipotese, experimento, metrica, criterio_sucesso, resultado, status)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Restaurantes pagariam R$ 149/mês por divulgação no app", "Oferecer 30 dias grátis a 20 restaurantes",
+         "Conversão para pago", "Pelo menos 6 assinam após o teste", "", "Planejado")])
+    ins("INSERT INTO cronograma (atividade, mes_inicio, duracao_meses, responsavel, custo) VALUES (?,?,?,?,?)", [
+        ("Desenvolvimento do MVP", 1, 3, "Sócio(a) 1", 25000), ("Teste com empresas piloto", 3, 1, "Sócio(a) 2", 0),
+        ("Publicação nas lojas", 4, 1, "Sócio(a) 1", 700), ("Lançamento", 4, 1, "Todos", 6000),
+    ])
+
 # ##############################################################################
 # PARTE: pnbox_motor.py
 # ##############################################################################
@@ -1080,6 +1226,136 @@ def calcular_tir(fluxos):
 
 
 # ------------------------------------------------------------------------------
+# 3b. RECEITA RECORRENTE (ASSINATURAS) POR SAFRAS DE CLIENTES
+# ------------------------------------------------------------------------------
+COLS_ASS = ["Mês", "Novos", "Cancelamentos", "Ativos", "Receita reconhecida", "Cobranças (caixa)",
+            "Custo de entrega", "Taxas de cobrança"]
+
+
+def simular_assinaturas(ass: pd.DataFrame | None, g_a: float, inf: float, meses: int = 36):
+    """
+    Cada mês de entrada forma uma safra (coorte) de assinantes. A safra encolhe a cada renovação
+    conforme o churn; quem paga por ciclo (trimestral, anual...) só pode sair na renovação.
+    - Cobrança (caixa): no início de cada ciclo, preço do ciclo x assinantes ativos.
+    - Receita reconhecida: preço do ciclo / meses do ciclo, todos os meses em que o assinante está ativo.
+    - Custo de entrega: custo mensal por assinante ativo (nuvem, APIs, suporte), corrigido pela inflação.
+    - Taxas de cobrança: % sobre o valor cobrado (meio de pagamento, loja de aplicativos).
+    - Novos assinantes: crescem à taxa mensal do plano no Ano 1; nos Anos 2 e 3 partem do Mês 12
+      e crescem à taxa anual de crescimento do projeto.
+    """
+    vazio = pd.DataFrame(columns=COLS_ASS), pd.DataFrame(columns=["Mês", "Plano", "Ativos", "Receita reconhecida"])
+    if ass is None or ass.empty:
+        return vazio
+    tot = {c: [0.0] * meses for c in COLS_ASS[1:]}
+    por_plano = []
+    for _, p in ass.iterrows():
+        preco, c = float(p["preco_ciclo"] or 0), max(1, int(round(float(p["ciclo_meses"] or 1))))
+        n1, g = float(p["novos_mes1"] or 0), float(p["crescimento_novos_pct"] or 0) / 100
+        churn_m = min(max(float(p["churn_mensal_pct"] or 0) / 100, 0.0), 1.0)
+        sobra_ciclo = (1 - churn_m) ** c              # fração que renova a cada ciclo
+        custo, taxa = float(p["custo_entrega_mensal"] or 0), float(p["taxa_cobranca_pct"] or 0) / 100
+        if preco <= 0 and n1 <= 0:
+            continue
+        novos = [n1 * (1 + g) ** t if t < 12 else n1 * (1 + g) ** 11 * (1 + g_a) ** (t // 12) for t in range(meses)]
+        ativos, rec, cob, canc = [0.0] * meses, [0.0] * meses, [0.0] * meses, [0.0] * meses
+        for t0 in range(meses):
+            for t in range(t0, meses):
+                a = t - t0
+                ren = a // c
+                vivos = novos[t0] * sobra_ciclo ** ren
+                ativos[t] += vivos
+                rec[t] += vivos * preco / c
+                if a % c == 0:
+                    cob[t] += vivos * preco
+                    if a > 0:
+                        canc[t] += novos[t0] * sobra_ciclo ** (ren - 1) - vivos
+        for t in range(meses):
+            tot["Novos"][t] += novos[t]
+            tot["Cancelamentos"][t] += canc[t]
+            tot["Ativos"][t] += ativos[t]
+            tot["Receita reconhecida"][t] += rec[t]
+            tot["Cobranças (caixa)"][t] += cob[t]
+            tot["Custo de entrega"][t] += ativos[t] * custo * (1 + inf) ** (t // 12)
+            tot["Taxas de cobrança"][t] += cob[t] * taxa
+            por_plano.append({"Mês": t + 1, "Plano": p["plano"], "Ativos": ativos[t], "Receita reconhecida": rec[t]})
+    if not por_plano:
+        return vazio
+    df = pd.DataFrame({"Mês": list(range(1, meses + 1)), **tot})
+    return df, pd.DataFrame(por_plano)
+
+
+def metricas_recorrencia(s: pd.DataFrame, planos: pd.DataFrame, ass: pd.DataFrame, gasto_aquisicao_m1: float) -> dict:
+    """Indicadores de negócios por assinatura (Ano 1)."""
+    if s is None or s.empty or float(s["Receita reconhecida"].sum()) <= 0:
+        return {"tem": False}
+    a1 = s.iloc[:12]
+    mrr1, mrr12 = float(s["Receita reconhecida"].iloc[0]), float(s["Receita reconhecida"].iloc[11])
+    ativos12 = float(s["Ativos"].iloc[11])
+    arpu = div(mrr12, ativos12)
+    # churn mensal médio: churn informado em cada plano, ponderado pelos assinantes ativos no Mês 12
+    p12 = planos[planos["Mês"] == 12].groupby("Plano")["Ativos"].sum()
+    taxas = dict(zip(ass["plano"], ass["churn_mensal_pct"] / 100))
+    churn = div(sum(p12.get(k, 0.0) * taxas.get(k, 0.0) for k in p12.index), float(p12.sum())) if p12.sum() > 0 else 0.0
+    rec_a1 = float(a1["Receita reconhecida"].sum())
+    margem_bruta = div(rec_a1 - float(a1["Custo de entrega"].sum()) - float(a1["Taxas de cobrança"].sum()), rec_a1)
+    lucro_bruto_cliente = arpu * margem_bruta
+    ltv = div(lucro_bruto_cliente, churn) if churn and churn > 0 else float("nan")
+    vida_meses = div(1, churn) if churn and churn > 0 else float("nan")
+    novos1 = float(s["Novos"].iloc[0])
+    cac = div(gasto_aquisicao_m1, novos1) if novos1 > 0 else float("nan")
+    ltv_cac = div(ltv, cac) if cac == cac and cac and cac > 0 and ltv == ltv else float("nan")
+    payback_cac = div(cac, lucro_bruto_cliente) if lucro_bruto_cliente > 0 and cac == cac else float("nan")
+    diferida = float(a1["Cobranças (caixa)"].sum()) - rec_a1
+    return {"tem": True, "mrr1": mrr1, "mrr12": mrr12, "arr12": mrr12 * 12, "ativos12": ativos12, "arpu": arpu,
+            "churn": churn, "vida_meses": vida_meses, "margem_bruta": margem_bruta, "ltv": ltv, "cac": cac,
+            "gasto_aquisicao_m1": gasto_aquisicao_m1, "novos1": novos1, "ltv_cac": ltv_cac,
+            "payback_cac": payback_cac, "receita_diferida_a1": diferida, "rec_a1": rec_a1,
+            "cobrancas_a1": float(a1["Cobranças (caixa)"].sum()),
+            "crescimento_mrr": div(mrr12, mrr1) - 1 if mrr1 > 0 else float("nan")}
+
+
+# ------------------------------------------------------------------------------
+# 3c. SIMPLES NACIONAL (Anexos I a V, LC 123/2006 com redação da LC 155/2016)
+# ------------------------------------------------------------------------------
+TABELAS_SIMPLES = {
+    "Anexo I - Comércio": [(180000, .04, 0), (360000, .073, 5940), (720000, .095, 13860), (1800000, .107, 22500),
+                           (3600000, .143, 87300), (4800000, .19, 378000)],
+    "Anexo II - Indústria": [(180000, .045, 0), (360000, .078, 5940), (720000, .10, 13860), (1800000, .112, 22500),
+                             (3600000, .147, 85500), (4800000, .30, 720000)],
+    "Anexo III - Serviços": [(180000, .06, 0), (360000, .112, 9360), (720000, .135, 17640), (1800000, .16, 35640),
+                             (3600000, .21, 125640), (4800000, .33, 648000)],
+    "Anexo IV - Serviços": [(180000, .045, 0), (360000, .09, 8100), (720000, .102, 12420), (1800000, .14, 39780),
+                            (3600000, .22, 183780), (4800000, .33, 828000)],
+    "Anexo V - Serviços": [(180000, .155, 0), (360000, .18, 4500), (720000, .195, 9900), (1800000, .205, 17100),
+                           (3600000, .23, 62100), (4800000, .305, 540000)],
+}
+
+
+def aliquota_simples(anexo: str, rbt12: float) -> dict:
+    """Alíquota efetiva = (RBT12 x alíquota nominal - parcela a deduzir) / RBT12."""
+    tab = TABELAS_SIMPLES.get(anexo)
+    if not tab or rbt12 <= 0:
+        return {"faixa": 0, "nominal": float("nan"), "deduzir": 0.0, "efetiva": float("nan")}
+    for i, (lim, nom, ded) in enumerate(tab, start=1):
+        if rbt12 <= lim:
+            return {"faixa": i, "nominal": nom, "deduzir": ded, "efetiva": (rbt12 * nom - ded) / rbt12}
+    lim, nom, ded = tab[-1]
+    return {"faixa": 7, "nominal": nom, "deduzir": ded, "efetiva": (rbt12 * nom - ded) / rbt12, "acima_limite": True}
+
+
+def fator_r(res: dict, d: dict) -> dict:
+    """Fator R = folha de salários dos últimos 12 meses (com pró-labore e encargos) ÷ receita bruta."""
+    cf = d["custos_fixos"]
+    pro = float(cf.loc[cf["descricao"].astype(str).str.lower().str.replace("-", "").str.replace(" ", "")
+                       .str.contains("prolabore|prólabore"), "valor_mensal"].sum())
+    folha12 = (res["salarios_m"] + res["encargos_m"] + pro) * 12
+    rec = res["anos"][1]["rec_bruta"]
+    fr = div(folha12, rec) if rec > 0 else float("nan")
+    return {"folha12": folha12, "pro_labore_m": pro, "receita12": rec, "fator_r": fr,
+            "anexo_por_fator_r": "Anexo III - Serviços" if fr == fr and fr >= 0.28 else "Anexo V - Serviços"}
+
+
+# ------------------------------------------------------------------------------
 # 4. MOTOR PRINCIPAL
 # ------------------------------------------------------------------------------
 def executar_motor(proj: dict, d: dict) -> dict:
@@ -1093,6 +1369,18 @@ def executar_motor(proj: dict, d: dict) -> dict:
     cdir_cat_m1 = {c: float(cat.loc[cat["categoria"] == c, "custo_mensal"].sum()) for c in CATEGORIAS}
     rec_cat_m1 = {c: float(cat.loc[cat["categoria"] == c, "receita_mensal"].sum()) for c in CATEGORIAS}
     cdir_m1 = sum(cdir_cat_m1.values())
+
+    # --- Assinaturas (receita recorrente), 36 meses
+    g_m = proj["crescimento_mensal_ano1_pct"] / 100
+    g_a = proj["crescimento_anual_pct"] / 100
+    inf = proj["inflacao_custos_anual_pct"] / 100
+    ass_df, ass_planos = simular_assinaturas(d.get("assinaturas"), g_a, inf)
+    tem_ass = not ass_df.empty
+
+    def serie(col):
+        return [float(v) for v in ass_df[col]] if tem_ass else [0.0] * 36
+    s_rec, s_cob, s_custo, s_taxa = (serie("Receita reconhecida"), serie("Cobranças (caixa)"),
+                                     serie("Custo de entrega"), serie("Taxas de cobrança"))
 
     # --- Pessoal, custos fixos e depreciação (mensais)
     pes = d["pessoal"]
@@ -1109,7 +1397,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
     pessoal_com_m = pessoal_m - mod_m - pessoal_adm_m
     cfx = d["custos_fixos"]
     cls = cfx["classificacao"].fillna("") if "classificacao" in cfx else pd.Series([""] * len(cfx))
-    cif_m = float(cfx.loc[cls.str.startswith("Custo indireto"), "valor_mensal"].sum())
+    cif_m = float(cfx.loc[cls.str.startswith("Custo"), "valor_mensal"].sum())   # indiretos de produção e de tecnologia
     desp_adm_m = float(cfx.loc[cls.str.contains("administrativa") | (cls == ""), "valor_mensal"].sum())
     desp_com_m = float(cfx.loc[cls.str.contains("comercial"), "valor_mensal"].sum())
     desp_fin_m = float(cfx.loc[cls.str.contains("financeira"), "valor_mensal"].sum())
@@ -1142,7 +1430,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
     pme = float(proj["pme_dias"])
     ciclo_op = pme + pmr
     ciclo_fin = ciclo_op - pmp
-    desembolso_m1 = cdir_m1 + receita_m1 * (aliq + var_pct) + cf_desemb_m
+    desembolso_m1 = (cdir_m1 + (receita_m1 + s_rec[0]) * (aliq + var_pct) + cf_desemb_m + s_custo[0] + s_taxa[0])
     ncg = max(0.0, desembolso_m1 / 30.0 * ciclo_fin)
     reserva = float(proj["reserva_caixa_extra"])
     capital_giro = ncg + reserva
@@ -1155,15 +1443,12 @@ def executar_motor(proj: dict, d: dict) -> dict:
     crono = cronograma_emprestimos(d["emprestimos"], anos=5)
 
     # --- Projeção mensal do Ano 1
-    g_m = proj["crescimento_mensal_ano1_pct"] / 100
-    g_a = proj["crescimento_anual_pct"] / 100
-    inf = proj["inflacao_custos_anual_pct"] / 100
     tma = proj["tma_anual_pct"] / 100
     meses = []
     for m in range(12):
         f = (1 + g_m) ** m
-        rec = receita_m1 * f
-        cv = cdir_m1 * f + rec * (aliq + var_pct)
+        rec = receita_m1 * f + s_rec[m]
+        cv = cdir_m1 * f + rec * (aliq + var_pct) + s_custo[m] + s_taxa[m]
         cf = cf_desemb_m + dep_m
         meses.append({"Mês": f"Mês {m + 1}", "Receita": rec, "Custos variáveis": cv,
                       "Margem de contribuição": rec - cv, "Custos fixos": cf,
@@ -1177,13 +1462,17 @@ def executar_motor(proj: dict, d: dict) -> dict:
     for k in (1, 2, 3):
         fr = fator_a1 * (1 + g_a) ** (k - 1)
         fi = (1 + inf) ** (k - 1)
-        rec_bruta = receita_m1 * fr
+        meses_k = slice((k - 1) * 12, k * 12)
+        ass_rec, ass_custo, ass_taxa = sum(s_rec[meses_k]), sum(s_custo[meses_k]), sum(s_taxa[meses_k])
+        rec_prod = receita_m1 * fr
+        rec_bruta = rec_prod + ass_rec
         rec_cat = {c: v * fr for c, v in rec_cat_m1.items()}
+        rec_cat["Assinatura"] = ass_rec
         cmv, cpv, csv = (cdir_cat_m1["Revenda"] * fr, cdir_cat_m1["Fabricação Própria"] * fr,
-                         cdir_cat_m1["Serviço"] * fr)
+                         cdir_cat_m1["Serviço"] * fr + ass_custo)
         custo_dir = cmv + cpv + csv
         impostos = rec_bruta * aliq
-        outras_var = rec_bruta * var_pct
+        outras_var = rec_bruta * var_pct + ass_taxa
         rec_liquida = rec_bruta - impostos
         cv_tot = custo_dir + impostos + outras_var
         mc = rec_bruta - cv_tot
@@ -1202,7 +1491,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
 
         # Balanço simplificado (caixa calculado por diferença: Ativo = Passivo + PL)
         receber = rec_bruta / 360 * pmr
-        estoques = inv_estoque * (rec_bruta / (receita_m1 * fator_a1)) if receita_m1 > 0 else inv_estoque
+        estoques = inv_estoque * (rec_prod / (receita_m1 * fator_a1)) if receita_m1 > 0 else inv_estoque
         imobilizado = max(0.0, inv_fixo - dep_anual * k)
         fornecedores = custo_dir / 360 * pmp
         obrigacoes = (pessoal + impostos) / 12
@@ -1210,7 +1499,9 @@ def executar_motor(proj: dict, d: dict) -> dict:
         div_cp = crono["amort"][k] if k < len(crono["amort"]) else 0.0
         div_cp = min(div_cp, saldo_div)
         div_lp = saldo_div - div_cp
-        pc = fornecedores + obrigacoes + div_cp
+        # Receita antecipada (assinaturas cobradas e ainda não prestadas): passivo circulante
+        receita_diferida = sum(s_cob[:k * 12]) - sum(s_rec[:k * 12])
+        pc = fornecedores + obrigacoes + div_cp + receita_diferida
         pnc = div_lp
         pl = capital_proprio + lucros_acum
         caixa = pc + pnc + pl - (receber + estoques + imobilizado + inv_pre)
@@ -1229,7 +1520,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
             dep=dep_anual, cf_total=cf_total, ebitda=ebitda, ebit=ebit, juros=juros,
             resultado=resultado, fco=fco, amort=amort, fluxo_socio=fluxo_socio,
             caixa=caixa, receber=receber, estoques=estoques, ac=ac, imobilizado=imobilizado,
-            ativo_total=ativo_total, fornecedores=fornecedores, obrigacoes=obrigacoes,
+            ativo_total=ativo_total, fornecedores=fornecedores, obrigacoes=obrigacoes, receita_diferida=receita_diferida,
             div_cp=div_cp, div_lp=div_lp, pc=pc, pnc=pnc, pl=pl, divida_bruta=saldo_div,
             divida_liquida=saldo_div - caixa, pe_contabil=pe_cont, pe_financeiro=pe_fin,
             pe_economico=pe_eco,
@@ -1278,7 +1569,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
 
     # --- Formação de preço (markup divisor)
     margem_desej = float(proj.get("margem_desejada_pct") or 0) / 100
-    df_pct = div(cf_desemb_m + dep_m, receita_m1) if receita_m1 > 0 else 0.0
+    df_pct = div(cf_desemb_m + dep_m, receita_m1 + s_rec[0]) if receita_m1 + s_rec[0] > 0 else 0.0
     df_pct = 0.0 if df_pct != df_pct else df_pct
     divisor = 1 - (aliq + var_pct + df_pct + margem_desej)
     markup_mult = div(1, divisor) if divisor > 0 else float("nan")
@@ -1307,12 +1598,12 @@ def executar_motor(proj: dict, d: dict) -> dict:
 
     rec_mes = [receita_m1 * (1 + g_m) ** m for m in range(12)]
     cdir_mes = [cdir_m1 * (1 + g_m) ** m for m in range(12)]
-    entradas = distribuir(rec_mes, rec_pz)
+    entradas = [e + c for e, c in zip(distribuir(rec_mes, rec_pz), s_cob[:12])]   # assinaturas: caixa na cobrança
     pag_forn = distribuir(cdir_mes, pag_pz)
     saldo = fontes - inv_fixo - inv_pre - inv_estoque
     fluxo_m = []
     for m in range(12):
-        sai_var = rec_mes[m] * (aliq + var_pct)
+        sai_var = (rec_mes[m] + s_rec[m]) * (aliq + var_pct) + s_custo[m] + s_taxa[m]
         parcela = crono["juros_m"][m] + crono["amort_m"][m]
         sai = pag_forn[m] + sai_var + cf_desemb_m + parcela
         ini = saldo
@@ -1322,6 +1613,9 @@ def executar_motor(proj: dict, d: dict) -> dict:
                         "Pessoal e custos fixos": cf_desemb_m, "Parcelas de empréstimos": parcela,
                         "Saldo final": saldo})
     df_fluxo_m = pd.DataFrame(fluxo_m)
+
+    # --- Indicadores de recorrência (CAC = gasto comercial fixo do Mês 1 ÷ novos assinantes do Mês 1)
+    rec_ind = metricas_recorrencia(ass_df, ass_planos, d.get("assinaturas"), desp_com_m + pessoal_com_m)
 
     return dict(
         mod_m=mod_m, pessoal_adm_m=pessoal_adm_m, pessoal_com_m=pessoal_com_m, cif_m=cif_m,
@@ -1337,6 +1631,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         capital_proprio=capital_proprio, capital_terceiros=capital_terceiros, fontes=fontes,
         crono=crono, meses=df_meses, anos=anos, fluxos=fluxos, vpl=vpl, tir=tir, il=il,
         payback_simples=payback_simples, payback_desc=payback_desc, resumo=resumo, tma=tma,
+        ass=ass_df, ass_planos=ass_planos, recorrencia=rec_ind, g_a=g_a, inf=inf,
     )
 
 
@@ -1734,6 +2029,20 @@ def semaforo(res: dict) -> list:
         "🟢" if pes <= 0.25 else ("🟡" if pes <= 0.35 else "🔴"),
         "Quanto da receita líquida vai para salários, encargos e benefícios. Acima de 35% costuma apertar o resultado.",
         f"{brl(a1['pessoal'])} ÷ {brl(a1['rec_liquida'])} = {pct(pes)}")
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        lc = rc["ltv_cac"]
+        add("LTV/CAC (assinaturas)", lc, f"{num_br(lc, 1)}x" if lc == lc else "n.a.",
+            "🟢" if lc == lc and lc >= 3 else ("🟡" if lc == lc and lc >= 1 else "🔴"),
+            "Quantas vezes o lucro bruto que um assinante deixa ao longo da vida cobre o custo de conquistá-lo. "
+            "Abaixo de 1 cada cliente novo dá prejuízo; 3 ou mais é a referência usada por investidores.",
+            f"LTV {brl(rc['ltv'])} ÷ CAC {brl(rc['cac'])}" if lc == lc else "Sem gasto comercial ou sem novos assinantes no Mês 1")
+        ch_ = rc["churn"]
+        add("Churn mensal efetivo", ch_, pct(ch_),
+            "🟢" if ch_ <= 0.03 else ("🟡" if ch_ <= 0.07 else "🔴"),
+            "Percentual de assinantes que cancelam por mês. Cada ponto de churn encurta a vida do cliente e o LTV.",
+            f"Churn de cada plano ponderado pelos assinantes ativos no Mês 12 = {pct(ch_)}; vida média ≈ 1 ÷ churn = "
+            f"{num_br(rc['vida_meses'], 0)} meses")
     fm = res["fluxo_mensal"]
     minimo = float(fm["Saldo final"].min()) if not fm.empty else 0.0
     mes_min = fm.loc[fm["Saldo final"].idxmin(), "Mês"] if not fm.empty else "-"
@@ -1796,6 +2105,44 @@ def tabela_checagens_v5(res: dict, d: dict, proj: dict) -> pd.DataFrame:
                        "Observação": ", ".join(exced["Recurso"]) or "A capacidade atende a demanda prevista até o Mês 12.",
                        "destino": "operacional", "Onde corrigir": "Marketing e operação → Plano operacional",
                        "Como corrigir": "Aumente a capacidade (equipamentos, pessoas, turnos) ou reveja a meta de vendas."})
+    # --- Serviços: horas demandadas x horas disponíveis
+    ch = custo_hora(res, d, proj)
+    if ch["horas_demandadas_m1"] > 0:
+        ok = ch["ocupacao_m12"] == ch["ocupacao_m12"] and ch["ocupacao_m12"] <= 1
+        extras.append({"Teste": "Horas da equipe suficientes para os serviços",
+                       "Valor apurado": f"Ocupação no Mês 12: {pct(ch['ocupacao_m12'])}" if ch["horas_cobraveis"] > 0
+                       else "nenhuma pessoa na área de produção/operação",
+                       "Situação": "OK" if ok else "VERIFICAR",
+                       "Observação": "As horas vendidas não podem passar das horas cobráveis da equipe.",
+                       "destino": "servicos", "Onde corrigir": "Finanças → Serviços e custo da hora",
+                       "Como corrigir": "Contrate mais pessoas, aumente a utilização ou reduza as horas vendidas."})
+    # --- Assinaturas
+    ass = d.get("assinaturas")
+    rc = res.get("recorrencia", {"tem": False})
+    if ass is not None and not ass.empty:
+        sem_churn = ass[(ass["churn_mensal_pct"] <= 0) & (ass["preco_ciclo"] > 0)]
+        extras.append({"Teste": "Assinaturas com taxa de cancelamento (churn)",
+                       "Valor apurado": f"{len(sem_churn)} plano(s) com churn zero",
+                       "Situação": "OK" if sem_churn.empty else "VERIFICAR",
+                       "Observação": ", ".join(sem_churn["plano"].astype(str)) or
+                       "Todos os planos preveem cancelamentos, como acontece na prática.",
+                       "destino": "assinaturas", "Onde corrigir": "Finanças → Assinaturas e receita recorrente",
+                       "Como corrigir": "Informe um churn mensal realista (pesquisas citam algo entre 3% e 8% ao mês para pequenas "
+                                        "empresas de software e aplicativos)."})
+        if rc.get("tem"):
+            lc = rc["ltv_cac"]
+            ok = lc == lc and lc >= 3
+            extras.append({"Teste": "LTV/CAC de pelo menos 3", "Valor apurado": f"{num_br(lc, 1)}x" if lc == lc else "sem CAC",
+                           "Situação": "OK" if ok else "VERIFICAR",
+                           "Observação": "Cada cliente deve gerar, ao longo da vida, ao menos 3 vezes o que custou para conquistá-lo.",
+                           "destino": "assinaturas", "Onde corrigir": "Finanças → Assinaturas → Indicadores",
+                           "Como corrigir": "Reduza o churn, aumente o preço/ARPU ou diminua o gasto comercial por novo cliente."})
+    if str(proj.get("tipo_negocio", "")).startswith(("Serviço", "Assinatura")) and res["inv_estoque"] > 0:
+        extras.append({"Teste": "Estoque inicial em negócio de serviço", "Valor apurado": brl(res["inv_estoque"]),
+                       "Situação": "VERIFICAR",
+                       "Observação": "Serviços e assinaturas costumam não ter estoque; confira se os materiais são mesmo necessários.",
+                       "destino": "produtos", "Onde corrigir": "Produtos e materiais → Materiais",
+                       "Como corrigir": "Zere o estoque inicial dos itens que não serão comprados antes da abertura."})
     return pd.concat([base, pd.DataFrame(extras)], ignore_index=True)
 
 
@@ -1812,6 +2159,55 @@ def raio_x(res: dict, chk: pd.DataFrame, completude: float, sem: list) -> dict:
     acoes = [f"{r['Teste']}: {r['Como corrigir'] or r['Observação']}" for _, r in chk[chk["Situação"] != "OK"].iterrows()]
     acoes += [f"{s['Indicador']} em {s['Valor']}: {s['Leitura']}" for s in sem if s["Status"] == "🔴"]
     return {"nota": nota, "acoes": acoes[:5], "pontos": (round(pontos_comp), round(pontos_chk), round(pontos_fin))}
+
+
+# ------------------------------------------------------------------------------
+# 15. SERVIÇOS: CUSTO DA HORA PRODUTIVA, CAPACIDADE EM HORAS E PREÇO DO SERVIÇO
+# ------------------------------------------------------------------------------
+def custo_hora(res: dict, d: dict, proj: dict) -> dict:
+    """
+    Custo da hora produtiva = (mão de obra da operação + custos indiretos + depreciação) ÷ horas cobráveis.
+    Horas cobráveis = pessoas da operação x horas contratadas por mês x taxa de utilização.
+    Custo pleno do serviço = insumos + horas x custo da hora.
+    Preço sugerido = custo pleno ÷ [1 − (impostos + despesas variáveis + despesas de estrutura % + margem)].
+    """
+    pes = d["pessoal"]
+    area = pes["area"].fillna("").astype(str)
+    pessoas = float(pes.loc[area.str.startswith("Produ"), "num_empregados"].sum())
+    h_mes = float(proj.get("horas_mes_pessoa") or 168)
+    util = float(proj.get("utilizacao_pct") or 75) / 100
+    horas_contr = pessoas * h_mes
+    horas_fat = horas_contr * util
+    custo_base = res["mod_m"] + res["cif_m"] + res["dep_m"]
+    ch = div(custo_base, horas_fat) if horas_fat > 0 else float("nan")
+    rec_a1 = res["anos"][1]["rec_bruta"]
+    estrutura = res["pessoal_adm_m"] + res["pessoal_com_m"] + res["desp_adm_m"] + res["desp_com_m"] + res["desp_fin_m"]
+    desp_pct = div(estrutura * 12, rec_a1) if rec_a1 > 0 else 0.0       # média do Ano 1
+    margem = res["margem_desejada"]
+    divisor = 1 - (res["aliq"] + res["var_pct"] + desp_pct + margem)
+    cat = res["cat"]
+    sv = cat[cat["horas_unit"] > 0].copy() if "horas_unit" in cat else cat.iloc[0:0].copy()
+    linhas = []
+    for _, r in sv.iterrows():
+        h = float(r["horas_unit"])
+        mao = h * ch if ch == ch else float("nan")
+        pleno = float(r["custo_unit"]) + (mao if mao == mao else 0.0)
+        preco = float(r["preco_venda"])
+        sug = div(pleno, divisor) if divisor > 0.05 else float("nan")
+        margem_real = div(preco - pleno - preco * (res["aliq"] + res["var_pct"]), preco) if preco > 0 else float("nan")
+        linhas.append({"Serviço": r["descricao"], "Horas por serviço": h, "Qtd/mês": float(r["qtd_mensal"]),
+                       "Horas/mês": h * float(r["qtd_mensal"]), "Insumos": float(r["custo_unit"]),
+                       "Mão de obra (horas x custo hora)": mao, "Custo pleno": pleno, "Preço atual": preco,
+                       "Preço sugerido": sug, "Margem após custos diretos": margem_real,
+                       "Valor da hora cobrada": div(preco, h)})
+    tab = pd.DataFrame(linhas)
+    horas_dem = float(tab["Horas/mês"].sum()) if not tab.empty else 0.0
+    return {"pessoas": pessoas, "horas_mes_pessoa": h_mes, "utilizacao": util, "horas_contratadas": horas_contr,
+            "horas_cobraveis": horas_fat, "custo_base": custo_base, "custo_hora": ch, "desp_pct": desp_pct,
+            "divisor": divisor, "tabela": tab, "horas_demandadas_m1": horas_dem,
+            "horas_demandadas_m12": horas_dem * (1 + res["g_m"]) ** 11,
+            "ocupacao_m1": div(horas_dem, horas_fat) if horas_fat > 0 else float("nan"),
+            "ocupacao_m12": div(horas_dem * (1 + res["g_m"]) ** 11, horas_fat) if horas_fat > 0 else float("nan")}
 
 # ##############################################################################
 # PARTE: pnbox_pdf.py
@@ -2479,6 +2875,63 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                              "PE un./mês": cp["pe_unidades_mes"].map(lambda v: num_br(v, 0))}),
                larguras=(56, 21, 21, 20, 20, 21, 21), tam=7)
 
+    # ---------------- SERVIÇOS E ASSINATURAS ----------------
+    ch = custo_hora(res, d, proj)
+    if not ch["tabela"].empty:
+        pdf.secao("SERVIÇOS: CUSTO DA HORA E PREÇO", nova_pagina=True)
+        pdf.paragrafo(f"Equipe da operação: {num_br(ch['pessoas'], 0)} pessoa(s) x {num_br(ch['horas_mes_pessoa'], 0)} h/mês x "
+                      f"utilização de {pct(ch['utilizacao'], 0)} = {num_br(ch['horas_cobraveis'], 0)} horas cobráveis por mês. "
+                      f"Custo da hora produtiva = {brl(ch['custo_base'])} ÷ {num_br(ch['horas_cobraveis'], 0)} h = "
+                      f"{brl(ch['custo_hora'])}. Ocupação prevista: {pct(ch['ocupacao_m1'])} no Mês 1 e "
+                      f"{pct(ch['ocupacao_m12'])} no Mês 12.", "", 9)
+        t_ = ch["tabela"]
+        pdf.tabela(pd.DataFrame({"Serviço": t_["Serviço"], "Horas": t_["Horas por serviço"].map(lambda v: num_br(v, 1)),
+                                 "Insumos": t_["Insumos"].map(brl), "Mão de obra": t_["Mão de obra (horas x custo hora)"].map(brl),
+                                 "Custo pleno": t_["Custo pleno"].map(brl), "Preço": t_["Preço atual"].map(brl),
+                                 "Sugerido": t_["Preço sugerido"].map(lambda v: brl(v) if v == v else "n.c."),
+                                 "R$/hora": t_["Valor da hora cobrada"].map(brl)}),
+                   larguras=(52, 14, 19, 20, 20, 18, 19, 18), tam=7)
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        s_ = res["ass"]
+        pdf.secao("ASSINATURAS E RECEITA RECORRENTE", nova_pagina=True)
+        a_ = d["assinaturas"]
+        pdf.tabela(pd.DataFrame({"Plano": a_["plano"], "Preço/ciclo": a_["preco_ciclo"].map(brl),
+                                 "Ciclo": a_["ciclo_meses"].map(lambda v: f"{num_br(v, 0)} m"),
+                                 "Novos Mês 1": a_["novos_mes1"].map(lambda v: num_br(v, 0)),
+                                 "Cresc. novos": a_["crescimento_novos_pct"].map(lambda v: pct(v / 100)),
+                                 "Churn/mês": a_["churn_mensal_pct"].map(lambda v: pct(v / 100)),
+                                 "Custo entrega": a_["custo_entrega_mensal"].map(brl),
+                                 "Taxa": a_["taxa_cobranca_pct"].map(lambda v: pct(v / 100))}),
+                   larguras=(52, 20, 12, 18, 18, 18, 22, 20), tam=7)
+        pdf.subtitulo("Projeção por ano")
+        linhas = []
+        for k in (1, 2, 3):
+            b_ = s_.iloc[(k - 1) * 12:k * 12]
+            r_, c_ = float(b_["Receita reconhecida"].sum()), float(b_["Cobranças (caixa)"].sum())
+            ce, tx = float(b_["Custo de entrega"].sum()), float(b_["Taxas de cobrança"].sum())
+            linhas.append({"Ano": f"Ano {k}", "Novos": num_br(b_["Novos"].sum(), 0),
+                           "Cancelados": num_br(b_["Cancelamentos"].sum(), 0), "Ativos (fim)": num_br(b_["Ativos"].iloc[-1], 0),
+                           "Receita reconhecida": brl(r_), "Cobranças": brl(c_), "Margem bruta": pct(div(r_ - ce - tx, r_))})
+        pdf.tabela(pd.DataFrame(linhas), larguras=(14, 18, 22, 22, 38, 36, 30), tam=7.5)
+        pdf.subtitulo("Indicadores de recorrência")
+        pdf.tabela(pd.DataFrame({
+            "Indicador": ["MRR no Mês 12", "ARR (MRR x 12)", "Assinantes no Mês 12", "ARPU", "Churn mensal médio",
+                          "Margem bruta recorrente", "LTV", "CAC", "LTV/CAC", "Payback do CAC", "Receita antecipada (fim do Ano 1)"],
+            "Valor": [brl(rc["mrr12"]), brl(rc["arr12"]), num_br(rc["ativos12"], 0), brl(rc["arpu"]), pct(rc["churn"]),
+                      pct(rc["margem_bruta"]), brl(rc["ltv"]) if rc["ltv"] == rc["ltv"] else "n.a.",
+                      brl(rc["cac"]) if rc["cac"] == rc["cac"] else "n.a.",
+                      f"{num_br(rc['ltv_cac'], 1)}x" if rc["ltv_cac"] == rc["ltv_cac"] else "n.a.",
+                      f"{num_br(rc['payback_cac'], 1)} meses" if rc["payback_cac"] == rc["payback_cac"] else "n.a.",
+                      brl(rc["receita_diferida_a1"])],
+            "Como se calcula": ["Valor mensal equivalente dos assinantes ativos", "", "", "MRR ÷ assinantes",
+                                "Churn de cada plano ponderado pelos ativos", "(Receita − entrega − taxas) ÷ receita",
+                                "ARPU x margem bruta ÷ churn", "Gasto comercial do Mês 1 ÷ novos do Mês 1", "Referência: 3x ou mais",
+                                "CAC ÷ (ARPU x margem bruta)", "Cobrado e ainda não prestado (passivo)"]}),
+            larguras=(55, 35, 90), alinhar=("LEFT", "RIGHT", "LEFT"), tam=8)
+        pdf.paragrafo("A receita das assinaturas é reconhecida mês a mês; planos pagos por ciclo entram inteiros no caixa na "
+                      "cobrança, e a parte ainda não prestada aparece no balanço como receita antecipada.", "I", 8)
+
     pdf.secao("PROJEÇÃO DE RESULTADOS E DRE", nova_pagina=True)
     pdf.paragrafo(f"Premissas: crescimento de {num_br(proj['crescimento_mensal_ano1_pct'])}% ao mês no Ano 1 e "
                   f"{num_br(proj['crescimento_anual_pct'])}% ao ano a partir do Ano 2; custos fixos corrigidos em "
@@ -2624,6 +3077,7 @@ def regras_situacao(proj: dict, d: dict) -> dict:
     def tem(t, n=1):
         return len(d[t]) >= n
     sw = d["swot"]
+    rec = tem("catalogo") or tem("assinaturas")
     return {
         "projeto": (bool(proj["nome_negocio"]) and bool(proj["cidade_uf"]), tem("socios")),
         "segmentos": (tem("segmentos", 2), tem("segmentos")),
@@ -2646,12 +3100,14 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "investimentos": (tem("inv_fixos") and (tem("socios") or tem("emprestimos")), tem("inv_fixos")),
         "produtos": (tem("catalogo") and tem("materiais"), tem("catalogo") or tem("materiais")),
         "custos": (tem("pessoal") and tem("custos_fixos"), tem("pessoal") or tem("custos_fixos")),
+        "servicos": (bool((d["catalogo"]["horas_unit"] > 0).any()), bool((d["catalogo"]["horas_unit"] > 0).any())),
+        "assinaturas": (tem("assinaturas") and bool((d["assinaturas"]["churn_mensal_pct"] > 0).all()), tem("assinaturas")),
         "preco": (tem("catalogo"), tem("catalogo")),
-        "dre": (tem("catalogo") and tem("custos_fixos"), tem("catalogo")),
-        "fluxo": (tem("catalogo") and tem("capital_giro_prazos"), tem("catalogo")),
-        "indicadores": (tem("catalogo") and tem("inv_fixos"), tem("catalogo")),
-        "graficos": (tem("catalogo"), tem("catalogo")),
-        "simulador": (tem("catalogo"), tem("catalogo")),
+        "dre": (rec and tem("custos_fixos"), rec),
+        "fluxo": (rec and tem("capital_giro_prazos"), rec),
+        "indicadores": (rec and tem("inv_fixos"), rec),
+        "graficos": (rec, rec),
+        "simulador": (rec, rec),
         "experimentos": (tem("experimentos"), tem("experimentos")),
         "riscos": (tem("riscos", 3), tem("riscos")),
         "cronograma": (tem("cronograma", 3), tem("cronograma")),
@@ -2663,7 +3119,15 @@ def regras_situacao(proj: dict, d: dict) -> dict:
 def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
-    vals = [1 if c else (0.5 if i else 0) for k, (c, i) in r.items() if k != "realizado"]
+    tipo = str(proj.get("tipo_negocio") or "Produtos")
+    fora = {"realizado"}
+    if not tipo.startswith(("Serviço", "Misto")):
+        fora.add("servicos")
+    if not tipo.startswith(("Assinatura", "Misto")):
+        fora.add("assinaturas")
+    if tipo.startswith("Assinatura") and not r["produtos"][1]:
+        fora.update({"produtos", "preco"})
+    vals = [1 if c else (0.5 if i else 0) for k, (c, i) in r.items() if k not in fora]
     return sum(vals) / max(len(vals), 1)
 
 
@@ -2702,6 +3166,11 @@ def gerar_sumario(proj: dict, d: dict, res: dict) -> str:
         p.append(f"O mercado alcançável foi estimado em {num_br(mk['sam_c'], 0)} clientes ({brl(mk['sam'])} por ano), e a meta "
                  f"de conquista (SOM) em {num_br(mk['som_c'], 0)} clientes. A receita prevista para o primeiro ano representa "
                  f"{pct(mk['pct_som'])} desse SOM.")
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        p.append(f"O modelo de receita é baseado em assinaturas: a projeção chega a {num_br(rc['ativos12'], 0)} assinantes e MRR de "
+                 f"{brl(rc['mrr12'])} no Mês 12, com churn médio de {pct(rc['churn'])} ao mês e relação LTV/CAC de "
+                 f"{num_br(rc['ltv_cac'], 1)}x.")
     p.append(f"A análise SWOT indica a {estrategia.lower()} como postura predominante.")
     p.append(f"O investimento total necessário é de {brl(res['investimento_total'])}, composto por {brl(res['inv_fixo'])} em "
              f"investimentos fixos, {brl(res['inv_pre'])} em gastos pré-operacionais, {brl(res['inv_estoque'])} em estoque inicial "
@@ -2730,6 +3199,7 @@ TAREFAS_IA = {
     "riscos": "Principais riscos do plano e como mitigá-los",
     "graficos": "Gráficos interpretativos dos principais números",
     "banca": "Simulação de banca examinadora: perguntas difíceis sobre o plano",
+    "recorrencia": "Assinaturas e serviços: churn, LTV/CAC, preço dos planos e custo da hora",
 }
 
 
@@ -2802,6 +3272,33 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                           "Margem": cat["margem_pct"].map(pct), "Qtd/mês": cat["qtd_mensal"].map(lambda v: num_br(v, 0)),
                           "Receita/mês": cat["receita_mensal"].map(brl)})
         b.append(_md_tabela(t, 60))
+    b.append(f"\n- Tipo de negócio: {proj.get('tipo_negocio') or 'Produtos'}")
+    ch = custo_hora(res, d, proj)
+    if not ch["tabela"].empty:
+        b.append("\n## 9b. Serviços e custo da hora")
+        b.append(f"- Equipe da operação: {num_br(ch['pessoas'], 0)} pessoa(s); {num_br(ch['horas_cobraveis'], 0)} horas cobráveis/mês "
+                 f"(utilização {pct(ch['utilizacao'], 0)}); custo da hora produtiva {brl(ch['custo_hora'])}; ocupação no Mês 12 "
+                 f"{pct(ch['ocupacao_m12'])}.")
+        t_ = ch["tabela"]
+        b.append(_md_tabela(pd.DataFrame({"Serviço": t_["Serviço"], "Horas": t_["Horas por serviço"].map(lambda v: num_br(v, 1)), "Custo pleno": t_["Custo pleno"].map(brl),
+                                          "Preço": t_["Preço atual"].map(brl),
+                                          "Sugerido": t_["Preço sugerido"].map(lambda v: brl(v) if v == v else "n.c."),
+                                          "R$/hora cobrada": t_["Valor da hora cobrada"].map(brl)})))
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        a_ = d["assinaturas"]
+        b.append("\n## 9c. Assinaturas (receita recorrente)")
+        b.append(_md_tabela(pd.DataFrame({"Plano": a_["plano"], "Público": a_["publico"], "Preço por ciclo": a_["preco_ciclo"].map(brl),
+                                          "Ciclo (meses)": a_["ciclo_meses"].map(lambda v: num_br(v, 0)),
+                                          "Novos no Mês 1": a_["novos_mes1"].map(lambda v: num_br(v, 0)),
+                                          "Crescimento dos novos %/mês": a_["crescimento_novos_pct"].map(lambda v: num_br(v, 1)),
+                                          "Churn %/mês": a_["churn_mensal_pct"].map(lambda v: num_br(v, 1)),
+                                          "Custo de entrega/assinante": a_["custo_entrega_mensal"].map(brl),
+                                          "Taxa de cobrança %": a_["taxa_cobranca_pct"].map(lambda v: num_br(v, 1))})))
+        b.append(f"- MRR Mês 1 {brl(rc['mrr1'])}; MRR Mês 12 {brl(rc['mrr12'])}; ARR {brl(rc['arr12'])}; assinantes no Mês 12 "
+                 f"{num_br(rc['ativos12'], 0)}; ARPU {brl(rc['arpu'])}; churn médio {pct(rc['churn'])}; margem bruta "
+                 f"{pct(rc['margem_bruta'])}; LTV {brl(rc['ltv'])}; CAC {brl(rc['cac'])}; LTV/CAC {num_br(rc['ltv_cac'], 1)}x; "
+                 f"payback do CAC {num_br(rc['payback_cac'], 1)} meses; receita antecipada no fim do Ano 1 {brl(rc['receita_diferida_a1'])}.")
     b.append("\n## 10. Estrutura de custos mensal")
     b.append(f"- Custos diretos {brl(res['cdir_m1'])}; impostos {pct(res['aliq'])} e despesas variáveis {pct(res['var_pct'])} da receita; "
              f"MOD {brl(res['mod_m'])}; custos indiretos de produção {brl(res['cif_m'])}; depreciação {brl(res['dep_m'])}; "
@@ -2851,6 +3348,10 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                     "uma tabela pronta para virar gráfico no Excel): (1) composição do investimento; (2) estrutura de custos; "
                     "(3) receita x custos x resultado nos 3 anos; (4) ponto de equilíbrio; (5) saldo de caixa mês a mês. "
                     "Abaixo de cada gráfico, escreva 2 ou 3 frases de interpretação.",
+        "recorrencia": "Se o plano tiver assinaturas ou serviços (seções 9b e 9c), avalie: o churn é realista para o setor? O LTV/CAC "
+                       "e o payback do CAC são saudáveis? Os preços dos planos e o desconto dos planos longos fazem sentido? O custo "
+                       "da hora cobre a equipe? Proponha 5 ações para reduzir cancelamentos e aumentar a receita por cliente, com o "
+                       "efeito estimado no MRR.",
         "banca": "Faça o papel de uma banca examinadora: elabore 10 perguntas difíceis sobre este plano (mercado, números, premissas, "
                  "riscos) e, para cada uma, indique o que uma boa resposta deveria conter.",
     }
@@ -3131,6 +3632,25 @@ def gerar_docx(proj: dict, d: dict, res: dict, piv_conc=None) -> bytes | None:
     it = res["investimento_total"]
     tabela(pd.DataFrame({"Item": ["Investimentos fixos", "Pré-operacionais", "Estoque inicial", "Capital de giro", "Total"],
                          "Valor": [brl(x) for x in (res["inv_fixo"], res["inv_pre"], res["inv_estoque"], res["capital_giro"], it)]}))
+    rc = res.get("recorrencia", {"tem": False})
+    if rc.get("tem"):
+        doc.add_heading("6.1b Assinaturas e receita recorrente", 2)
+        a_ = d["assinaturas"]
+        tabela(pd.DataFrame({"Plano": a_["plano"], "Preço por ciclo": a_["preco_ciclo"].map(brl),
+                             "Ciclo (meses)": a_["ciclo_meses"].map(lambda v: num_br(v, 0)),
+                             "Novos no Mês 1": a_["novos_mes1"].map(lambda v: num_br(v, 0)),
+                             "Churn/mês": a_["churn_mensal_pct"].map(lambda v: pct(v / 100))}))
+        doc.add_paragraph(f"MRR no Mês 12 de {brl(rc['mrr12'])} ({num_br(rc['ativos12'], 0)} assinantes), churn médio de "
+                          f"{pct(rc['churn'])} ao mês, margem bruta recorrente de {pct(rc['margem_bruta'])}, LTV de {brl(rc['ltv'])}, "
+                          f"CAC de {brl(rc['cac'])} e LTV/CAC de {num_br(rc['ltv_cac'], 1)}x.")
+    ch = custo_hora(res, d, proj)
+    if not ch["tabela"].empty:
+        doc.add_heading("6.1c Serviços e custo da hora", 2)
+        doc.add_paragraph(f"Custo da hora produtiva de {brl(ch['custo_hora'])}, com {num_br(ch['horas_cobraveis'], 0)} horas "
+                          f"cobráveis por mês e ocupação prevista de {pct(ch['ocupacao_m12'])} no Mês 12.")
+        t_ = ch["tabela"]
+        tabela(pd.DataFrame({"Serviço": t_["Serviço"], "Custo pleno": t_["Custo pleno"].map(brl), "Preço": t_["Preço atual"].map(brl),
+                             "Preço sugerido": t_["Preço sugerido"].map(lambda v: brl(v) if v == v else "n.c.")}))
     doc.add_heading("6.2 Demonstração do resultado", 2)
     tabela(tabela_dre(res))
     doc.add_heading("6.3 Indicadores de viabilidade", 2)
@@ -3268,9 +3788,9 @@ def ficha_avaliacao_pdf(avaliacoes: list, rubrica=RUBRICA_PADRAO, professor="", 
 
 
 st.set_page_config(page_title="PNBOX Acadêmico - Plano de Negócio", page_icon="📊", layout="wide",
-                   initial_sidebar_state="expanded")
+                   initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "5.0"
+VERSAO_PROGRAMA = "6.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -3316,19 +3836,19 @@ MODO_WEB = NAVEGADOR or Path("/mount/src").exists() or os.environ.get("PNBOX_WEB
 
 
 def _versao_inicial() -> str:
-    """'modelo' abre com o exemplo FitBox; 'branco' abre com um projeto vazio."""
+    """'modelo' abre com o FitBox; 'branco', com um projeto vazio; 'assinatura', com o Conecta Vale."""
     try:
         q = st.query_params.get("versao", "")
     except Exception:
         q = ""
-    if q in ("modelo", "branco"):
+    if q in ("modelo", "branco", "assinatura"):
         return q
-    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco"):
+    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco", "assinatura"):
         return os.environ["PNBOX_VERSAO"]
     arq = APP_DIR / "versao.txt"
     if arq.exists():
         v = arq.read_text(encoding="utf-8").strip().lower()
-        if v in ("modelo", "branco"):
+        if v in ("modelo", "branco", "assinatura"):
             return v
     return "modelo"
 
@@ -3374,8 +3894,8 @@ LISTAS_PADRAO = {
                        "Realização pessoal", "Sustentabilidade", "Confiança", "Desempenho", "Simplicidade",
                        "Aprendizado e autodesenvolvimento", "Integração de produtos"],
     "area_pessoal": ["Produção / operação", "Administrativo", "Comercial / vendas"],
-    "classe_custo_fixo": ["Custo indireto de produção", "Despesa administrativa", "Despesa comercial",
-                          "Despesa financeira"],
+    "classe_custo_fixo": ["Custo indireto de produção", "Custo de tecnologia / infraestrutura",
+                          "Despesa administrativa", "Despesa comercial", "Despesa financeira"],
     "setor": ["Comércio", "Serviço", "Indústria", "Agronegócio", "Alimentos e bebidas", "Bares e restaurantes",
               "Varejo", "Moda", "Saúde e bem-estar", "Tecnologia", "Educação", "Turismo", "Beleza e estética"],
     "canal": ["Marketing de Conteúdo", "Publicidade em Redes Sociais", "Marketing Viral", "Comunidade",
@@ -3434,6 +3954,10 @@ PAGINAS = [
      "Investimentos fixos, pré-operacionais, capital de giro e de onde vem o dinheiro."),
     ("produtos", "Finanças", "📦", "Produtos e materiais",
      "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
+    ("servicos", "Finanças", "🧑‍💻", "Serviços e custo da hora",
+     "Para quem vende tempo e conhecimento: custo da hora produtiva, horas da equipe e preço de cada serviço."),
+    ("assinaturas", "Finanças", "💳", "Assinaturas e receita recorrente",
+     "Planos mensais, trimestrais ou anuais: assinantes, cancelamentos (churn), MRR, CAC, LTV e custos de tecnologia."),
     ("custos", "Finanças", "🧾", "Custos e despesas",
      "Custos variáveis, mão de obra (produção e administrativa) e custos fixos classificados."),
     ("preco", "Finanças", "🏷️", "Formação de preço",
@@ -3523,6 +4047,33 @@ def aplicar_tema():
       .pn-card-info {{ border: 1px solid #dfe5ee; border-radius: 12px; padding: 14px 16px; background: #f7f9fc; }}
       .pn-face {{ font-size: 1.8rem; line-height: 1; }}
       .pn-etapa {{ border-left: 4px solid #2f6fd0; padding: 6px 12px; margin: 8px 0; }}
+      [data-testid="stAppDeployButton"] {{ display: none; }}
+      /* ---------- Celular e telas estreitas ---------- */
+      @media (max-width: 700px) {{
+        [data-testid="stMainBlockContainer"], .block-container {{ padding: 2.6rem .7rem 5rem .7rem !important; }}
+        h1 {{ font-size: 1.55rem !important; }}
+        h2 {{ font-size: 1.3rem !important; }}
+        h3 {{ font-size: 1.12rem !important; }}
+        /* grade de cartões: 2 por linha, compactos */
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-card_"]) {{ flex-wrap: wrap !important; gap: .55rem !important; }}
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-card_"]) > [data-testid="stColumn"] {{
+          flex: 1 1 calc(50% - .55rem) !important; min-width: calc(50% - .55rem) !important; width: calc(50% - .55rem) !important; }}
+        [data-testid="stHorizontalBlock"]:has([class*="st-key-card_"]) > [data-testid="stColumn"]:not(:has([class*="st-key-card_"])) {{
+          display: none !important; }}
+        [class*="st-key-card_"] {{ min-height: 118px; padding: 11px 12px 10px 12px; border-radius: 14px; }}
+        [class*="st-key-card_"] .pn-ic {{ font-size: 1.6rem; }}
+        [class*="st-key-card_"] .pn-tit {{ font-size: .92rem; margin-top: .2rem; }}
+        [class*="st-key-card_"] .pn-desc {{ display: none; }}
+        [class*="st-key-card_"] .pn-selo {{ font-size: .72rem; margin-top: .3rem; }}
+        .pn-grupo {{ font-size: 1.02rem; margin: .9rem 0 .3rem 0; }}
+        /* números e botões maiores para o dedo */
+        [data-testid="stMetricValue"] {{ font-size: 1.25rem !important; }}
+        [data-testid="stMetricLabel"] p {{ font-size: .8rem !important; }}
+        .stButton button, .stDownloadButton button {{ min-height: 44px; }}
+        [data-baseweb="tab-list"] {{ overflow-x: auto; scrollbar-width: none; }}
+        [data-baseweb="tab"] {{ padding-left: .55rem !important; padding-right: .55rem !important; white-space: nowrap; }}
+        .pn-card-info {{ padding: 11px 12px; font-size: .92rem; }}
+      }}
       {css_escuro}
     </style>""", unsafe_allow_html=True)
 
@@ -3560,6 +4111,8 @@ if not listar_projetos():
         shutil.copy(antigo, PASTA / "Projeto da versão anterior.pnbox")
     if VERSAO == "branco":
         criar_projeto_em_branco(PASTA / "Meu Projeto.pnbox", "Meu Projeto")
+    elif VERSAO == "assinatura":
+        criar_projeto_assinatura(PASTA / "Conecta Vale (modelo assinatura).pnbox")
     else:
         criar_projeto_modelo(PASTA / "FitBox (modelo).pnbox")
 
@@ -3761,6 +4314,10 @@ def _tem(tab, minimo=1):
     return len(d[tab]) >= minimo
 
 
+def _receita() -> bool:
+    return _tem("catalogo") or _tem("assinaturas")
+
+
 def situacao(p: str) -> str:
     """✅ completo · ◐ em andamento · ○ não iniciado"""
     sw = d["swot"]
@@ -3786,12 +4343,15 @@ def situacao(p: str) -> str:
         "investimentos": (_tem("inv_fixos") and (_tem("socios") or _tem("emprestimos")), _tem("inv_fixos")),
         "produtos": (_tem("catalogo") and _tem("materiais"), _tem("catalogo") or _tem("materiais")),
         "custos": (_tem("pessoal") and _tem("custos_fixos"), _tem("pessoal") or _tem("custos_fixos")),
+        "servicos": (bool((d["catalogo"]["horas_unit"] > 0).any()) and float(proj["utilizacao_pct"]) > 0,
+                     bool((d["catalogo"]["horas_unit"] > 0).any())),
+        "assinaturas": (_tem("assinaturas") and bool((d["assinaturas"]["churn_mensal_pct"] > 0).all()), _tem("assinaturas")),
         "preco": (_tem("catalogo"), _tem("catalogo")),
-        "dre": (_tem("catalogo") and _tem("custos_fixos"), _tem("catalogo")),
-        "fluxo": (_tem("catalogo") and _tem("capital_giro_prazos"), _tem("catalogo")),
-        "indicadores": (_tem("catalogo") and _tem("inv_fixos"), _tem("catalogo")),
-        "graficos": (_tem("catalogo"), _tem("catalogo")),
-        "simulador": (_tem("catalogo"), _tem("catalogo")),
+        "dre": (_receita() and _tem("custos_fixos"), _receita()),
+        "fluxo": (_receita() and _tem("capital_giro_prazos"), _receita()),
+        "indicadores": (_receita() and _tem("inv_fixos"), _receita()),
+        "graficos": (_receita(), _receita()),
+        "simulador": (_receita(), _receita()),
         "experimentos": (_tem("experimentos"), _tem("experimentos")),
         "riscos": (_tem("riscos", 3), _tem("riscos")),
         "cronograma": (_tem("cronograma", 3), _tem("cronograma")),
@@ -3801,12 +4361,16 @@ def situacao(p: str) -> str:
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
+    tipo = str(proj.get("tipo_negocio") or "Produtos")
+    opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto")))
+    if opcional and not iniciado:
+        return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
 
 
 def completude() -> float:
-    sts = [situacao(p[0]) for p in PAGINAS if situacao(p[0])]
-    return sum(1 if s == "✅" else (0.5 if s == "◐" else 0) for s in sts) / max(len(sts), 1)
+    return completude_de(proj, d)
 
 
 # ------------------------------------------------------------------------------
@@ -3829,7 +4393,8 @@ with st.sidebar:
     with st.expander("➕ Novo projeto"):
         novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")
         tipo = st.radio("Começar a partir de", ["Em branco (do zero)", "Modelo FitBox (alimentação saudável)",
-                                                "Modelo Café Mucuri (cafeteria e padaria)", "Cópia do projeto atual"])
+                                                "Modelo Café Mucuri (cafeteria e padaria)",
+                                                "Modelo Conecta Vale (aplicativo por assinatura)", "Cópia do projeto atual"])
         if st.button("Criar projeto", type="primary", width="stretch"):
             if not novo_nome.strip():
                 st.error("Informe um nome.")
@@ -3841,6 +4406,8 @@ with st.sidebar:
                     criar_projeto_modelo(destino)
                 elif tipo.startswith("Modelo Café"):
                     criar_projeto_cafe(destino)
+                elif tipo.startswith("Modelo Conecta"):
+                    criar_projeto_assinatura(destino)
                 else:
                     conn.commit()
                     shutil.copy(ss.db, destino)
@@ -3906,8 +4473,23 @@ with st.sidebar:
 # ------------------------------------------------------------------------------
 # CABEÇALHO DAS FERRAMENTAS
 # ------------------------------------------------------------------------------
+def rolar_para_topo():
+    """Ao trocar de página, volta a tela para o início (útil sobretudo no celular)."""
+    import streamlit.components.v1 as components
+    components.html("""<script>
+      try { const d = window.parent.document;
+        for (const s of ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main']) {
+          const el = d.querySelector(s); if (el) el.scrollTo({top: 0}); }
+        window.parent.scrollTo({top: 0});
+      } catch (e) {}
+    </script>""", height=0)
+
+
 def cabecalho(p: str):
     _, grupo, icone, titulo, descricao = PAG[p]
+    if ss.get("_pag_vista") != p:
+        ss["_pag_vista"] = p
+        rolar_para_topo()
     c1, c2 = st.columns([1, 5])
     if c1.button("← Voltar ao plano", key="voltar_" + p, width="stretch"):
         ir("inicio")
@@ -3985,6 +4567,9 @@ def salvo_txt():
 # PAINEL DO PLANO (tela inicial)
 # ==============================================================================
 def pg_inicio():
+    if ss.get("_pag_vista") != "inicio":
+        ss["_pag_vista"] = "inicio"
+        rolar_para_topo()
     if not ss.get("bemvindo_ok"):
         with st.container(border=True):
             st.markdown(f"""
@@ -4067,11 +4652,66 @@ se a ideia é **viável**. Como usar:
 # ==============================================================================
 # IDENTIFICAÇÃO
 # ==============================================================================
+TIPOS_NEGOCIO = {
+    "Produtos": "Fabrica ou revende mercadorias. Use Produtos e materiais, ficha técnica e estoques.",
+    "Serviços (hora ou projeto)": "Vende tempo e conhecimento (consultoria, manutenção, design, desenvolvimento sob encomenda, "
+                                  "estética...). Use também 🧑‍💻 Serviços e custo da hora.",
+    "Assinatura (receita recorrente)": "Cobra planos que se renovam (aplicativos, software, clubes, academias, mensalidades). "
+                                       "Use 💳 Assinaturas e receita recorrente.",
+    "Misto": "Combina produtos, serviços e/ou assinaturas.",
+}
+
+
+def calculadora_simples():
+    res = R()
+    fr = fator_r(res, d)
+    st.markdown("""
+No Simples Nacional a alíquota depende do **anexo** da atividade e da **receita bruta dos últimos 12 meses (RBT12)**:
+alíquota efetiva = (RBT12 × alíquota nominal − parcela a deduzir) ÷ RBT12. Serviços de tecnologia, engenharia e outros de
+natureza intelectual ficam no **Anexo V**, mas passam ao **Anexo III**, mais barato, quando o **fator R** (folha de pagamento,
+incluindo pró-labore, ÷ receita bruta) é de 28% ou mais. Confirme sempre o CNAE e o anexo com um contador.
+""")
+    c1, c2, c3 = st.columns(3)
+    anexos = list(TABELAS_SIMPLES)
+    sugerido = proj["anexo_simples"] if proj["anexo_simples"] in anexos else (
+        "Anexo III - Serviços" if str(proj["tipo_negocio"]).startswith(("Serviço", "Assinatura")) else "Anexo I - Comércio")
+    anexo = c1.selectbox("Anexo da atividade", anexos, index=anexos.index(sugerido), key=wk("anexo"))
+    rbt = c2.number_input("Receita bruta de 12 meses (RBT12)", 0.0, 1e9, float(round(res["anos"][1]["rec_bruta"], 2)), 1000.0,
+                          key=wk("rbt12"), help="Sugestão: a receita prevista para o Ano 1.")
+    usar_r = anexo in ("Anexo III - Serviços", "Anexo V - Serviços")
+    anexo_final = fr["anexo_por_fator_r"] if usar_r else anexo
+    r = aliquota_simples(anexo_final, rbt)
+    c3.metric("Fator R previsto", pct(fr["fator_r"]) if fr["fator_r"] == fr["fator_r"] else "n.a.",
+              help=f"Folha de 12 meses {brl(fr['folha12'])} (salários, encargos e pró-labore de {brl(fr['pro_labore_m'])}/mês) "
+                   f"÷ receita {brl(fr['receita12'])}")
+    if usar_r:
+        st.info(f"Com fator R de {pct(fr['fator_r'])}, a atividade é tributada pelo **{anexo_final}**.")
+    if r["efetiva"] == r["efetiva"]:
+        a, b, c = st.columns(3)
+        a.metric("Faixa", "acima do limite" if r.get("acima_limite") else f"{r['faixa']}ª")
+        b.metric("Alíquota nominal", pct(r["nominal"]))
+        c.metric("Alíquota efetiva", pct(r["efetiva"]))
+        if st.button(f"Usar {pct(r['efetiva'])} como imposto sobre vendas", key=wk("usar_aliq")):
+            salvar_unica(conn, "projeto", {"aliquota_imposto_pct": round(r["efetiva"] * 100, 2), "anexo_simples": anexo})
+            ss.pop(wk("aliq"), None)
+            invalidar()
+            marcar_salvo()
+            st.rerun()
+    st.caption("Tabelas da LC 123/2006 com a redação da LC 155/2016. A reforma tributária (EC 132/2023 e LC 214/2025) mantém o "
+               "Simples, mas a partir de 2027 a empresa pode recolher IBS e CBS dentro da guia única ou por fora, no regime "
+               "regular. Para o plano, use a regra vigente, cite a fonte e confirme com um contador.")
+
+
 def pg_projeto():
     cabecalho("projeto")
     t1, t2, t3 = st.tabs(["🏢 Negócio", "👥 Grupo e entrega", "📈 Premissas financeiras"])
     v = {}
     with t1:
+        tipos = list(TIPOS_NEGOCIO)
+        atual_t = proj["tipo_negocio"] if proj["tipo_negocio"] in tipos else tipos[0]
+        v["tipo_negocio"] = st.radio("Como o negócio ganha dinheiro?", tipos, index=tipos.index(atual_t), horizontal=True,
+                                     key=wk("tipo_neg"), help="Define quais ferramentas o programa recomenda e quais checagens aplica.")
+        st.caption(TIPOS_NEGOCIO[v["tipo_negocio"]])
         c1, c2, c3 = st.columns(3)
         v["nome_negocio"] = c1.text_input("Nome do negócio", proj["nome_negocio"], key=wk("nome"), max_chars=60)
         objs = ["Criar um novo negócio", "Expandir um negócio existente", "Captar recursos", "Outro"]
@@ -4112,6 +4752,8 @@ def pg_projeto():
         v["pme_dias"] = p3.number_input("Prazo médio de estoques (dias)", 0.0, 365.0, proj["pme_dias"], 1.0, key=wk("pme"))
         v["reserva_caixa_extra"] = p1.number_input("Reserva financeira de segurança (R$)", 0.0, 1e8, proj["reserva_caixa_extra"], 1000.0, key=wk("res"))
         v["recuperar_giro"] = int(p2.checkbox("No VPL, recuperar o capital de giro no último ano", bool(proj["recuperar_giro"]), key=wk("rg")))
+        with st.expander("🧮 Calcular a alíquota do Simples Nacional (anexos e fator R)"):
+            calculadora_simples()
     auto_unica("projeto", v)
     salvo_txt()
 
@@ -4821,7 +5463,12 @@ def pg_produtos():
             "preco_venda": moeda("Preço de venda (R$)"),
             "custo_aquisicao": moeda("Valor de aquisição / custo informado (R$)"),
             "qtd_mensal": N("Qtd. vendida no Mês 1", min_value=0, step=1),
-            "qtd_estoque_inicial": N("Estoque inicial (só revenda)", min_value=0, step=1)}, "descricao")
+            "qtd_estoque_inicial": N("Estoque inicial (só revenda)", min_value=0, step=1),
+            "horas_unit": N("Horas de trabalho por unidade (serviços)", min_value=0.0, step=0.5,
+                            help="Quanto tempo da equipe cada serviço consome. Usado em 🧑‍💻 Serviços e custo da hora.")},
+            "descricao")
+        st.caption("Vende planos com pagamento recorrente (mensal, trimestral, anual)? Cadastre-os em "
+                   "**💳 Assinaturas e receita recorrente**, não aqui: lá o programa considera renovações e cancelamentos.")
     with t3:
         cat, mat = d["catalogo"], d["materiais"]
         fabricaveis = cat[cat["categoria"] != "Revenda"]["descricao"].tolist()
@@ -4913,6 +5560,7 @@ def pg_custos():
 | **Custo direto (variável)** | Vai direto no produto e varia com a quantidade | matéria-prima, embalagem, mercadoria de revenda | Ficha técnica / valor de aquisição |
 | **Mão de obra direta (MOD)** | Pessoas que produzem ou prestam o serviço | cozinheiros, auxiliares de produção | Mão de obra com área "Produção / operação" |
 | **Custo indireto de produção (CIF)** | Gasto da produção que não dá para medir por unidade | energia da cozinha, manutenção de máquinas, aluguel da área produtiva | Custos fixos classificados como "Custo indireto" |
+| **Custo de tecnologia / infraestrutura** | Base fixa para entregar um serviço digital | nuvem mínima, licenças de software, domínio, contas de desenvolvedor | Custos fixos classificados como "Custo de tecnologia" (gastos por assinante ficam em 💳 Assinaturas) |
 | **Despesa** | Gasto para administrar e vender, fora da produção | pró-labore, contador, marketing, tarifas bancárias | Custos fixos "Despesa administrativa / comercial / financeira" |
 | **Despesa variável de venda** | Proporcional à receita | impostos, comissões, taxas de cartão | Custos de comercialização (%) |
 | **Investimento** | Compra de bens duráveis; entra no resultado só pela depreciação | máquinas, móveis, reforma | Investimentos e fontes |
@@ -5291,6 +5939,306 @@ def pg_realizado():
     proxima("realizado")
 
 # ##############################################################################
+# PARTE: pnbox_ui_paginas4.py
+# ##############################################################################
+# ==============================================================================
+# PNBOX ACADÊMICO - INTERFACE: SERVIÇOS (CUSTO DA HORA) E ASSINATURAS (RECEITA RECORRENTE)
+# ==============================================================================
+
+
+def _info(html: str):
+    st.markdown(f'<div class="pn-card-info">{html}</div>', unsafe_allow_html=True)
+    st.write("")
+
+
+# ------------------------------------------------------------------------------
+# SERVIÇOS E CUSTO DA HORA
+# ------------------------------------------------------------------------------
+def pg_servicos():
+    cabecalho("servicos")
+    _info("Em serviços, o principal custo é o <b>tempo da equipe</b>. O programa calcula quanto custa cada hora "
+          "efetivamente cobrável e, a partir dela, o custo pleno e o preço sugerido de cada serviço. Cadastre a equipe da "
+          "operação em <b>🧾 Custos e despesas</b> (área \"Produção / operação\").")
+    t1, t2, t3 = st.tabs(["⏱️ Horas da equipe", "🧾 Custo e preço dos serviços", "📚 Como funciona"])
+    v = {}
+    with t1:
+        c1, c2 = st.columns(2)
+        v["horas_mes_pessoa"] = c1.number_input("Horas contratadas por pessoa no mês", 0.0, 400.0, float(proj["horas_mes_pessoa"] or 168),
+                                                4.0, key=wk("hmes"),
+                                                help="44 h semanais ≈ 220 h/mês com o descanso remunerado; 40 h ≈ 176 h; 6 h/dia em 20 dias = 120 h.")
+        v["utilizacao_pct"] = c2.slider("Taxa de utilização (% das horas que vira trabalho cobrável)", 10, 100,
+                                        int(proj["utilizacao_pct"] or 75), 5, key=wk("util"),
+                                        help="Desconte reuniões, deslocamentos, orçamentos, treinamento, retrabalho e férias. "
+                                             "Empresas de serviços costumam ficar entre 60% e 80%.")
+        auto_unica("projeto", v)
+        res = R()
+        ch = custo_hora(res, d, proj)
+        k = st.columns(4)
+        k[0].metric("Pessoas na operação", num_br(ch["pessoas"], 0))
+        k[1].metric("Horas contratadas/mês", num_br(ch["horas_contratadas"], 0))
+        k[2].metric("Horas cobráveis/mês", num_br(ch["horas_cobraveis"], 0))
+        k[3].metric("Custo da hora produtiva", brl(ch["custo_hora"]) if ch["custo_hora"] == ch["custo_hora"] else "n.a.",
+                    help=f"(Mão de obra da operação {brl(res['mod_m'])} + custos indiretos e de tecnologia {brl(res['cif_m'])} "
+                         f"+ depreciação {brl(res['dep_m'])}) ÷ {num_br(ch['horas_cobraveis'], 0)} horas cobráveis")
+        if ch["pessoas"] == 0:
+            st.warning("Não há ninguém na área \"Produção / operação\". Sem equipe não há horas para vender.")
+            if st.button("Ir para Custos e despesas →"):
+                ir("custos", "Cadastre na aba Mão de obra quem executa os serviços, com a área \"Produção / operação\".")
+                st.rerun()
+        if ch["horas_cobraveis"] > 0:
+            st.markdown("**Ocupação da equipe (horas vendidas ÷ horas cobráveis)**")
+            o1, o12 = ch["ocupacao_m1"], ch["ocupacao_m12"]
+            st.progress(min(1.0, o1 if o1 == o1 else 0.0), text=f"Mês 1: {num_br(ch['horas_demandadas_m1'], 0)} h vendidas = {pct(o1)}")
+            st.progress(min(1.0, o12 if o12 == o12 else 0.0), text=f"Mês 12: {num_br(ch['horas_demandadas_m12'], 0)} h vendidas = {pct(o12)}")
+            if o12 == o12 and o12 > 1:
+                st.error("No Mês 12 a equipe não dá conta das horas vendidas. Planeje contratações ou reduza a meta.")
+            elif o12 == o12 and o12 < 0.5:
+                st.info("Há muita hora ociosa: dá para vender mais serviços sem aumentar a equipe.")
+    with t2:
+        st.caption("Serviços cadastrados (os mesmos de Produtos e materiais, categoria Serviço). **Insumos** são materiais "
+                   "gastos em cada execução; o tempo da equipe entra pelas **horas por serviço**.")
+        editor("catalogo", {
+            "descricao": T("Serviço", required=True, width="large"),
+            "preco_venda": moeda("Preço cobrado (R$)"),
+            "custo_aquisicao": moeda("Insumos por serviço (R$)"),
+            "qtd_mensal": N("Qtd. no Mês 1", min_value=0, step=1),
+            "horas_unit": N("Horas por serviço", min_value=0.0, step=0.5),
+            "qtd_estoque_inicial": None}, "descricao", filtro={"categoria": "Serviço"})
+        res = R()
+        ch = custo_hora(res, d, proj)
+        tab = ch["tabela"]
+        if tab.empty:
+            st.info("Informe as horas por serviço para ver o custo pleno e o preço sugerido.")
+        else:
+            st.markdown(f"**Custo da hora:** {brl(ch['custo_hora'])} · **Despesas de estrutura:** {pct(ch['desp_pct'])} da receita "
+                        f"(média do Ano 1) · **Margem desejada:** {pct(res['margem_desejada'])}")
+            vis = tab.copy()
+            for c in ("Insumos", "Mão de obra (horas x custo hora)", "Custo pleno", "Preço atual", "Preço sugerido",
+                      "Valor da hora cobrada"):
+                vis[c] = vis[c].map(lambda x: brl(x) if x == x else "não calculável")
+            vis["Margem após custos diretos"] = tab["Margem após custos diretos"].map(pct)
+            for c in ("Horas por serviço", "Qtd/mês", "Horas/mês"):
+                vis[c] = vis[c].map(lambda x: num_br(x, 1))
+            st.dataframe(vis, hide_index=True, width="stretch")
+            if ch["divisor"] <= 0.05:
+                st.warning("As despesas de estrutura, os impostos e a margem desejada somam quase 100% da receita: nenhum preço "
+                           "cobre tudo isso. Reduza a estrutura, revise a margem ou aumente o volume de vendas.")
+            baixos = tab[(tab["Preço sugerido"] == tab["Preço sugerido"]) & (tab["Preço atual"] < tab["Preço sugerido"])]
+            if not baixos.empty:
+                st.warning("Abaixo do preço sugerido: " + ", ".join(baixos["Serviço"]) + ".")
+            g = tab.melt("Serviço", ["Custo pleno", "Preço atual", "Preço sugerido"], "Valor", "R$").dropna()
+            st.altair_chart(alt.Chart(g).mark_bar().encode(
+                x=alt.X("Serviço:N", title=None, axis=alt.Axis(labelAngle=0, labelLimit=180)), xOffset="Valor:N",
+                y=alt.Y("R$:Q", title="R$"),
+                color=alt.Color("Valor:N", scale=alt.Scale(domain=["Custo pleno", "Preço atual", "Preço sugerido"],
+                                                           range=["#c0392b", "#2f6fd0", "#18a058"]),
+                                legend=alt.Legend(orient="bottom", title=None)),
+                tooltip=["Serviço", "Valor", alt.Tooltip("R$:Q", format=",.2f")]).properties(height=320), width="stretch")
+    with t3:
+        st.markdown(r"""
+#### Passo a passo do preço de um serviço
+1. **Horas cobráveis** = pessoas da operação × horas contratadas no mês × taxa de utilização.
+   Ninguém trabalha 100% do tempo em atividades que o cliente paga: há deslocamento, orçamento, reunião interna, estudo.
+2. **Custo da hora produtiva** = (salários, encargos e benefícios da operação + custos indiretos e de tecnologia +
+   depreciação dos equipamentos) ÷ horas cobráveis.
+3. **Custo pleno do serviço** = insumos + horas do serviço × custo da hora.
+4. **Preço sugerido** = custo pleno ÷ [1 − (impostos + despesas variáveis + despesas de estrutura + margem desejada)],
+   o mesmo *markup* divisor usado para produtos.
+
+#### Leituras úteis
+- **Valor da hora cobrada** (preço ÷ horas) mostra se o serviço remunera o tempo da equipe.
+- **Ocupação** acima de 100% indica que faltam pessoas; abaixo de 50% indica capacidade ociosa.
+- Para profissional autônomo, o mesmo raciocínio vale: some os custos mensais e o pró-labore desejado, divida pelas horas
+  produtivas e acrescente os impostos.
+- Serviços vendidos por pacote (mensalidade de manutenção, plano de suporte) também podem ser tratados como
+  **assinatura**, em 💳 Assinaturas e receita recorrente.
+""")
+    proxima("servicos")
+
+
+# ------------------------------------------------------------------------------
+# ASSINATURAS E RECEITA RECORRENTE
+# ------------------------------------------------------------------------------
+CICLOS = {1: "Mensal", 3: "Trimestral", 6: "Semestral", 12: "Anual"}
+
+
+def pg_assinaturas():
+    cabecalho("assinaturas")
+    _info("Em negócios por assinatura o cliente não compra uma vez: ele <b>fica</b> e paga de novo a cada ciclo, até "
+          "cancelar. Por isso o programa projeta <b>safras de assinantes</b> mês a mês, separando o dinheiro que entra "
+          "(<b>cobranças</b>) da receita que pertence a cada mês (<b>receita reconhecida</b>). Um plano anual pago adiantado "
+          "entra todo no caixa, mas vira receita 1/12 por mês.")
+    t1, t2, t3, t4, t5 = st.tabs(["📋 Planos", "📈 Projeção 36 meses", "📊 MRR, churn, CAC e LTV", "☁️ Custos de tecnologia",
+                                  "📚 Como funciona"])
+    with t1:
+        st.caption("Um plano por linha. **Preço por ciclo** é o valor cobrado de uma vez (ex.: R$ 3.000 no plano anual). "
+                   "**Churn** é a % de assinantes que cancelam por mês. **Custo de entrega** é o gasto mensal por assinante "
+                   "ativo (nuvem, APIs, SMS/e-mail, suporte). **Taxa de cobrança** é o % do meio de pagamento ou da loja de "
+                   "aplicativos.")
+        editor("assinaturas", {
+            "plano": T("Plano", required=True, width="medium"),
+            "publico": S("Público", options=["Empresas (B2B)", "Consumidores (B2C)"]),
+            "preco_ciclo": moeda("Preço por ciclo (R$)"),
+            "ciclo_meses": N("Ciclo (meses)", min_value=1, max_value=36, step=1,
+                             help="1 = mensal, 3 = trimestral, 6 = semestral, 12 = anual"),
+            "novos_mes1": N("Novos assinantes no Mês 1", min_value=0.0, step=1.0),
+            "crescimento_novos_pct": N("Crescimento dos novos (% ao mês)", step=0.5,
+                                       help="Quanto a captação de novos assinantes cresce por mês no Ano 1."),
+            "churn_mensal_pct": N("Churn (% ao mês)", min_value=0.0, max_value=100.0, step=0.5),
+            "custo_entrega_mensal": moeda("Custo de entrega por assinante/mês (R$)"),
+            "taxa_cobranca_pct": N("Taxa de cobrança (%)", min_value=0.0, max_value=50.0, step=0.5)}, "plano")
+        ass = d["assinaturas"]
+        if not ass.empty:
+            resumo = pd.DataFrame({
+                "Plano": ass["plano"], "Ciclo": ass["ciclo_meses"].map(lambda c: CICLOS.get(int(c), f"{int(c)} meses")),
+                "Equivale por mês": [brl(div(p, c)) for p, c in zip(ass["preco_ciclo"], ass["ciclo_meses"].clip(lower=1))],
+                "Vida média do assinante": [f"{num_br(div(1, c / 100), 0)} meses" if c > 0 else "infinita (churn zero!)"
+                                            for c in ass["churn_mensal_pct"]],
+                "Lucro bruto por assinante/mês": [brl(div(p, c) * (1 - t / 100) - e) for p, c, t, e in
+                                                  zip(ass["preco_ciclo"], ass["ciclo_meses"].clip(lower=1),
+                                                      ass["taxa_cobranca_pct"], ass["custo_entrega_mensal"])]})
+            st.dataframe(resumo, hide_index=True, width="stretch")
+            if (ass["churn_mensal_pct"] <= 0).any():
+                st.warning("Plano com churn zero: na prática, todo negócio por assinatura perde clientes. Informe uma estimativa.")
+    res = R()
+    s, planos, rc = res["ass"], res["ass_planos"], res["recorrencia"]
+    with t2:
+        if s.empty:
+            st.info("Cadastre ao menos um plano na aba 📋 Planos.")
+        else:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Assinantes ativos por plano**")
+                st.altair_chart(alt.Chart(planos).mark_area(opacity=0.85).encode(
+                    x=alt.X("Mês:Q", scale=alt.Scale(domain=[1, 36])), y=alt.Y("Ativos:Q", stack=True, title="Assinantes"),
+                    color=alt.Color("Plano:N", legend=alt.Legend(orient="bottom", columns=1, title=None)),
+                    tooltip=["Mês", "Plano", alt.Tooltip("Ativos:Q", format=",.0f")]).properties(height=330), width="stretch")
+            with c2:
+                st.markdown("**Receita reconhecida (MRR) x dinheiro que entra (cobranças)**")
+                lg = s.melt("Mês", ["Receita reconhecida", "Cobranças (caixa)"], "Série", "R$")
+                st.altair_chart(alt.Chart(lg).mark_line(point=False, strokeWidth=2.5).encode(
+                    x=alt.X("Mês:Q", scale=alt.Scale(domain=[1, 36])), y="R$:Q",
+                    color=alt.Color("Série:N", scale=alt.Scale(range=["#2f6fd0", "#e67e22"]),
+                                    legend=alt.Legend(orient="bottom", title=None)),
+                    tooltip=["Mês", "Série", alt.Tooltip("R$:Q", format=",.2f")]).properties(height=330), width="stretch")
+            anos = []
+            for k in (1, 2, 3):
+                bloco = s.iloc[(k - 1) * 12:k * 12]
+                r_, c_ = float(bloco["Receita reconhecida"].sum()), float(bloco["Cobranças (caixa)"].sum())
+                ce, tx = float(bloco["Custo de entrega"].sum()), float(bloco["Taxas de cobrança"].sum())
+                anos.append({"Ano": f"Ano {k}", "Novos": num_br(bloco["Novos"].sum(), 0),
+                             "Cancelamentos": num_br(bloco["Cancelamentos"].sum(), 0),
+                             "Ativos no fim": num_br(bloco["Ativos"].iloc[-1], 0), "Receita reconhecida": brl(r_),
+                             "Cobranças (caixa)": brl(c_), "Receita antecipada acumulada": brl(res["anos"][k]["receita_diferida"]),
+                             "Custo de entrega": brl(ce), "Taxas": brl(tx), "Margem bruta": pct(div(r_ - ce - tx, r_))})
+            st.dataframe(pd.DataFrame(anos), hide_index=True, width="stretch")
+            with st.expander("Ver a projeção mês a mês"):
+                vis = s.copy()
+                for c in ("Novos", "Cancelamentos", "Ativos"):
+                    vis[c] = vis[c].map(lambda x: num_br(x, 1))
+                for c in ("Receita reconhecida", "Cobranças (caixa)", "Custo de entrega", "Taxas de cobrança"):
+                    vis[c] = vis[c].map(brl)
+                st.dataframe(vis, hide_index=True, width="stretch", height=420)
+            st.caption("Assinantes aparecem com casas decimais porque o churn é uma média: 2,5 assinantes perdidos significa "
+                       "\"entre 2 e 3\". A receita das assinaturas entra automaticamente na DRE, no fluxo de caixa e nos indicadores.")
+    with t3:
+        if not rc.get("tem"):
+            st.info("Cadastre planos com preço e novos assinantes para ver os indicadores.")
+        else:
+            k = st.columns(4)
+            k[0].metric("MRR no Mês 12", brl(rc["mrr12"]), f"Mês 1: {brl(rc['mrr1'])}", delta_color="off",
+                        help="Receita recorrente mensal: soma do valor mensal equivalente de todos os assinantes ativos.")
+            k[1].metric("ARR (MRR x 12)", brl(rc["arr12"]), help="Receita recorrente anualizada no ritmo do Mês 12.")
+            k[2].metric("Assinantes no Mês 12", num_br(rc["ativos12"], 0))
+            k[3].metric("ARPU (receita média por assinante)", brl(rc["arpu"]), help="MRR ÷ assinantes ativos no Mês 12.")
+            k = st.columns(4)
+            k[0].metric("Churn mensal médio", pct(rc["churn"]), f"vida média ≈ {num_br(rc['vida_meses'], 0)} meses",
+                        delta_color="off", help="Churn de cada plano ponderado pelos assinantes do Mês 12. Vida média = 1 ÷ churn.")
+            k[1].metric("Margem bruta recorrente (Ano 1)", pct(rc["margem_bruta"]),
+                        help="(Receita reconhecida − custo de entrega − taxas de cobrança) ÷ receita reconhecida.")
+            k[2].metric("LTV (lucro bruto por assinante na vida)", brl(rc["ltv"]) if rc["ltv"] == rc["ltv"] else "n.a.",
+                        help="ARPU × margem bruta ÷ churn.")
+            k[3].metric("CAC (custo para conquistar 1 assinante)", brl(rc["cac"]) if rc["cac"] == rc["cac"] else "n.a.",
+                        help=f"Gasto comercial fixo do Mês 1 ({brl(rc['gasto_aquisicao_m1'])}: pessoal comercial + despesas "
+                             f"comerciais) ÷ {num_br(rc['novos1'], 0)} novos assinantes no Mês 1.")
+            lc, pb = rc["ltv_cac"], rc["payback_cac"]
+            k = st.columns(3)
+            k[0].metric("LTV/CAC", f"{num_br(lc, 1)}x" if lc == lc else "n.a.",
+                        help="Referência: 3x ou mais. Abaixo de 1x, cada cliente novo dá prejuízo.")
+            k[1].metric("Payback do CAC", f"{num_br(pb, 1)} meses" if pb == pb else "n.a.",
+                        help="Meses de lucro bruto de um assinante para pagar o custo de conquistá-lo. Referência: até 12 meses.")
+            k[2].metric("Receita antecipada no fim do Ano 1", brl(rc["receita_diferida_a1"]),
+                        help="Dinheiro de planos já cobrados e ainda não prestados. É caixa, mas também é dívida com o cliente.")
+            st.markdown("#### Leitura rápida")
+            leit = []
+            leit.append(("🟢" if lc == lc and lc >= 3 else ("🟡" if lc == lc and lc >= 1 else "🔴"),
+                         f"LTV/CAC de {num_br(lc, 1)}x: " + ("a aquisição de clientes se paga com folga." if lc == lc and lc >= 3 else
+                                                           "a conquista de clientes está cara para o que eles deixam de lucro.")))
+            leit.append(("🟢" if rc["churn"] <= 0.03 else ("🟡" if rc["churn"] <= 0.07 else "🔴"),
+                         f"Churn de {pct(rc['churn'])} ao mês: em um ano, cerca de {pct(1 - (1 - rc['churn']) ** 12, 0)} da base "
+                         "seria substituída só para manter o tamanho."))
+            leit.append(("🟢" if rc["margem_bruta"] >= 0.7 else ("🟡" if rc["margem_bruta"] >= 0.5 else "🔴"),
+                         f"Margem bruta de {pct(rc['margem_bruta'])}: empresas de software costumam operar entre 70% e 85%."))
+            for ic, tx in leit:
+                st.markdown(f"{ic} {tx}")
+    with t4:
+        st.markdown("""
+Classifique cada gasto de tecnologia pelo jeito como ele cresce:
+
+| Tipo de gasto | Exemplos | Onde lançar no programa |
+|---|---|---|
+| **Cresce com cada assinante** | servidor/nuvem por uso, banco de dados, armazenamento, envio de SMS e e-mail, APIs pagas por chamada, uso de inteligência artificial, suporte ao cliente | Coluna **Custo de entrega por assinante** (aba Planos) |
+| **% de cada cobrança** | meio de pagamento (cartão, Pix, boleto), comissão das lojas de aplicativos sobre assinaturas vendidas dentro do app | Coluna **Taxa de cobrança** (aba Planos) |
+| **Fixo por mês** | infraestrutura mínima de nuvem, licenças de ferramentas (repositório de código, design, monitoramento), domínio, contas de desenvolvedor | 🧾 Custos e despesas → Custos fixos, classificação **Custo de tecnologia / infraestrutura** |
+| **Equipe técnica** | desenvolvedores, suporte, DevOps | 🧾 Custos e despesas → Mão de obra, área **Produção / operação** |
+| **Antes de abrir** | desenvolvimento da primeira versão (MVP), identidade visual, registro de marca | 🏗️ Investimentos → Pré-operacionais |
+| **Equipamentos** | computadores e celulares para teste | 🏗️ Investimentos → Investimentos fixos (com depreciação) |
+
+As lojas de aplicativos cobram comissão sobre compras e assinaturas feitas dentro do app, e essas regras vêm mudando
+por decisões judiciais e regulatórias em vários países. Consulte as condições vigentes antes de fechar o plano. Vender para
+empresas por boleto ou Pix, fora da loja, costuma reduzir a taxa de cobrança.
+""")
+        cf = d["custos_fixos"]
+        tec = cf[cf["classificacao"].astype(str).str.startswith("Custo de tecnologia")]
+        st.markdown(f"**Custos fixos de tecnologia cadastrados:** {brl(tec['valor_mensal'].sum())}/mês")
+        if not tec.empty:
+            st.dataframe(tec[["descricao", "valor_mensal"]].rename(columns={"descricao": "Item", "valor_mensal": "R$/mês"})
+                         .assign(**{"R$/mês": lambda x: x["R$/mês"].map(brl)}), hide_index=True, width="stretch")
+        if st.button("Lançar custos fixos de tecnologia →"):
+            ir("custos", "Na aba Custos fixos, use a classificação \"Custo de tecnologia / infraestrutura\".")
+            st.rerun()
+    with t5:
+        st.markdown(r"""
+#### Faturamento não é receita
+Um cliente que paga **R$ 3.000 por um plano anual** em janeiro:
+- **Caixa:** entra R$ 3.000 em janeiro.
+- **Receita (DRE):** R$ 250 por mês, de janeiro a dezembro, porque o serviço é prestado ao longo do ano.
+- **Balanço:** em janeiro sobra R$ 2.750 de **receita antecipada**, uma obrigação com o cliente que diminui a cada mês.
+
+#### Erro comum em planos de negócio
+Lançar os planos trimestrais, semestrais e anuais como se fossem **vendidos de novo todo mês** (por exemplo, "8 planos
+anuais de R$ 4.200 por mês" somando R$ 33.600 de receita mensal). Isso multiplica a receita: o plano anual é cobrado
+uma vez por ano, e quem já assinou não paga de novo no mês seguinte. O certo é projetar **novos assinantes**,
+**cancelamentos** e **renovações**, como esta ferramenta faz.
+
+#### Os indicadores
+- **MRR** (receita recorrente mensal) = soma dos valores mensais equivalentes dos assinantes ativos. **ARR** = MRR × 12.
+- **Churn** = % de assinantes que cancelam por mês. Vida média do cliente ≈ 1 ÷ churn.
+- **ARPU** = MRR ÷ assinantes ativos.
+- **Margem bruta** = (receita − custo de entrega − taxas) ÷ receita.
+- **LTV** (valor do cliente na vida) = ARPU × margem bruta ÷ churn.
+- **CAC** (custo de aquisição) = gastos de marketing e vendas ÷ novos assinantes.
+- **LTV/CAC**: referência de 3x ou mais. **Payback do CAC** = CAC ÷ (ARPU × margem bruta), idealmente até 12 meses.
+
+#### Como o programa calcula
+Cada mês de entrada forma uma **safra**. A cada renovação, a safra perde a parte que cancela. Quem paga por ciclo
+(trimestral, anual) só sai na renovação: o churn mensal informado é convertido para o ciclo,
+1 − (1 − churn)^meses do ciclo. Nos Anos 2 e 3, a entrada de novos assinantes parte do Mês 12 e cresce à taxa anual de
+crescimento das premissas.
+""")
+    proxima("assinaturas")
+
+# ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
 # ##############################################################################
 # ==============================================================================
@@ -5374,7 +6322,8 @@ Confira os números que ela citar com os do programa.
     c1, c2 = st.columns([2, 1])
     with c1:
         escolha = st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
-                                 default=["indicadores", "concorrencia", "custos", "graficos"], key=wk("ia_tarefas"))
+                                 default=["indicadores", "concorrencia", "custos", "graficos"] +
+                                 (["recorrencia"] if R()["recorrencia"].get("tem") else []), key=wk("ia_tarefas"))
     with c2:
         publico = st.selectbox("Quem está pedindo", ["estudante de Administração", "estudante de Ciências Contábeis",
                                                       "estudante de Economia", "empreendedor iniciante", "professor"],
@@ -5783,7 +6732,7 @@ ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "segmentos": pg_segmentos, 
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
          "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
-         "investimentos": pg_investimentos, "produtos": pg_produtos, "custos": pg_custos, "preco": pg_preco,
+         "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,
          "simulador": pg_simulador, "experimentos": pg_experimentos, "riscos": pg_riscos, "cronograma": pg_cronograma,
          "realizado": pg_realizado, "ia": pg_ia, "sumario": pg_sumario, "apresentacao": pg_apresentacao,
