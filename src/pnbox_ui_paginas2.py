@@ -1,5 +1,5 @@
 # ==============================================================================
-# PNBOX ACADÊMICO - INTERFACE: FERRAMENTAS FINANCEIRAS
+# VIABILIZALAB - INTERFACE: FERRAMENTAS FINANCEIRAS
 # ==============================================================================
 
 def tabela_comp(df):
@@ -246,10 +246,20 @@ No **custeio variável**, o produto recebe só o custo direto; MOD, CIF e despes
                                           help="Produção / operação = mão de obra direta (entra no custo do produto por absorção)."),
                                 "num_empregados": N("Nº", min_value=0, step=1), "salario_mensal": moeda("Salário (R$)"),
                                 "encargos_pct": N("Encargos (%)", min_value=0.0), "beneficios_unit": moeda("Benefícios por pessoa (R$)"),
-                                "atribuicoes": T("Atribuições", width="medium")}, "cargo")
+                                "atribuicoes": T("Atribuições", width="medium"),
+                                "mes_inicio": N("Começa no mês", min_value=1, max_value=120, step=1,
+                                                help="1 = desde a abertura. Use 13 para contratar no início do Ano 2, 25 no Ano 3...")},
+                    "cargo")
+        st.caption("📅 **Contratações futuras:** para planejar quem entra depois, crie uma linha com o cargo e informe o mês de "
+                   "início. O custo entra na DRE e no fluxo a partir desse mês.")
         r = R()
+        if (d["pessoal"]["mes_inicio"] > 1).any():
+            ps = r["pes_serie"]
+            st.altair_chart(alt.Chart(pd.DataFrame({"Mês": range(1, len(ps) + 1), "Custo com pessoal": ps})).mark_area(
+                line={"color": "#2f6fd0"}, color="#2f6fd033").encode(x="Mês:Q", y=alt.Y("Custo com pessoal:Q", title="R$/mês (sem inflação)"))
+                .properties(height=200, title="Custo com pessoal mês a mês, com as contratações planejadas"), width="stretch")
         c = st.columns(4)
-        c[0].metric("Total com pessoal / mês", brl(r["pessoal_m"]))
+        c[0].metric("Total com pessoal / mês (Mês 1)", brl(r["pessoal_m"]))
         c[1].metric("Mão de obra direta (produção)", brl(r["mod_m"]))
         c[2].metric("Administrativo", brl(r["pessoal_adm_m"]))
         c[3].metric("Comercial / vendas", brl(r["pessoal_com_m"]))
@@ -344,10 +354,10 @@ def pg_dre():
         st.dataframe(mm.assign(**{c: mm[c].map(brl) for c in mm.columns[1:]}), hide_index=True, width="stretch")
     st.subheader("Demonstração do resultado (Anos 1 a 3)")
     st.dataframe(tabela_dre(r), hide_index=True, width="stretch", height=560)
-    st.bar_chart(pd.DataFrame({"Receita": [r["anos"][a]["rec_bruta"] for a in (1, 2, 3)],
-                               "EBITDA": [r["anos"][a]["ebitda"] for a in (1, 2, 3)],
-                               "Resultado líquido": [r["anos"][a]["resultado"] for a in (1, 2, 3)]},
-                              index=["Ano 1", "Ano 2", "Ano 3"]), stack=False)
+    st.bar_chart(pd.DataFrame({"Receita": [r["anos"][a]["rec_bruta"] for a in r["ANOS"]],
+                               "EBITDA": [r["anos"][a]["ebitda"] for a in r["ANOS"]],
+                               "Resultado líquido": [r["anos"][a]["resultado"] for a in r["ANOS"]]},
+                              index=[f"Ano {a:02d}" for a in r["ANOS"]]), stack=False)
     proxima("dre")
 
 
@@ -394,7 +404,7 @@ def pg_indicadores():
                 st.caption(s_["Leitura"])
                 with st.popover("🔎 Como foi calculado"):
                     st.write(s_["Como foi calculado"])
-    st.subheader("Resumo financeiro (Ano 1, padrão PNBOX)")
+    st.subheader("Resumo financeiro (Ano 1, padrão Sebrae)")
     rs, a1 = r["resumo"], r["anos"][1]
     k = st.columns(4)
     k[0].metric("Investimento total", brl(r["investimento_total"]))
@@ -410,7 +420,7 @@ def pg_indicadores():
     k[0].metric("PE contábil (anual)", brl(a1["pe_contabil"]))
     k[1].metric("PE financeiro (anual)", brl(a1["pe_financeiro"]))
     k[2].metric("PE econômico (anual)", brl(a1["pe_economico"]))
-    k[3].metric("Payback descontado", f"{num_br(r['payback_desc'], 1)} meses" if r["payback_desc"] == r["payback_desc"] else "> 36 meses")
+    k[3].metric("Payback descontado", f"{num_br(r['payback_desc'], 1)} meses" if r["payback_desc"] == r["payback_desc"] else f"> {r['MESES']} meses")
 
     st.subheader("Matriz de indicadores (5 blocos)")
     ind = tabela_indicadores(r)
@@ -435,8 +445,8 @@ def pg_indicadores():
             "- **Custos variáveis**: custo direto dos itens (ficha técnica ou valor de aquisição) + impostos + custos de comercialização.\n"
             "- **Custos fixos totais**: pessoal + custos fixos + depreciação (linear, com valor residual).\n"
             "- **Fluxo do projeto** (VPL/TIR): Ano 0 = investimento total; Anos 1 a 3 = EBITDA (no Simples, os tributos já estão "
-            "na alíquota sobre vendas). Opcionalmente recupera o capital de giro no Ano 3.\n"
-            "- **Payback simples e rentabilidade** seguem o PNBOX: investimento ÷ resultado operacional mensal do Ano 1.\n"
+            "na alíquota sobre vendas). Opcionalmente recupera o capital de giro no último ano do horizonte.\n"
+            "- **Payback simples e rentabilidade** seguem o modelo do Sebrae: investimento ÷ resultado operacional mensal do Ano 1.\n"
             "- **Juros** pela Tabela Price, mês a mês. **Balanço simplificado**: caixa por diferença (Ativo = Passivo + PL), lucros retidos.")
     proxima("indicadores")
 

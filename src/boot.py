@@ -47,7 +47,7 @@ if __name__ == "__main__" and not _no_streamlit():
         _s.bind(("127.0.0.1", 0))
         _porta = _s.getsockname()[1]
     _os.environ["PNBOX_AUTOFECHAR"] = "1"
-    print(f"Abrindo o PNBOX em http://localhost:{_porta}  (feche a aba do navegador para encerrar)")
+    print(f"Abrindo o ViabilizaLab em http://localhost:{_porta}  (feche a aba do navegador para encerrar)")
     from streamlit.web import cli as _stcli
     _sys.argv = ["streamlit", "run", str(_Path(__file__).resolve()),
                  f"--server.port={_porta}", "--server.address=localhost",

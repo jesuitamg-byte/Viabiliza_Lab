@@ -1,5 +1,5 @@
 # ==============================================================================
-# PNBOX ACADÊMICO - INTERFACE: CONCLUSÃO, ENTREGA, PROFESSOR E CONFIGURAÇÕES
+# VIABILIZALAB - INTERFACE: CONCLUSÃO, ENTREGA, PROFESSOR E CONFIGURAÇÕES
 # ==============================================================================
 import json
 import tempfile
@@ -81,8 +81,8 @@ Confira os números que ela citar com os do programa.
     c1, c2 = st.columns([2, 1])
     with c1:
         escolha = st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
-                                 default=["indicadores", "concorrencia", "custos", "graficos"] +
-                                 (["recorrencia"] if R()["recorrencia"].get("tem") else []), key=wk("ia_tarefas"))
+                                 default=[k for k in TAREFAS_IA if k != "recorrencia" or R()["recorrencia"].get("tem")],
+                                 key=wk("ia_tarefas"))
     with c2:
         publico = st.selectbox("Quem está pedindo", ["estudante de Administração", "estudante de Ciências Contábeis",
                                                       "estudante de Economia", "empreendedor iniciante", "professor"],
@@ -187,9 +187,9 @@ def pg_apresentacao():
         c[2].metric("Lucro líquido", brl(a1["resultado"]))
         c[3].metric("Lucratividade", pct(div(a1["resultado"], a1["rec_bruta"])))
         c = st.columns(4)
-        c[0].metric("VPL (3 anos)", brl(res["vpl"]))
+        c[0].metric(f"VPL ({res['N']} anos)", brl(res["vpl"]))
         c[1].metric("TIR", pct(res["tir"]) if res["tir"] is not None else "n.a.")
-        c[2].metric("Payback descontado", f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else "> 36 meses")
+        c[2].metric("Payback descontado", f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else f"> {res['MESES']} meses")
         c[3].metric("Ponto de equilíbrio", brl(a1["pe_contabil"]))
     elif s == "semaforo":
         st.header("🚦 Saúde do negócio")
@@ -212,7 +212,7 @@ def pg_apresentacao():
             fontes["%"] = fontes["Valor"] / max(fontes["Valor"].sum(), 1)
             rosca(fontes, "Fontes de recursos", "ap_fontes", tabela=False)
     elif s == "dre":
-        st.header("📈 Receita e resultado em 3 anos")
+        st.header(f"📈 Receita e resultado em {res['N']} ano{'s' if res['N'] > 1 else ''}")
         anos = pd.DataFrame([{"Ano": f"Ano {k}", "Receita": v["rec_bruta"], "Resultado": v["resultado"]} for k, v in res["anos"].items()])
         longo = anos.melt("Ano", var_name="Série", value_name="R$")
         st.altair_chart(alt.Chart(longo).mark_bar().encode(x=alt.X("Ano:N", title=None), xOffset="Série:N", y="R$:Q",
@@ -279,7 +279,7 @@ def pg_relatorio():
     k = st.columns(3)
     with k[0].container(border=True):
         st.markdown("#### 📄 Relatório completo (PDF)")
-        st.caption("Todas as ferramentas, tabelas, gráficos e checagens, na ordem do PNBOX.")
+        st.caption("Todas as ferramentas, tabelas, gráficos e checagens, na ordem do plano de negócio do Sebrae.")
         if st.button("Gerar PDF", type="primary", width="stretch", key="b_pdf"):
             with st.spinner("Montando o relatório... (pode levar alguns segundos)"):
                 extras = {"comp": composicoes(res, d), "dre": tabela_dre(res), "indicadores": tabela_indicadores(res),
@@ -487,7 +487,8 @@ Você está usando a **versão on-line**. Os projetos ficam guardados **no armaz
 # ==============================================================================
 # ROTEADOR
 # ==============================================================================
-ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "segmentos": pg_segmentos, "personas": pg_personas,
+ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade, "canvas": pg_canvas, "porter": pg_porter,
+         "ge": pg_ge, "bcg": pg_bcg, "bsc": pg_bsc, "reforma": pg_reforma, "segmentos": pg_segmentos, "personas": pg_personas,
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
          "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,

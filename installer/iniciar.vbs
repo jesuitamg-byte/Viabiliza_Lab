@@ -1,4 +1,4 @@
-' Abre o PNBOX Academico (janela do Python oculta; fecha sozinho ao fechar a aba)
+' Abre o ViabilizaLab (janela do Python oculta; fecha sozinho ao fechar a aba)
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 d = fso.GetParentFolderName(WScript.ScriptFullName)

@@ -1,8 +1,8 @@
 """
 ================================================================================
-PNBOX ACADÊMICO - RELATÓRIO EM PDF (pnbox_pdf.py)
+VIABILIZALAB - RELATÓRIO EM PDF (pnbox_pdf.py)
 ================================================================================
-Gera o relatório completo do plano de negócio, na ordem do PNBOX/Sebrae.
+Gera o relatório completo do plano de negócio, na ordem do plano de negócio do Sebrae.
 Requer fpdf2 >= 2.7 (pip install -U fpdf2).
 ================================================================================
 """
@@ -215,6 +215,133 @@ def _fmt_curto(v, _=None):
     return f"R$ {v:.0f}"
 
 
+# ------------------------------------------------------------------------------
+# FIGURAS DA ANÁLISE ESTRATÉGICA (matplotlib) E QUADRO DO CANVAS
+# ------------------------------------------------------------------------------
+def _fig_png(fig) -> bytes:
+    import matplotlib.pyplot as plt
+    b = io.BytesIO()
+    fig.savefig(b, format="png", dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    return b.getvalue()
+
+
+def png_porter(tab: pd.DataFrame) -> bytes | None:
+    try:
+        import numpy as np
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return None
+    vals = tab["Intensidade"].tolist()
+    rot = ["Rivalidade", "Novos\nentrantes", "Substitutos", "Clientes", "Fornecedores"]
+    ang = np.linspace(0, 2 * np.pi, len(vals), endpoint=False).tolist()
+    fig, ax = plt.subplots(figsize=(4.2, 4.2), subplot_kw={"polar": True})
+    ax.plot(ang + ang[:1], vals + vals[:1], color="#2f6fd0", linewidth=2)
+    ax.fill(ang + ang[:1], vals + vals[:1], color="#2f6fd0", alpha=0.25)
+    ax.set_xticks(ang)
+    ax.set_xticklabels(rot, fontsize=9)
+    ax.set_ylim(0, 5)
+    ax.set_yticks([1, 2, 3, 4, 5])
+    ax.tick_params(axis="y", labelsize=7, colors="#777")
+    return _fig_png(fig)
+
+
+def png_ge(tab: pd.DataFrame) -> bytes | None:
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return None
+    cores = {(2, 2): "#27ae60", (2, 1): "#27ae60", (1, 2): "#27ae60", (2, 0): "#f1c40f", (1, 1): "#f1c40f",
+             (0, 2): "#f1c40f", (1, 0): "#e74c3c", (0, 1): "#e74c3c", (0, 0): "#e74c3c"}
+    fig, ax = plt.subplots(figsize=(6.2, 4.6))
+    for i in range(3):
+        for j in range(3):
+            ax.add_patch(plt.Rectangle((j * 10 / 3, i * 10 / 3), 10 / 3, 10 / 3, color=cores[(i, j)], alpha=0.18, lw=0))
+    ax.scatter(tab["Força competitiva"], tab["Atratividade"], s=260, color="#1f4f8f", alpha=0.85, zorder=3)
+    for k, (_, r) in enumerate(tab.iterrows(), start=1):
+        ax.annotate(str(k), (r["Força competitiva"], r["Atratividade"]), ha="center", va="center", fontsize=8,
+                    color="white", fontweight="bold", zorder=4)
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.set_xlabel("Força competitiva")
+    ax.set_ylabel("Atratividade do mercado")
+    for v in (10 / 3, 20 / 3):
+        ax.axvline(v, color="#999", lw=0.6)
+        ax.axhline(v, color="#999", lw=0.6)
+    return _fig_png(fig)
+
+
+def png_bcg(tab: pd.DataFrame, lim: float) -> bytes | None:
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return None
+    cor = {"Estrela": "#f1c40f", "Vaca leiteira": "#27ae60", "Interrogação": "#2980b9", "Abacaxi": "#c0392b"}
+    fig, ax = plt.subplots(figsize=(6.2, 4.6))
+    mx = max(float(tab["Receita anual"].max()), 1.0)
+    ax.scatter(tab["Participação relativa"].clip(0.1, 10), tab["Crescimento do mercado (%)"],
+               s=[120 + 1800 * v / mx for v in tab["Receita anual"]], c=[cor[q] for q in tab["Quadrante"]],
+               alpha=0.75, edgecolors="white", zorder=3)
+    for _, r in tab.iterrows():
+        ax.annotate(str(r["Produto"])[:24], (min(max(r["Participação relativa"], 0.1), 10), r["Crescimento do mercado (%)"]),
+                    textcoords="offset points", xytext=(0, 10), ha="center", fontsize=7.5)
+    ax.set_xscale("log")
+    ax.set_xlim(10, 0.1)
+    ax.axvline(1, color="#888", ls="--", lw=0.8)
+    ax.axhline(lim, color="#888", ls="--", lw=0.8)
+    ax.set_xlabel("Participação relativa de mercado (log; líder à esquerda)")
+    ax.set_ylabel("Crescimento do mercado (% a.a.)")
+    y0, y1 = ax.get_ylim()
+    ax.text(9, y1 * 0.97, "Estrela", fontsize=8, va="top", color="#7d6608")
+    ax.text(0.11, y1 * 0.97, "Interrogação", fontsize=8, va="top", ha="right", color="#1b4f72")
+    ax.text(9, y0 + (y1 - y0) * 0.03, "Vaca leiteira", fontsize=8, color="#196f3d")
+    ax.text(0.11, y0 + (y1 - y0) * 0.03, "Abacaxi", fontsize=8, ha="right", color="#7b241c")
+    return _fig_png(fig)
+
+
+def canvas_pdf(pdf, bl: dict):
+    """Desenha o Business Model Canvas em uma página (retrato, 180 mm de largura)."""
+    x0, y0, w, h1, h2 = pdf.l_margin, pdf.get_y() + 2, 36, 62, 45
+    caixas = [("Parcerias-chave", 0, 0, 1, 2), ("Atividades-chave", 1, 0, 1, 1), ("Recursos-chave", 1, 1, 1, 1),
+              ("Proposta de valor", 2, 0, 1, 2), ("Relacionamento com clientes", 3, 0, 1, 1), ("Canais", 3, 1, 1, 1),
+              ("Segmentos de clientes", 4, 0, 1, 2)]
+    for nome, c, r, cw, rh in caixas:
+        x, y = x0 + c * w, y0 + r * h1
+        pdf.rect(x, y, w * cw, h1 * rh)
+        _texto_caixa(pdf, nome, bl.get(nome, []), x, y, w * cw, h1 * rh)
+    yb = y0 + 2 * h1
+    for i, nome in enumerate(["Estrutura de custos", "Fontes de receita"]):
+        x = x0 + i * 90
+        pdf.rect(x, yb, 90, h2)
+        _texto_caixa(pdf, nome, bl.get(nome, []), x, yb, 90, h2)
+    pdf.set_y(yb + h2 + 3)
+
+
+def _texto_caixa(pdf, nome, itens, x, y, w, h):
+    pdf.set_fill_color(*AZUL)
+    pdf.rect(x, y, w, 6, style="F")
+    pdf.set_xy(x + 1, y + 0.8)
+    pdf.fonte("B", 6.6 if len(nome) > 22 else 7)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(w - 2, 4.4, pdf.t(nome.replace("Relacionamento com clientes", "Relacionamento")))
+    pdf.set_text_color(0, 0, 0)
+    pdf.fonte("", 6.6)
+    yy = y + 7.5
+    for it in itens:
+        if yy > y + h - 4:
+            break
+        pdf.set_xy(x + 1.2, yy)
+        txt = pdf.t("• " + str(it))
+        pdf.multi_cell(w - 2.4, 3.1, txt[:160], align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        yy = pdf.get_y() + 0.6
+
+
 def graficos_png(comp: dict) -> list:
     """Devolve [(título, bytes PNG)]. Se o matplotlib não estiver instalado, devolve lista vazia."""
     try:
@@ -307,7 +434,9 @@ def graficos_png(comp: dict) -> list:
 # ==============================================================================
 def gerar_pdf(proj, d, res, extras) -> bytes:
     """extras: dict com dre, indicadores, cenarios, checagens, swot_diag, quadrantes."""
-    from pnbox_motor import brl, num_br, pct, div, QUADRANTES, mercado, semaforo, capacidade_demanda, custo_hora  # noqa (removido no arquivo único)
+    from pnbox_motor import brl, num_br, pct, div, QUADRANTES, mercado, semaforo, capacidade_demanda, custo_hora  # noqa
+    from pnbox_estrategia import canvas_blocos, porter_tabela, porter_leitura, ge_tabela, bcg_tabela  # noqa
+    from pnbox_estrategia import QUADRANTES_BCG, checar_smart, PERSPECTIVAS, bsc_indicadores_plano, simular_reforma  # noqa
     pdf = Relatorio(proj["nome_negocio"])
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -352,6 +481,23 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         "Sócio": s["nome"], "Função": s["funcao"], "Minicurrículo": s["perfil"],
         "Capital (R$)": s["capital_integralizado"].map(brl)}), larguras=(40, 34, 76, 30),
         alinhar=("LEFT", "LEFT", "LEFT", "RIGHT"))
+
+    ob = d.get("objetivos")
+    if any(proj.get(k) for k in ("missao", "visao", "valores")) or (ob is not None and not ob.empty):
+        pdf.secao("MISSÃO, VISÃO, VALORES E OBJETIVOS", nova_pagina=True)
+        pdf.campo("Missão", proj.get("missao", ""))
+        pdf.campo("Visão", proj.get("visao", ""))
+        pdf.campo("Valores", proj.get("valores", ""))
+        if ob is not None and not ob.empty:
+            pdf.subtitulo("Objetivos estratégicos (critérios SMART)")
+            pdf.tabela(pd.DataFrame({
+                "Objetivo": ob["objetivo"], "Perspectiva": ob["perspectiva"], "Indicador e meta": [
+                    f"{i_}: {num_br(m, 1)} {u}" for i_, m, u in zip(ob["indicador"], ob["meta"], ob["unidade"])],
+                "Prazo": ob["prazo_meses"].map(lambda v: f"mês {num_br(v, 0)}"), "Responsável": ob["responsavel"],
+                "SMART": ["".join(L if ok else "-" for L, (ok, _) in checar_smart(o).items()) for _, o in ob.iterrows()]}),
+                larguras=(54, 26, 46, 14, 26, 14), alinhar=("LEFT", "LEFT", "LEFT", "CENTER", "LEFT", "CENTER"), tam=7)
+            pdf.paragrafo("SMART: S = específico, M = mensurável, A = atingível, R = relevante, T = temporal. Um hífen indica o "
+                          "critério que ainda precisa ser ajustado.", "I", 7.5)
 
     # ---------------- 2. SEGMENTOS ----------------
     pdf.secao("SEGMENTAÇÃO DE MERCADO")
@@ -472,6 +618,63 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                              "Classif.": sw["natureza"] + " / " + sw["impacto"], "Diagnóstico": sw["diagnostico"],
                              "Plano de ação": sw["plano_acao"]}),
                larguras=(16, 20, 30, 24, 45, 45), alinhar=("LEFT",) * 6, tam=7)
+
+    # ---------------- ANÁLISE ESTRATÉGICA ----------------
+    pdf.secao("BUSINESS MODEL CANVAS", nova_pagina=True)
+    canvas_pdf(pdf, canvas_blocos(proj, d, res))
+    pt = porter_tabela(d)
+    if (pt["Intensidade"] > 0).any():
+        pdf.secao("CINCO FORÇAS DE PORTER", nova_pagina=True)
+        img = png_porter(pt)
+        if img:
+            pdf.image(io.BytesIO(img), x=60, w=90)
+        pdf.tabela(pd.DataFrame({"Força": pt["Força"], "Nota (1-5)": pt["Intensidade"].map(lambda v: num_br(v, 0)),
+                                 "Justificativa": pt["Justificativa"].str.replace("(sugestão) ", "", regex=False),
+                                 "Estratégia": pt["Estratégia"]}), larguras=(40, 16, 62, 62),
+                   alinhar=("LEFT", "CENTER", "LEFT", "LEFT"), tam=7.5)
+        pdf.paragrafo(porter_leitura(pt), "I", 8.5)
+    ge_ = ge_tabela(d)
+    if not ge_.empty:
+        pdf.secao("MATRIZ GE / McKINSEY", nova_pagina=True)
+        img = png_ge(ge_)
+        if img:
+            pdf.image(io.BytesIO(img), x=35, w=140)
+        pdf.tabela(ge_[["Segmento", "Atratividade", "Força competitiva", "Recomendação"]].assign(
+            Segmento=[f"{k}. {s}" for k, s in enumerate(ge_["Segmento"], start=1)],
+            Atratividade=ge_["Atratividade"].map(lambda v: num_br(v, 1)),
+            **{"Força competitiva": ge_["Força competitiva"].map(lambda v: num_br(v, 1))}),
+            larguras=(70, 30, 35, 45), alinhar=("LEFT", "CENTER", "CENTER", "LEFT"), tam=7.5)
+        pdf.paragrafo("Atratividade = média das notas de tamanho, lucro, longevidade e concorrência do segmento. Força competitiva = "
+                      "informada pelo grupo ou média entre a aderência ao segmento e a nota da empresa frente aos concorrentes.", "I", 7.5)
+    lim = float(proj.get("bcg_limite_crescimento_pct") or 10)
+    bcg_ = bcg_tabela(d, res, lim)
+    if not bcg_.empty:
+        pdf.secao("MATRIZ BCG", nova_pagina=True)
+        img = png_bcg(bcg_, lim)
+        if img:
+            pdf.image(io.BytesIO(img), x=35, w=140)
+        pdf.tabela(pd.DataFrame({"Produto": bcg_["Produto"], "Cresc. mercado": bcg_["Crescimento do mercado (%)"].map(lambda v: f"{num_br(v, 1)}%"),
+                                 "Part. relativa": bcg_["Participação relativa"].map(lambda v: f"{num_br(v, 2)}x"),
+                                 "Receita anual": bcg_["Receita anual"].map(brl), "Quadrante": bcg_["Quadrante"]}),
+                   larguras=(66, 24, 24, 34, 32), alinhar=("LEFT", "RIGHT", "RIGHT", "RIGHT", "LEFT"), tam=7.5)
+        for q, (_, txt) in QUADRANTES_BCG.items():
+            itens = bcg_.loc[bcg_["Quadrante"] == q, "Produto"].tolist()
+            if itens:
+                pdf.paragrafo(f"{q} ({', '.join(itens)}): {txt}", "", 8)
+    if ob is not None and not ob.empty:
+        pdf.secao("BALANCED SCORECARD", nova_pagina=True)
+        ind = bsc_indicadores_plano(proj, d, res)
+        for per in PERSPECTIVAS:
+            sub = ob[ob["perspectiva"] == per]
+            pdf.subtitulo(f"Perspectiva {per.lower()}")
+            if not sub.empty:
+                pdf.tabela(pd.DataFrame({"Objetivo": sub["objetivo"], "Indicador": sub["indicador"],
+                                         "Meta": [f"{num_br(m, 1)} {u}" for m, u in zip(sub["meta"], sub["unidade"])],
+                                         "Prazo": sub["prazo_meses"].map(lambda v: f"mês {num_br(v, 0)}"),
+                                         "Iniciativa": sub["iniciativa"]}), larguras=(55, 38, 28, 16, 43),
+                           alinhar=("LEFT", "LEFT", "RIGHT", "CENTER", "LEFT"), tam=7.2)
+            if ind.get(per):
+                pdf.paragrafo("Indicadores do plano: " + "; ".join(f"{n} = {v}" for n, v in ind[per]), "I", 7.5)
 
     # ---------------- 8. CANAIS E FUNIL ----------------
     pdf.secao("CANAIS DE AQUISIÇÃO E FUNIL DE VENDAS", nova_pagina=True)
@@ -707,7 +910,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                    larguras=(52, 20, 12, 18, 18, 18, 22, 20), tam=7)
         pdf.subtitulo("Projeção por ano")
         linhas = []
-        for k in (1, 2, 3):
+        for k in res["ANOS"]:
             b_ = s_.iloc[(k - 1) * 12:k * 12]
             r_, c_ = float(b_["Receita reconhecida"].sum()), float(b_["Cobranças (caixa)"].sum())
             ce, tx = float(b_["Custo de entrega"].sum()), float(b_["Taxas de cobrança"].sum())
@@ -742,8 +945,14 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     for col in mm.columns[1:]:
         mm[col] = mm[col].map(brl)
     pdf.tabela(mm, larguras=(18, 33, 33, 33, 30, 33), tam=7.5)
-    pdf.subtitulo("Demonstração do resultado do exercício (Anos 1 a 3)")
-    pdf.tabela(extras["dre"], larguras=(70, 30, 30, 30, 20), tam=7.5)
+    N = res["N"]
+    pdf.subtitulo(f"Demonstração do resultado do exercício (Anos 1 a {N})" if N > 1 else "Demonstração do resultado do exercício (Ano 1)")
+    dre = extras["dre"]
+    for bloco in [res["ANOS"][i:i + 5] for i in range(0, N, 5)]:
+        cols = ["Conta"] + [f"Ano {a}" for a in bloco] + (["% Receita (Ano 1)"] if bloco[0] == 1 else [])
+        lw = 62 + (0 if bloco[0] == 1 else 18)
+        larg = (lw,) + tuple((180 - lw - (18 if bloco[0] == 1 else 0)) / len(bloco) for _ in bloco) + ((18,) if bloco[0] == 1 else ())
+        pdf.tabela(dre[cols], larguras=larg, tam=7.5 if len(bloco) <= 3 else 6.8)
 
     # ---------------- 13. INDICADORES ----------------
     pdf.secao("FLUXO DE CAIXA MENSAL (ANO 1)", nova_pagina=True)
@@ -765,7 +974,7 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                              "Leitura": [s_["Leitura"] for s_ in sem]}), larguras=(18, 45, 27, 90),
                alinhar=("CENTER", "LEFT", "RIGHT", "LEFT"), tam=7.5)
     rs = res["resumo"]
-    pdf.subtitulo("Resumo financeiro (Ano 1, padrão PNBOX)")
+    pdf.subtitulo("Resumo financeiro (Ano 1, padrão Sebrae)")
     pdf.tabela(pd.DataFrame({
         "Indicador": ["Receita anual", "Custos variáveis", "Margem de contribuição", "Custos fixos (com depreciação)",
                       "Resultado operacional", "Lucratividade", "Rentabilidade", "Payback simples",
@@ -776,18 +985,18 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                   f"{num_br(rs['payback_meses'], 1)} meses" if rs["payback_meses"] == rs["payback_meses"] else "Não recupera",
                   brl(a1["pe_contabil"]), brl(a1["pe_financeiro"]), brl(a1["pe_economico"])]}),
         larguras=(120, 60))
-    pdf.subtitulo("Avaliação do investimento (horizonte de 3 anos)")
+    pdf.subtitulo(f"Avaliação do investimento (horizonte de {res['N']} ano{'s' if res['N'] > 1 else ''})")
     fl = res["fluxos"]
     pdf.tabela(pd.DataFrame({
-        "Indicador": ["Fluxos de caixa do projeto (Ano 0 a 3)", "VPL à TMA", "TIR", "Índice de lucratividade",
+        "Indicador": [f"Fluxos de caixa do projeto (Ano 0 a {res['N']})", "VPL à TMA", "TIR", "Índice de lucratividade",
                       "Payback descontado"],
         "Valor": [" | ".join(brl(v) for v in fl), brl(res["vpl"]),
                   pct(res["tir"]) if res["tir"] is not None else "n.a.",
                   f"{num_br(res['il'])}x" if res["il"] == res["il"] else "n.a.",
-                  f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else "acima de 36 meses"]}),
+                  f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else f"acima de {res['MESES']} meses"]}),
         larguras=(55, 125), alinhar=("LEFT", "LEFT"))
-    pdf.paragrafo("Fluxo do projeto: Ano 0 = investimento total; Anos 1 a 3 = EBITDA" +
-                  (" (Ano 3 inclui a recuperação do capital de giro)." if proj.get("recuperar_giro") else "."), "I", 7.5)
+    pdf.paragrafo(f"Fluxo do projeto: Ano 0 = investimento total; Anos 1 a {res['N']} = EBITDA" +
+                  (f" (Ano {res['N']} inclui a recuperação do capital de giro)." if proj.get("recuperar_giro") else "."), "I", 7.5)
     pdf.subtitulo("Matriz de indicadores em 5 blocos")
     ind = extras["indicadores"]
     for bloco, g in ind.groupby("Bloco", sort=False):
@@ -795,8 +1004,14 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         if pdf.get_y() > 250:
             pdf.add_page()
         pdf.cell(0, 5, pdf.t(bloco), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.tabela(g[["Indicador", "Fórmula", "Ano 1", "Ano 2", "Ano 3", "Var. Ano 2/Ano 1"]],
-                   larguras=(42, 46, 25, 25, 25, 17), alinhar=("LEFT", "LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"), tam=7)
+        for bloco_a in [res["ANOS"][i:i + 4] for i in range(0, res["N"], 4)]:
+            cols = ["Indicador"] + (["Fórmula"] if bloco_a[0] == 1 else []) + [f"Ano {a}" for a in bloco_a] + \
+                   (["Var. Ano 2/Ano 1"] if bloco_a[0] == 1 and res["N"] >= 2 else [])
+            fixa = 42 + (46 if bloco_a[0] == 1 else 0) + (17 if "Var. Ano 2/Ano 1" in cols else 0)
+            larg = [42] + ([46] if bloco_a[0] == 1 else []) + [(180 - fixa) / len(bloco_a)] * len(bloco_a) + \
+                   ([17] if "Var. Ano 2/Ano 1" in cols else [])
+            pdf.tabela(g[cols], larguras=tuple(larg), alinhar=tuple(["LEFT"] * (2 if bloco_a[0] == 1 else 1) +
+                                                                     ["RIGHT"] * (len(cols) - (2 if bloco_a[0] == 1 else 1))), tam=7)
 
     # ---------------- 14. GRÁFICOS ----------------
     imgs = graficos_png(extras["comp"]) if extras.get("comp") else []
@@ -852,6 +1067,25 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
     ch = extras["checagens"]
     pdf.tabela(ch[["Teste", "Valor apurado", "Situação", "Observação"]], larguras=(50, 40, 20, 70),
                alinhar=("LEFT", "LEFT", "CENTER", "LEFT"), tam=7.5)
+
+    if float(proj.get("reforma_b2b_pct") or 0) > 0 or proj.get("anexo_simples"):
+        an = proj.get("anexo_simples") or "Anexo III - Serviços"
+        ano_r = int(float(proj.get("reforma_ano") or 2027))
+        cc = float(proj.get("reforma_compras_credito") or -1)
+        rr = simular_reforma(a1["rec_bruta"], res["aliq"], an, ano_r, float(proj.get("reforma_cbs_pct") or 11.3) / 100,
+                             float(proj.get("reforma_ibs_pct") or 0.1) / 100, float(proj.get("reforma_b2b_pct") or 0) / 100,
+                             a1["custo_dir"] + a1["fixos"] if cc < 0 else cc)
+        pdf.secao("REFORMA TRIBUTÁRIA: SIMULAÇÃO", nova_pagina=True)
+        pdf.paragrafo(f"Ano simulado: {ano_r}; {an}; CBS {num_br(proj.get('reforma_cbs_pct') or 11.3, 2)}% e IBS "
+                      f"{num_br(proj.get('reforma_ibs_pct') or 0.1, 2)}%; vendas para empresas que aproveitam crédito: "
+                      f"{num_br(proj.get('reforma_b2b_pct') or 0, 0)}%.", "", 8.5)
+        pdf.tabela(pd.DataFrame({
+            "Item": ["DAS", "IBS + CBS sobre as vendas", "(-) Crédito das compras", "Total (DAS + IBS/CBS)", "Crédito aos clientes empresas"],
+            "Simples puro": [brl(rr["das_puro"]), "no DAS", "-", brl(rr["puro_total"]), brl(rr["puro_credito_cliente"])],
+            "Simples híbrido": [brl(rr["das_hibrido"]), brl(rr["iva_debito"]), brl(-rr["iva_credito"]), brl(rr["hib_total"]),
+                                brl(rr["hib_credito_cliente"])]}), larguras=(80, 50, 50), alinhar=("LEFT", "RIGHT", "RIGHT"))
+        pdf.paragrafo("Simulação didática e simplificada. Fontes: LC 214/2025, art. 41; partilha do DAS da LC 123/2006; CBS de "
+                      "referência de 11,3% para 2027 calculada pelo TCU, sujeita à definição do Senado. Confirme com um contador.", "I", 7.5)
 
     if str(proj.get("conclusao") or "").strip():
         pdf.secao("CONCLUSÃO E PARECER FINAL", nova_pagina=True)

@@ -1,24 +1,26 @@
-﻿; Instalador do PNBOX Academico (gerado automaticamente pelo GitHub Actions)
+﻿; Instalador do ViabilizaLab (gerado automaticamente pelo GitHub Actions)
 #ifndef Versao
   #define Versao "modelo"
 #endif
 #if Versao == "modelo"
-  #define Nome "PNBOX Acadêmico - Modelo FitBox"
-  #define Arq "PNBOX-Setup-Modelo-FitBox"
-  #define Pasta "PNBOX Academico Modelo"
+  #define Nome "ViabilizaLab - Modelo FitBox"
+  #define Arq "ViabilizaLab-Setup-Modelo-FitBox"
+  #define Pasta "ViabilizaLab Modelo"
   #define Id "PNBOXAcademicoModelo"
+  #define NomeAntigo "PNBOX Acadêmico - Modelo FitBox"
 #else
-  #define Nome "PNBOX Acadêmico - Em branco"
-  #define Arq "PNBOX-Setup-Em-Branco"
-  #define Pasta "PNBOX Academico"
+  #define Nome "ViabilizaLab - Em branco"
+  #define Arq "ViabilizaLab-Setup-Em-Branco"
+  #define Pasta "ViabilizaLab"
   #define Id "PNBOXAcademicoEmBranco"
+  #define NomeAntigo "PNBOX Acadêmico - Em branco"
 #endif
 
 [Setup]
 AppId={#Id}
 AppName={#Nome}
-AppVersion=4.1
-AppPublisher=PNBOX Academico - UFVJM
+AppVersion=7.0
+AppPublisher=ViabilizaLab - UFVJM
 DefaultDirName={localappdata}\{#Pasta}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -35,9 +37,14 @@ Name: "pt"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 [Files]
 Source: "..\dist\PNBOX\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
+[InstallDelete]
+; atalhos da versão anterior, quando o programa se chamava PNBOX Acadêmico
+Type: files; Name: "{autodesktop}\{#NomeAntigo}.lnk"
+Type: files; Name: "{autoprograms}\{#NomeAntigo}.lnk"
+
 [Icons]
 Name: "{autodesktop}\{#Nome}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\iniciar.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\pnbox.ico"
 Name: "{autoprograms}\{#Nome}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\iniciar.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\pnbox.ico"
 
 [Run]
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\iniciar.vbs"""; Description: "Abrir o PNBOX agora"; Flags: postinstall nowait skipifsilent
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\iniciar.vbs"""; Description: "Abrir o ViabilizaLab agora"; Flags: postinstall nowait skipifsilent

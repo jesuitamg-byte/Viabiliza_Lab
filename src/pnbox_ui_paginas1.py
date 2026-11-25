@@ -1,5 +1,5 @@
 # ==============================================================================
-# PNBOX ACADÊMICO - INTERFACE: PAINEL E FERRAMENTAS DE ESTRATÉGIA E MERCADO
+# VIABILIZALAB - INTERFACE: PAINEL E FERRAMENTAS DE ESTRATÉGIA E MERCADO
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ def pg_inicio():
     if not ss.get("bemvindo_ok"):
         with st.container(border=True):
             st.markdown(f"""
-### 👋 Bem-vindo ao PNBOX Acadêmico
+### 👋 Bem-vindo ao ViabilizaLab
 Este programa ajuda você a construir um **plano de negócio completo**, do cliente aos números, e a descobrir
 se a ideia é **viável**. Como usar:
 
@@ -192,7 +192,9 @@ def pg_projeto():
         objs = ["Criar um novo negócio", "Expandir um negócio existente", "Captar recursos", "Outro"]
         v["objetivo"] = c2.selectbox("Objetivo do plano", objs,
                                      index=objs.index(proj["objetivo"]) if proj["objetivo"] in objs else 0, key=wk("obj"))
-        v["periodo_anos"] = c3.number_input("Período de planejamento (anos)", 1, 3, int(proj["periodo_anos"] or 3), key=wk("per"))
+        v["periodo_anos"] = c3.number_input("Horizonte de planejamento (anos)", 1, 10, int(proj["periodo_anos"] or 3), key=wk("per"),
+                                            help="Quantos anos o plano projeta: DRE, fluxos, VPL, TIR e payback usam este período. "
+                                                 "Planos de bancos e do Sebrae costumam usar de 3 a 5 anos.")
         regs = ["Simples Nacional", "MEI", "Lucro Presumido", "Lucro Real"]
         v["enquadramento"] = c1.selectbox("Enquadramento tributário", regs, key=wk("enq"),
                                           index=regs.index(proj["enquadramento"]) if proj["enquadramento"] in regs else 0)

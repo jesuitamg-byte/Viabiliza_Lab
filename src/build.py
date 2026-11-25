@@ -1,11 +1,11 @@
 import re
-partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_pdf.py","pnbox_extras.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas4.py","pnbox_ui_paginas3.py"]
+partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_estrategia.py","pnbox_pdf.py","pnbox_extras.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas4.py","pnbox_ui_paginas5.py","pnbox_ui_paginas3.py"]
 cab='''"""
 ================================================================================
-PNBOX ACADÊMICO v6 - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v7 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
-    - dois cliques no arquivo "Abrir PNBOX.bat" (na mesma pasta); ou
+    - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
     - dois cliques neste arquivo .py (se o Windows abrir .py com o Python); ou
     - no terminal:  py app_pnbox.py
 Na primeira vez ele instala sozinho as bibliotecas que faltarem

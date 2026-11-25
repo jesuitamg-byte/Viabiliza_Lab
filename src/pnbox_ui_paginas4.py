@@ -1,5 +1,5 @@
 # ==============================================================================
-# PNBOX ACADÊMICO - INTERFACE: SERVIÇOS (CUSTO DA HORA) E ASSINATURAS (RECEITA RECORRENTE)
+# VIABILIZALAB - INTERFACE: SERVIÇOS (CUSTO DA HORA) E ASSINATURAS (RECEITA RECORRENTE)
 # ==============================================================================
 
 
@@ -125,7 +125,7 @@ def pg_assinaturas():
           "cancelar. Por isso o programa projeta <b>safras de assinantes</b> mês a mês, separando o dinheiro que entra "
           "(<b>cobranças</b>) da receita que pertence a cada mês (<b>receita reconhecida</b>). Um plano anual pago adiantado "
           "entra todo no caixa, mas vira receita 1/12 por mês.")
-    t1, t2, t3, t4, t5 = st.tabs(["📋 Planos", "📈 Projeção 36 meses", "📊 MRR, churn, CAC e LTV", "☁️ Custos de tecnologia",
+    t1, t2, t3, t4, t5 = st.tabs(["📋 Planos", "📈 Projeção mês a mês", "📊 MRR, churn, CAC e LTV", "☁️ Custos de tecnologia",
                                   "📚 Como funciona"])
     with t1:
         st.caption("Um plano por linha. **Preço por ciclo** é o valor cobrado de uma vez (ex.: R$ 3.000 no plano anual). "
@@ -136,7 +136,7 @@ def pg_assinaturas():
             "plano": T("Plano", required=True, width="medium"),
             "publico": S("Público", options=["Empresas (B2B)", "Consumidores (B2C)"]),
             "preco_ciclo": moeda("Preço por ciclo (R$)"),
-            "ciclo_meses": N("Ciclo (meses)", min_value=1, max_value=36, step=1,
+            "ciclo_meses": N("Ciclo (meses)", min_value=1, max_value=60, step=1,
                              help="1 = mensal, 3 = trimestral, 6 = semestral, 12 = anual"),
             "novos_mes1": N("Novos assinantes no Mês 1", min_value=0.0, step=1.0),
             "crescimento_novos_pct": N("Crescimento dos novos (% ao mês)", step=0.5,
@@ -157,6 +157,12 @@ def pg_assinaturas():
             st.dataframe(resumo, hide_index=True, width="stretch")
             if (ass["churn_mensal_pct"] <= 0).any():
                 st.warning("Plano com churn zero: na prática, todo negócio por assinatura perde clientes. Informe uma estimativa.")
+        st.markdown("**Custo de aquisição (CAC)**")
+        verba = st.number_input("Quanto do gasto comercial mensal é dedicado a conquistar novos assinantes? (R$)", 0.0, 1e7,
+                                float(proj["verba_aquisicao_mensal"] or 0), 100.0, key=wk("verba_cac"),
+                                help="Anúncios, comissões de venda, eventos de captação... (valor já lançado em Custos e despesas). "
+                                     "Deixe 0 para usar todo o gasto comercial fixo do Mês 1.")
+        auto_unica("projeto", {"verba_aquisicao_mensal": verba})
     res = R()
     s, planos, rc = res["ass"], res["ass_planos"], res["recorrencia"]
     with t2:
@@ -167,19 +173,19 @@ def pg_assinaturas():
             with c1:
                 st.markdown("**Assinantes ativos por plano**")
                 st.altair_chart(alt.Chart(planos).mark_area(opacity=0.85).encode(
-                    x=alt.X("Mês:Q", scale=alt.Scale(domain=[1, 36])), y=alt.Y("Ativos:Q", stack=True, title="Assinantes"),
+                    x=alt.X("Mês:Q", scale=alt.Scale(domain=[1, res["MESES"]])), y=alt.Y("Ativos:Q", stack=True, title="Assinantes"),
                     color=alt.Color("Plano:N", legend=alt.Legend(orient="bottom", columns=1, title=None)),
                     tooltip=["Mês", "Plano", alt.Tooltip("Ativos:Q", format=",.0f")]).properties(height=330), width="stretch")
             with c2:
                 st.markdown("**Receita reconhecida (MRR) x dinheiro que entra (cobranças)**")
                 lg = s.melt("Mês", ["Receita reconhecida", "Cobranças (caixa)"], "Série", "R$")
                 st.altair_chart(alt.Chart(lg).mark_line(point=False, strokeWidth=2.5).encode(
-                    x=alt.X("Mês:Q", scale=alt.Scale(domain=[1, 36])), y="R$:Q",
+                    x=alt.X("Mês:Q", scale=alt.Scale(domain=[1, res["MESES"]])), y="R$:Q",
                     color=alt.Color("Série:N", scale=alt.Scale(range=["#2f6fd0", "#e67e22"]),
                                     legend=alt.Legend(orient="bottom", title=None)),
                     tooltip=["Mês", "Série", alt.Tooltip("R$:Q", format=",.2f")]).properties(height=330), width="stretch")
             anos = []
-            for k in (1, 2, 3):
+            for k in res["ANOS"]:
                 bloco = s.iloc[(k - 1) * 12:k * 12]
                 r_, c_ = float(bloco["Receita reconhecida"].sum()), float(bloco["Cobranças (caixa)"].sum())
                 ce, tx = float(bloco["Custo de entrega"].sum()), float(bloco["Taxas de cobrança"].sum())
@@ -216,8 +222,8 @@ def pg_assinaturas():
             k[2].metric("LTV (lucro bruto por assinante na vida)", brl(rc["ltv"]) if rc["ltv"] == rc["ltv"] else "n.a.",
                         help="ARPU × margem bruta ÷ churn.")
             k[3].metric("CAC (custo para conquistar 1 assinante)", brl(rc["cac"]) if rc["cac"] == rc["cac"] else "n.a.",
-                        help=f"Gasto comercial fixo do Mês 1 ({brl(rc['gasto_aquisicao_m1'])}: pessoal comercial + despesas "
-                             f"comerciais) ÷ {num_br(rc['novos1'], 0)} novos assinantes no Mês 1.")
+                        help=f"Gasto de aquisição do Mês 1 ({brl(rc['gasto_aquisicao_m1'])}, {rc.get('origem_cac', '')}) ÷ "
+                             f"{num_br(rc['novos1'], 0)} novos assinantes no Mês 1.")
             lc, pb = rc["ltv_cac"], rc["payback_cac"]
             k = st.columns(3)
             k[0].metric("LTV/CAC", f"{num_br(lc, 1)}x" if lc == lc else "n.a.",
@@ -290,7 +296,7 @@ uma vez por ano, e quem já assinou não paga de novo no mês seguinte. O certo 
 #### Como o programa calcula
 Cada mês de entrada forma uma **safra**. A cada renovação, a safra perde a parte que cancela. Quem paga por ciclo
 (trimestral, anual) só sai na renovação: o churn mensal informado é convertido para o ciclo,
-1 − (1 − churn)^meses do ciclo. Nos Anos 2 e 3, a entrada de novos assinantes parte do Mês 12 e cresce à taxa anual de
+1 − (1 − churn)^meses do ciclo. A partir do Ano 2, a entrada de novos assinantes parte do Mês 12 e cresce à taxa anual de
 crescimento das premissas.
 """)
     proxima("assinaturas")
