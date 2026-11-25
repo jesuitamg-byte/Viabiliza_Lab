@@ -1,4 +1,4 @@
-# Gera os instaladores do PNBOX para Windows (versão Modelo FitBox e versão Em branco)
+# Gera os instaladores do ViabilizaLab para Windows (versão Modelo FitBox e versão Em branco)
 # e publica na página "Releases" do repositório. Roda sozinho a cada atualização do programa.
 name: Gerar instaladores Windows
 
@@ -67,20 +67,27 @@ jobs:
         with:
           path: saida
           merge-multiple: true
+      - name: Remover instaladores com o nome antigo (PNBOX)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for a in PNBOX-Setup-Modelo-FitBox.exe PNBOX-Setup-Em-Branco.exe; do
+            gh release delete-asset instaladores "$a" --repo "${{ github.repository }}" -y || true
+          done
       - name: Publicar na página Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: instaladores
-          name: "PNBOX Acadêmico - instaladores para Windows"
+          name: "ViabilizaLab - instaladores para Windows"
           make_latest: true
           body: |
             **Como instalar:** baixe um dos arquivos abaixo, dê dois cliques e siga as telas.
-            - `PNBOX-Setup-Modelo-FitBox.exe`: abre com o estudo de caso FitBox preenchido.
-            - `PNBOX-Setup-Em-Branco.exe`: abre com um projeto vazio para começar do zero.
+            - `ViabilizaLab-Setup-Modelo-FitBox.exe`: abre com o estudo de caso FitBox preenchido.
+            - `ViabilizaLab-Setup-Em-Branco.exe`: abre com um projeto vazio para começar do zero.
 
             Não é preciso ter Python instalado. Se o Windows mostrar "O Windows protegeu o computador",
             clique em **Mais informações** e depois em **Executar assim mesmo** (o programa não tem assinatura digital paga).
 
-            Os projetos ficam em **Documentos\PNBOX**. Atualizado automaticamente a cada nova versão do programa.
+            Os projetos ficam em **Documentos\ViabilizaLab**. Atualizado automaticamente a cada nova versão do programa.
           files: saida/*.exe
           fail_on_unmatched_files: true

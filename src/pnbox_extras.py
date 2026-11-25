@@ -1,6 +1,6 @@
 """
 ================================================================================
-PNBOX ACADÊMICO - RECURSOS EXTRAS (pnbox_extras.py)
+VIABILIZALAB - RECURSOS EXTRAS (pnbox_extras.py)
 ================================================================================
 Sumário executivo automático, texto para análise com IA, pitch deck em PDF,
 exportação em Word, situação de preenchimento e avaliação (modo professor).
@@ -17,8 +17,10 @@ from fpdf.enums import XPos, YPos
 
 from pnbox_motor import (brl, num_br, pct, div, QUADRANTES, pontuacao_swot, mercado, semaforo,
                          tabela_dre, tabela_indicadores, composicoes, sensibilidade, capacidade_demanda,
-                         tabela_checagens_v5, raio_x, executar_motor, custo_hora)
+                         tabela_checagens_v5, raio_x, executar_motor, custo_hora, cenarios)
 from pnbox_db import SCHEMA, conectar, ler, ler_unica
+from pnbox_estrategia import (checar_smart, PERSPECTIVAS, canvas_blocos, bcg_tabela, ge_tabela, porter_tabela,
+                              porter_leitura, bsc_indicadores_plano, simular_reforma, frase_smart)
 from pnbox_pdf import Relatorio, graficos_png, AZUL, FONTES_CANDIDATAS
 
 
@@ -52,6 +54,15 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "investimentos": (tem("inv_fixos") and (tem("socios") or tem("emprestimos")), tem("inv_fixos")),
         "produtos": (tem("catalogo") and tem("materiais"), tem("catalogo") or tem("materiais")),
         "custos": (tem("pessoal") and tem("custos_fixos"), tem("pessoal") or tem("custos_fixos")),
+        "identidade": (bool(proj["missao"]) and bool(proj["visao"]) and bool(proj["valores"]) and tem("objetivos", 3) and
+                       all(all(ok for ok, _ in checar_smart(o).values()) for _, o in d["objetivos"].iterrows()),
+                       bool(proj["missao"]) or bool(proj["visao"]) or tem("objetivos")),
+        "canvas": (bool(proj["canvas_relacionamento"]) and bool(proj["canvas_parcerias"]), tem("segmentos") or tem("propostas")),
+        "porter": (len(d["porter"]) >= 5 and bool((d["porter"]["intensidade"] > 0).all()) and
+                   not d["porter"]["justificativa"].astype(str).str.startswith("(sugestão)").any(), tem("porter")),
+        "ge": (tem("segmentos", 2) and tem("concorrencia_notas"), tem("segmentos")),
+        "bcg": (tem("bcg", 2), tem("bcg")),
+        "bsc": (set(PERSPECTIVAS) <= set(d["objetivos"]["perspectiva"]), tem("objetivos")),
         "servicos": (bool((d["catalogo"]["horas_unit"] > 0).any()), bool((d["catalogo"]["horas_unit"] > 0).any())),
         "assinaturas": (tem("assinaturas") and bool((d["assinaturas"]["churn_mensal_pct"] > 0).all()), tem("assinaturas")),
         "preco": (tem("catalogo"), tem("catalogo")),
@@ -131,9 +142,9 @@ def gerar_sumario(proj: dict, d: dict, res: dict) -> str:
     p.append(f"Para o primeiro ano, projeta-se receita bruta de {brl(a1['rec_bruta'])}, margem de contribuição de {pct(a1['imc'])} "
              f"e resultado líquido de {brl(a1['resultado'])} (lucratividade de {pct(div(a1['resultado'], a1['rec_bruta']))}). "
              f"O ponto de equilíbrio contábil é de {brl(a1['pe_contabil'])} por ano.")
-    p.append(f"Na avaliação do investimento em três anos, à TMA de {pct(res['tma'])} ao ano, o VPL é de {brl(res['vpl'])}"
+    p.append(f"Na avaliação do investimento em {res['N']} ano{'s' if res['N'] > 1 else ''}, à TMA de {pct(res['tma'])} ao ano, o VPL é de {brl(res['vpl'])}"
              + (f", a TIR é de {pct(tir)}" if tir is not None else "")
-             + (f" e o payback descontado ocorre em {num_br(pb, 1)} meses." if pb == pb else " e o investimento não se paga em 36 meses."))
+             + (f" e o payback descontado ocorre em {num_br(pb, 1)} meses." if pb == pb else f" e o investimento não se paga em {res['MESES']} meses."))
     p.append("Com base nesses resultados, o negócio se mostra " + ("economicamente viável" if viavel else
              "ainda não viável nas premissas atuais, sendo necessário rever preços, custos ou investimentos") + ".")
     return "\n".join(p)
@@ -152,6 +163,10 @@ TAREFAS_IA = {
     "graficos": "Gráficos interpretativos dos principais números",
     "banca": "Simulação de banca examinadora: perguntas difíceis sobre o plano",
     "recorrencia": "Assinaturas e serviços: churn, LTV/CAC, preço dos planos e custo da hora",
+    "smart": "Revisão da missão, visão, valores e objetivos SMART",
+    "estrategia": "Análise estratégica integrada: Canvas, Cinco Forças, GE/McKinsey, BCG e Balanced Scorecard",
+    "coerencia": "Coerência entre as ferramentas (mercado x vendas x capacidade x equipe x finanças)",
+    "reforma": "Efeito da reforma tributária e escolha entre Simples puro e híbrido",
 }
 
 
@@ -182,11 +197,35 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
     b.append("\n## 1. Identificação")
     b.append(f"- Negócio: {proj['nome_negocio']} | Cidade: {proj['cidade_uf']} | Setor: {proj['setor_atuacao']}")
     b.append(f"- Enquadramento: {proj['enquadramento']} | Porte: {proj['porte']} | Objetivo: {proj['objetivo']}")
+    b.append(f"- Tipo de negócio: {proj.get('tipo_negocio') or 'Produtos'} | Horizonte do plano: {res['N']} ano(s)")
+    if any(proj.get(k) for k in ("missao", "visao", "valores")):
+        b.append("\n## 1. Missão, visão e valores")
+        b.append(f"- Missão: {proj.get('missao', '')}\n- Visão: {proj.get('visao', '')}\n- Valores: {proj.get('valores', '')}")
+    ob = d.get("objetivos")
+    if ob is not None and not ob.empty:
+        b.append("\n## 1. Objetivos SMART (checagem automática do programa)")
+        b.append(_md_tabela(pd.DataFrame({
+            "Objetivo": ob["objetivo"], "Perspectiva": ob["perspectiva"], "Indicador": ob["indicador"],
+            "Meta": [f"{num_br(m, 1)} {u}" for m, u in zip(ob["meta"], ob["unidade"])],
+            "Prazo (mês)": ob["prazo_meses"].map(lambda v: num_br(v, 0)), "Iniciativa": ob["iniciativa"],
+            "SMART": ["".join(L if ok else "-" for L, (ok, _) in checar_smart(o).items()) for _, o in ob.iterrows()]})))
     seg = d["segmentos"]
     if not seg.empty:
         s_ = seg.assign(Média=seg.iloc[:, 2:7].mean(axis=1).round(1)).sort_values("Média", ascending=False)
         b.append("\n## 2. Segmentos de clientes (notas 1 a 10)")
         b.append(_md_tabela(s_[["nome", "descricao", "Média"]].rename(columns={"nome": "Segmento", "descricao": "Descrição"})))
+    pers = d["personas"]
+    if not pers.empty:
+        b.append("\n## 2. Personas")
+        for _, p_ in pers.iterrows():
+            b.append(f"- {p_['nome']}, {num_br(p_['idade'], 0)} anos, {p_['profissao']}: {p_['descricao']} Ganhos: {p_['ganhos']}. "
+                     f"Dores: {p_['desafios']}. Objeções: {p_['duvidas_objecoes']}.")
+    jor = d["jornada_cliente"]
+    if not jor.empty:
+        b.append("\n## 2. Jornada do cliente")
+        b.append(_md_tabela(jor[["persona_nome", "macro_fase", "etapa", "estado_emocional", "oportunidades"]].rename(columns={
+            "persona_nome": "Persona", "macro_fase": "Fase", "etapa": "Etapa", "estado_emocional": "Emoção",
+            "oportunidades": "Oportunidade"}), 30))
     props = d.get("propostas")
     if props is not None and not props.empty:
         b.append("\n## 3. Propostas de valor")
@@ -209,10 +248,48 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                 b.append(f"- {nat}s: " + "; ".join(f"{r['fator']} ({r['impacto']})" for _, r in itens.iterrows()))
         if diag["predominante"]:
             b.append(f"- Quadrante predominante: {QUADRANTES[diag['predominante']][0]}")
+    b.append("\n## 6. Análise estratégica")
+    bl = canvas_blocos(proj, d, res)
+    b.append("Business Model Canvas: " + " | ".join(f"{k}: {'; '.join(v) or '(vazio)'}" for k, v in bl.items()))
+    pt = porter_tabela(d)
+    if (pt["Intensidade"] > 0).any():
+        b.append("Cinco Forças de Porter (1 = fraca, 5 = muito forte):")
+        b.append(_md_tabela(pt.assign(Intensidade=pt["Intensidade"].map(lambda v: num_br(v, 0)))))
+        b.append(f"- Leitura do programa: {porter_leitura(pt)}")
+    ge_ = ge_tabela(d)
+    if not ge_.empty:
+        b.append("Matriz GE/McKinsey (0 a 10):")
+        b.append(_md_tabela(ge_[["Segmento", "Atratividade", "Força competitiva", "Recomendação"]]))
+    bcg_ = bcg_tabela(d, res, float(proj.get("bcg_limite_crescimento_pct") or 10))
+    if not bcg_.empty:
+        b.append(f"Matriz BCG (crescimento alto a partir de {num_br(proj.get('bcg_limite_crescimento_pct') or 10, 1)}% a.a.):")
+        b.append(_md_tabela(bcg_.assign(**{"Receita anual": bcg_["Receita anual"].map(brl), "Margem": bcg_["Margem"].map(pct)})))
+    ind_bsc = bsc_indicadores_plano(proj, d, res)
+    b.append("Balanced Scorecard - indicadores do plano: " + " | ".join(
+        f"{p}: " + "; ".join(f"{n} = {v}" for n, v in ind_bsc[p]) for p in PERSPECTIVAS if ind_bsc.get(p)))
     if any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
         b.append("\n## 7. Marketing (4Ps)")
         for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
             b.append(f"- {rot}: {proj.get(k, '')}")
+    if not d["canais"].empty:
+        b.append("\n## 7. Canais e funil de vendas")
+        b.append(_md_tabela(d["canais"].rename(columns={"canal": "Canal"})))
+        if not d["funil_vendas"].empty:
+            b.append(_md_tabela(d["funil_vendas"]))
+    b.append("\n## 7. Plano operacional")
+    b.append(f"- Localização: {proj.get('loc_endereco', '')}. {proj.get('loc_justificativa', '')}\n- Processos: {proj.get('op_processos', '')}"
+             f"\n- Horário: {proj.get('op_horario', '')}")
+    cd_ = capacidade_demanda(d, res)
+    if not cd_.empty:
+        b.append(_md_tabela(cd_.assign(**{"Uso Mês 1": cd_["Uso Mês 1"].map(pct), "Uso Mês 12": cd_["Uso Mês 12"].map(pct)})))
+    pes_ = d["pessoal"]
+    if not pes_.empty:
+        b.append(_md_tabela(pd.DataFrame({"Cargo": pes_["cargo"], "Área": pes_["area"], "Nº": pes_["num_empregados"].map(lambda v: num_br(v, 0)),
+                                          "Salário": pes_["salario_mensal"].map(brl), "Começa no mês": pes_["mes_inicio"].map(lambda v: num_br(v, 0))})))
+    fo_ = d["fornecedores"]
+    if not fo_.empty:
+        b.append(_md_tabela(fo_[["nome", "itens", "prazo_pagamento_dias", "critico"]].rename(columns={
+            "nome": "Fornecedor", "itens": "Itens", "prazo_pagamento_dias": "Prazo pagto (dias)", "critico": "Crítico"})))
     b.append("\n## 8. Investimento e fontes")
     b.append(f"- Investimento total {brl(res['investimento_total'])}: fixos {brl(res['inv_fixo'])}; pré-operacionais {brl(res['inv_pre'])}; "
              f"estoque {brl(res['inv_estoque'])}; capital de giro {brl(res['capital_giro'])}.")
@@ -260,17 +337,41 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
     if not cf.empty:
         b.append(_md_tabela(pd.DataFrame({"Custo fixo": cf["descricao"], "Classificação": cf["classificacao"],
                                           "R$/mês": cf["valor_mensal"].map(brl)})))
-    b.append("\n## 11. DRE (Anos 1 a 3)")
+    b.append(f"\n## 11. DRE (Anos 1 a {res['N']})")
     b.append(_md_tabela(tabela_dre(res)))
     b.append("\n## 12. Indicadores e semáforo")
     b.append(_md_tabela(pd.DataFrame({"Indicador": [s_["Indicador"] for s_ in sem], "Valor": [s_["Valor"] for s_ in sem],
                                       "Situação": [{"🟢": "bom", "🟡": "atenção", "🔴": "crítico"}[s_["Status"]] for s_ in sem]})))
     b.append(f"- VPL {brl(res['vpl'])}; TIR {pct(res['tir']) if res['tir'] is not None else 'n.a.'}; TMA {pct(res['tma'])}; "
-             f"payback descontado {num_br(res['payback_desc'], 1) + ' meses' if res['payback_desc'] == res['payback_desc'] else '> 36 meses'}; "
+             f"payback descontado {num_br(res['payback_desc'], 1) + ' meses' if res['payback_desc'] == res['payback_desc'] else '> ' + str(res['MESES']) + ' meses'}; "
              f"PE contábil {brl(a1['pe_contabil'])}/ano; margem de segurança {pct(div(a1['rec_bruta'] - a1['pe_contabil'], a1['rec_bruta']))}.")
     sens = sensibilidade(res)
     b.append("- Sensibilidade (efeito de ±10% no resultado do Ano 1): " +
              "; ".join(f"{r['Variável']} {brl(r['Impacto absoluto'])}" for _, r in sens.iterrows()))
+    b.append("\n## 12. Cenários")
+    b.append(_md_tabela(cenarios(res, proj)))
+    if float(proj.get("reforma_b2b_pct") or 0) > 0 or proj.get("anexo_simples"):
+        an = proj.get("anexo_simples") or "Anexo III - Serviços"
+        ano_r = int(float(proj.get("reforma_ano") or 2027))
+        cc = float(proj.get("reforma_compras_credito") or -1)
+        rr = simular_reforma(a1["rec_bruta"], res["aliq"], an, ano_r, float(proj.get("reforma_cbs_pct") or 11.3) / 100,
+                             float(proj.get("reforma_ibs_pct") or 0.1) / 100, float(proj.get("reforma_b2b_pct") or 0) / 100,
+                             a1["custo_dir"] + a1["fixos"] if cc < 0 else cc)
+        b.append(f"\n## 12. Reforma tributária (simulação didática, {ano_r}, {an})")
+        b.append(f"- Simples puro: tributos {brl(rr['puro_total'])}, crédito aos clientes empresas {brl(rr['puro_credito_cliente'])}. "
+                 f"Simples híbrido: DAS {brl(rr['das_hibrido'])} + IBS/CBS líquidos {brl(rr['iva_debito'] - rr['iva_credito'])} = "
+                 f"{brl(rr['hib_total'])}, crédito aos clientes {brl(rr['hib_credito_cliente'])}. Vendas B2B: "
+                 f"{num_br(proj.get('reforma_b2b_pct') or 0, 0)}%.")
+    for tab_, tit, cols in (("riscos", "Riscos", ["risco", "probabilidade", "impacto", "mitigacao"]),
+                            ("cronograma", "Cronograma de implantação", ["atividade", "mes_inicio", "duracao_meses", "custo"]),
+                            ("experimentos", "Experimentos de validação", ["hipotese", "experimento", "metrica", "criterio_sucesso", "status"]),
+                            ("realizado", "Orçado x realizado (meses já operados)", ["mes", "receita_real", "custos_variaveis_real", "custos_fixos_real"])):
+        if d.get(tab_) is not None and not d[tab_].empty:
+            b.append(f"\n## 12. {tit}")
+            b.append(_md_tabela(d[tab_][cols]))
+    for k_, tit in (("sumario_executivo", "Sumário executivo escrito pelo grupo"), ("conclusao", "Conclusão do grupo")):
+        if str(proj.get(k_) or "").strip():
+            b.append(f"\n## 12. {tit}\n{proj[k_]}")
     pend = chk[chk["Situação"] != "OK"]
     if not pend.empty:
         b.append("\n## 13. Inconsistências apontadas pelo programa")
@@ -283,7 +384,18 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
 
     b.append("\n# O QUE EU PRECISO QUE VOCÊ FAÇA")
     pedidos = {
-        "indicadores": "Para CADA indicador da seção 12, explique em linguagem simples: (a) o que ele mede; (b) a situação atual deste "
+        "smart": "Avalie a missão, a visão e os valores (clareza, foco no cliente, prazo da visão) e reescreva-os se preciso. Para cada "
+                 "objetivo da tabela de Objetivos SMART, diga quais letras falham e proponha uma versão SMART completa, coerente com os "
+                 "números do plano.",
+        "estrategia": "Faça uma análise integrada da seção Análise estratégica: o Canvas é coerente com os números? As Cinco Forças "
+                      "justificam as margens previstas? Cruze a matriz GE (onde investir) com a BCG (que produtos financiam o "
+                      "crescimento) e com a SWOT. Termine com 5 prioridades estratégicas, cada uma ligada a um objetivo do BSC.",
+        "coerencia": "Verifique a coerência entre as ferramentas: a meta de vendas cabe no mercado (SOM)? A capacidade e a equipe "
+                     "(com as contratações) atendem a demanda? Os canais e o funil sustentam o volume? Os custos e preços batem com "
+                     "a DRE? Liste cada incoerência encontrada e como corrigi-la.",
+        "reforma": "Explique, para este negócio, o que muda com a reforma tributária (IBS e CBS) e, usando a simulação fornecida, "
+                   "quando o Simples híbrido pode valer a pena. Deixe claro que a decisão deve ser confirmada com um contador.",
+        "indicadores": "Para CADA indicador da seção Indicadores e semáforo, explique em linguagem simples: (a) o que ele mede; (b) a situação atual deste "
                        "negócio com o valor exato; (c) o que isso significa para a saúde do negócio; (d) uma ação concreta para melhorar. "
                        "Termine com um parecer geral (viável, viável com ressalvas ou inviável) e justifique.",
         "concorrencia": "Com base na concorrência, na SWOT e nas propostas de valor, proponha 5 estratégias para driblar os concorrentes, "
@@ -298,9 +410,9 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                   "impacto e uma ação de prevenção para cada um.",
         "graficos": "Gere gráficos interpretativos (se puder executar código, use Python/matplotlib; se não, descreva o gráfico e monte "
                     "uma tabela pronta para virar gráfico no Excel): (1) composição do investimento; (2) estrutura de custos; "
-                    "(3) receita x custos x resultado nos 3 anos; (4) ponto de equilíbrio; (5) saldo de caixa mês a mês. "
+                    "(3) receita x custos x resultado em todos os anos do horizonte; (4) ponto de equilíbrio; (5) saldo de caixa mês a mês. "
                     "Abaixo de cada gráfico, escreva 2 ou 3 frases de interpretação.",
-        "recorrencia": "Se o plano tiver assinaturas ou serviços (seções 9b e 9c), avalie: o churn é realista para o setor? O LTV/CAC "
+        "recorrencia": "Se o plano tiver assinaturas ou serviços (seções de Serviços e de Assinaturas), avalie: o churn é realista para o setor? O LTV/CAC "
                        "e o payback do CAC são saudáveis? Os preços dos planos e o desconto dos planos longos fazem sentido? O custo "
                        "da hora cobre a equipe? Proponha 5 ações para reduzir cancelamentos e aumentar a receita por cliente, com o "
                        "efeito estimado no MRR.",
@@ -310,7 +422,9 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
     for i, t in enumerate([t for t in tarefas if t in pedidos], start=1):
         b.append(f"{i}. {pedidos[t]}")
     b.append("\nOrganize a resposta com títulos, use tabelas quando ajudar e termine com uma lista de próximos passos.")
-    return "\n".join(b)
+    texto = "\n".join(b)
+    cont = iter(range(1, 200))
+    return re.sub(r"(?m)^## \d+[a-z]?\. ", lambda m_: f"## {next(cont)}. ", texto)
 
 
 # ------------------------------------------------------------------------------
@@ -451,8 +565,8 @@ def gerar_pitch(proj: dict, d: dict, res: dict) -> bytes:
     pp.slide("Os números", "Projeção do primeiro ano")
     pp.numeros([("Investimento total", brl(res["investimento_total"])), ("Receita - Ano 1", brl(a1["rec_bruta"])),
                 ("Lucro - Ano 1", brl(a1["resultado"])), ("Lucratividade", pct(div(a1["resultado"], a1["rec_bruta"])))])
-    pp.numeros([("VPL (3 anos)", brl(res["vpl"])), ("TIR", pct(res["tir"]) if res["tir"] is not None else "n.a."),
-                ("Payback descontado", f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else "> 36 meses"),
+    pp.numeros([(f"VPL ({res['N']} anos)", brl(res["vpl"])), ("TIR", pct(res["tir"]) if res["tir"] is not None else "n.a."),
+                ("Payback descontado", f"{num_br(res['payback_desc'], 1)} meses" if res["payback_desc"] == res["payback_desc"] else f"> {res['MESES']} meses"),
                 ("Ponto de equilíbrio", brl(a1["pe_contabil"]))])
     # 9. Gráficos
     imgs = graficos_png(composicoes(res, d))
@@ -539,6 +653,18 @@ def gerar_docx(proj: dict, d: dict, res: dict, piv_conc=None) -> bytes | None:
     doc.add_heading("Sumário executivo", 1)
     for par in str(proj.get("sumario_executivo") or gerar_sumario(proj, d, res)).split("\n"):
         doc.add_paragraph(par)
+    if any(proj.get(k) for k in ("missao", "visao", "valores")):
+        doc.add_heading("Missão, visão e valores", 1)
+        for rot, k in (("Missão", "missao"), ("Visão", "visao"), ("Valores", "valores")):
+            if proj.get(k):
+                doc.add_paragraph(f"{rot}: {proj[k]}")
+    ob = d.get("objetivos")
+    if ob is not None and not ob.empty:
+        doc.add_heading("Objetivos estratégicos SMART", 2)
+        tabela(pd.DataFrame({"Objetivo": ob["objetivo"], "Perspectiva": ob["perspectiva"],
+                             "Meta": [f"{i_}: {num_br(m, 1)} {u}" for i_, m, u in zip(ob["indicador"], ob["meta"], ob["unidade"])],
+                             "Prazo": ob["prazo_meses"].map(lambda v: f"mês {num_br(v, 0)}"),
+                             "SMART": ["".join(L if ok else "-" for L, (ok, _) in checar_smart(o).items()) for _, o in ob.iterrows()]}))
     doc.add_heading("1. Análise de mercado", 1)
     doc.add_heading("1.1 Segmentos de clientes", 2)
     seg = d["segmentos"]
@@ -571,6 +697,31 @@ def gerar_docx(proj: dict, d: dict, res: dict, piv_conc=None) -> bytes | None:
     diag = pontuacao_swot(sw)
     if diag["predominante"]:
         doc.add_paragraph(f"Estratégia predominante: {QUADRANTES[diag['predominante']][0]}. {QUADRANTES[diag['predominante']][2]}")
+    doc.add_heading("3.1 Business Model Canvas", 2)
+    for k, v in canvas_blocos(proj, d, res).items():
+        doc.add_paragraph(f"{k}: " + ("; ".join(v) if v else "(não preenchido)"))
+    pt = porter_tabela(d)
+    if (pt["Intensidade"] > 0).any():
+        doc.add_heading("3.2 Cinco Forças de Porter", 2)
+        tabela(pt.assign(Intensidade=pt["Intensidade"].map(lambda v: num_br(v, 0)),
+                         Justificativa=pt["Justificativa"].str.replace("(sugestão) ", "", regex=False)))
+        doc.add_paragraph(porter_leitura(pt))
+    ge_ = ge_tabela(d)
+    if not ge_.empty:
+        doc.add_heading("3.3 Matriz GE/McKinsey", 2)
+        tabela(ge_[["Segmento", "Atratividade", "Força competitiva", "Recomendação"]])
+    bcg_ = bcg_tabela(d, res, float(proj.get("bcg_limite_crescimento_pct") or 10))
+    if not bcg_.empty:
+        doc.add_heading("3.4 Matriz BCG", 2)
+        tabela(bcg_.assign(**{"Receita anual": bcg_["Receita anual"].map(brl), "Margem": bcg_["Margem"].map(pct)}))
+    if ob is not None and not ob.empty:
+        doc.add_heading("3.5 Balanced Scorecard", 2)
+        ind = bsc_indicadores_plano(proj, d, res)
+        for per in PERSPECTIVAS:
+            sub = ob[ob["perspectiva"] == per]
+            doc.add_paragraph(f"Perspectiva {per.lower()}: " + ("; ".join(f"{o} (iniciativa: {i_})" for o, i_ in
+                                                                         zip(sub["objetivo"], sub["iniciativa"])) or "sem objetivos")
+                              + (". Indicadores do plano: " + "; ".join(f"{n} = {v}" for n, v in ind[per]) if ind.get(per) else ""))
     doc.add_heading("4. Plano de marketing", 1)
     for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
         doc.add_paragraph(f"{rot}: {proj.get(k, '')}")
@@ -614,7 +765,7 @@ def gerar_docx(proj: dict, d: dict, res: dict, piv_conc=None) -> bytes | None:
         doc.add_heading("6.4 Gráficos", 2)
         for tit, png in imgs:
             doc.add_picture(io.BytesIO(png), width=Cm(14))
-            doc.add_paragraph(f"Figura - {tit}. Fonte: elaborado pelos autores com o PNBOX Acadêmico.").runs[0].italic = True
+            doc.add_paragraph(f"Figura - {tit}. Fonte: elaborado pelos autores com o ViabilizaLab.").runs[0].italic = True
     doc.add_heading("7. Conclusão", 1)
     doc.add_paragraph(str(proj.get("conclusao") or "Escreva aqui a conclusão do grupo sobre a viabilidade do negócio."))
     buf = io.BytesIO()

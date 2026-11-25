@@ -1,6 +1,6 @@
 """
 ================================================================================
-PNBOX ACADÊMICO - MOTOR ECONÔMICO-FINANCEIRO (pnbox_motor.py)
+VIABILIZALAB - MOTOR ECONÔMICO-FINANCEIRO (pnbox_motor.py)
 ================================================================================
 Recebe as tabelas do projeto e calcula: custos unitários (ficha técnica),
 investimento total, capital de giro, depreciação, cronograma dos empréstimos,
@@ -252,7 +252,7 @@ def fator_r(res: dict, d: dict) -> dict:
     cf = d["custos_fixos"]
     pro = float(cf.loc[cf["descricao"].astype(str).str.lower().str.replace("-", "").str.replace(" ", "")
                        .str.contains("prolabore|prólabore"), "valor_mensal"].sum())
-    folha12 = (res["salarios_m"] + res["encargos_m"] + pro) * 12
+    folha12 = res.get("folha_ano1", (res["salarios_m"] + res["encargos_m"]) * 12) + pro * 12
     rec = res["anos"][1]["rec_bruta"]
     fr = div(folha12, rec) if rec > 0 else float("nan")
     return {"folha12": folha12, "pro_labore_m": pro, "receita12": rec, "fator_r": fr,
@@ -274,20 +274,33 @@ def executar_motor(proj: dict, d: dict) -> dict:
     rec_cat_m1 = {c: float(cat.loc[cat["categoria"] == c, "receita_mensal"].sum()) for c in CATEGORIAS}
     cdir_m1 = sum(cdir_cat_m1.values())
 
-    # --- Assinaturas (receita recorrente), 36 meses
+    # --- Horizonte de planejamento escolhido pelo usuário (1 a 10 anos)
+    N = int(min(max(round(float(proj.get("periodo_anos") or 3)), 1), 10))
+    ANOS = list(range(1, N + 1))
+    MESES = 12 * N
+
+    # --- Assinaturas (receita recorrente), todos os meses do horizonte
     g_m = proj["crescimento_mensal_ano1_pct"] / 100
     g_a = proj["crescimento_anual_pct"] / 100
     inf = proj["inflacao_custos_anual_pct"] / 100
-    ass_df, ass_planos = simular_assinaturas(d.get("assinaturas"), g_a, inf)
+    ass_df, ass_planos = simular_assinaturas(d.get("assinaturas"), g_a, inf, meses=MESES)
     tem_ass = not ass_df.empty
 
     def serie(col):
-        return [float(v) for v in ass_df[col]] if tem_ass else [0.0] * 36
+        return [float(v) for v in ass_df[col]] if tem_ass else [0.0] * MESES
     s_rec, s_cob, s_custo, s_taxa = (serie("Receita reconhecida"), serie("Cobranças (caixa)"),
                                      serie("Custo de entrega"), serie("Taxas de cobrança"))
 
     # --- Pessoal, custos fixos e depreciação (mensais)
-    pes = d["pessoal"]
+    pes_todos = d["pessoal"]
+    inicio = (pes_todos["mes_inicio"] if "mes_inicio" in pes_todos else pd.Series([1.0] * len(pes_todos))).fillna(1).clip(lower=1)
+    linha_total = (pes_todos["num_empregados"] * pes_todos["salario_mensal"] * (1 + pes_todos["encargos_pct"] / 100) +
+                   pes_todos["num_empregados"] * pes_todos["beneficios_unit"])
+    linha_sal_enc = pes_todos["num_empregados"] * pes_todos["salario_mensal"] * (1 + pes_todos["encargos_pct"] / 100)
+    # custo de pessoal mês a mês (sem inflação): cada cargo entra no seu mês de início
+    pes_serie = [float(linha_total[inicio <= t + 1].sum()) for t in range(MESES)]
+    sal_enc_serie = [float(linha_sal_enc[inicio <= t + 1].sum()) for t in range(MESES)]
+    pes = pes_todos[inicio <= 1]                                    # equipe do Mês 1 (custeio unitário e custo da hora)
     sal = pes["num_empregados"] * pes["salario_mensal"]
     salarios_m = float(sal.sum())
     encargos_m = float((sal * pes["encargos_pct"] / 100).sum())
@@ -344,7 +357,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
     capital_proprio = float(d["socios"]["capital_integralizado"].sum())
     capital_terceiros = float(d["emprestimos"]["valor"].sum())
     fontes = capital_proprio + capital_terceiros
-    crono = cronograma_emprestimos(d["emprestimos"], anos=5)
+    crono = cronograma_emprestimos(d["emprestimos"], anos=N + 1)
 
     # --- Projeção mensal do Ano 1
     tma = proj["tma_anual_pct"] / 100
@@ -353,7 +366,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         f = (1 + g_m) ** m
         rec = receita_m1 * f + s_rec[m]
         cv = cdir_m1 * f + rec * (aliq + var_pct) + s_custo[m] + s_taxa[m]
-        cf = cf_desemb_m + dep_m
+        cf = pes_serie[m] + fixos_m + dep_m
         meses.append({"Mês": f"Mês {m + 1}", "Receita": rec, "Custos variáveis": cv,
                       "Margem de contribuição": rec - cv, "Custos fixos": cf,
                       "Resultado operacional": rec - cv - cf})
@@ -363,7 +376,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
     # --- DRE e balanço dos Anos 1 a 3
     anos = {}
     lucros_acum = 0.0
-    for k in (1, 2, 3):
+    for k in ANOS:
         fr = fator_a1 * (1 + g_a) ** (k - 1)
         fi = (1 + inf) ** (k - 1)
         meses_k = slice((k - 1) * 12, k * 12)
@@ -381,7 +394,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         cv_tot = custo_dir + impostos + outras_var
         mc = rec_bruta - cv_tot
         imc = div(mc, rec_bruta)
-        pessoal = pessoal_m * 12 * fi
+        pessoal = sum(pes_serie[meses_k]) * fi
         fixos = fixos_m * 12 * fi
         cf_desemb = pessoal + fixos
         ebitda = mc - cf_desemb
@@ -431,9 +444,9 @@ def executar_motor(proj: dict, d: dict) -> dict:
         )
 
     # --- Avaliação do projeto (fluxo do projeto = EBITDA, investimento no ano 0)
-    fluxos = [-investimento_total] + [anos[k]["ebitda"] for k in (1, 2, 3)]
+    fluxos = [-investimento_total] + [anos[k]["ebitda"] for k in ANOS]
     if proj.get("recuperar_giro"):
-        fluxos[3] += capital_giro
+        fluxos[N] += capital_giro
     vpl = sum(f / (1 + tma) ** t for t, f in enumerate(fluxos))
     tir = calcular_tir(fluxos)
     vp_entradas = sum(f / (1 + tma) ** t for t, f in enumerate(fluxos) if t > 0)
@@ -442,7 +455,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
     lucro_mensal_a1 = anos[1]["resultado"] / 12
     payback_simples = div(investimento_total, lucro_mensal_a1) if lucro_mensal_a1 > 0 else float("nan")
     acum, payback_desc = -investimento_total, float("nan")
-    for t in (1, 2, 3):
+    for t in ANOS:
         fd = fluxos[t] / (1 + tma) ** t
         if fd > 0 and acum + fd >= 0:
             payback_desc = ((t - 1) + (-acum) / fd) * 12
@@ -509,17 +522,20 @@ def executar_motor(proj: dict, d: dict) -> dict:
     for m in range(12):
         sai_var = (rec_mes[m] + s_rec[m]) * (aliq + var_pct) + s_custo[m] + s_taxa[m]
         parcela = crono["juros_m"][m] + crono["amort_m"][m]
-        sai = pag_forn[m] + sai_var + cf_desemb_m + parcela
+        sai = pag_forn[m] + sai_var + pes_serie[m] + fixos_m + parcela
         ini = saldo
         saldo = saldo + entradas[m] - sai
         fluxo_m.append({"Mês": f"Mês {m + 1}", "Saldo inicial": ini, "Recebimentos": entradas[m],
                         "Fornecedores": pag_forn[m], "Impostos e desp. variáveis": sai_var,
-                        "Pessoal e custos fixos": cf_desemb_m, "Parcelas de empréstimos": parcela,
+                        "Pessoal e custos fixos": pes_serie[m] + fixos_m, "Parcelas de empréstimos": parcela,
                         "Saldo final": saldo})
     df_fluxo_m = pd.DataFrame(fluxo_m)
 
     # --- Indicadores de recorrência (CAC = gasto comercial fixo do Mês 1 ÷ novos assinantes do Mês 1)
-    rec_ind = metricas_recorrencia(ass_df, ass_planos, d.get("assinaturas"), desp_com_m + pessoal_com_m)
+    verba = float(proj.get("verba_aquisicao_mensal") or 0)
+    rec_ind = metricas_recorrencia(ass_df, ass_planos, d.get("assinaturas"), verba if verba > 0 else desp_com_m + pessoal_com_m)
+    if rec_ind.get("tem"):
+        rec_ind["origem_cac"] = "verba de aquisição informada" if verba > 0 else "gasto comercial fixo do Mês 1"
 
     return dict(
         mod_m=mod_m, pessoal_adm_m=pessoal_adm_m, pessoal_com_m=pessoal_com_m, cif_m=cif_m,
@@ -536,6 +552,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         crono=crono, meses=df_meses, anos=anos, fluxos=fluxos, vpl=vpl, tir=tir, il=il,
         payback_simples=payback_simples, payback_desc=payback_desc, resumo=resumo, tma=tma,
         ass=ass_df, ass_planos=ass_planos, recorrencia=rec_ind, g_a=g_a, inf=inf,
+        N=N, ANOS=ANOS, MESES=MESES, pes_serie=pes_serie, folha_ano1=sum(sal_enc_serie[:12]),
     )
 
 
@@ -594,9 +611,11 @@ def tabela_dre(res: dict) -> pd.DataFrame:
     ]
     rows = []
     for nome, k, s in linhas:
-        v = [A[a][k] * s for a in (1, 2, 3)]
-        rows.append({"Conta": nome, "Ano 1": brl(v[0]), "Ano 2": brl(v[1]), "Ano 3": brl(v[2]),
-                     "% Receita (Ano 1)": pct(div(A[1][k], A[1]["rec_bruta"]))})
+        lin = {"Conta": nome}
+        for a in res["ANOS"]:
+            lin[f"Ano {a}"] = brl(A[a][k] * s)
+        lin["% Receita (Ano 1)"] = pct(div(A[1][k], A[1]["rec_bruta"]))
+        rows.append(lin)
     return pd.DataFrame(rows)
 
 
@@ -608,21 +627,27 @@ def tabela_indicadores(res: dict) -> pd.DataFrame:
     inv = res["investimento_total"]
     linhas = []
 
+    AN = res["ANOS"]
+
     def add(bloco, nome, formula, vals, fmt, leitura, var="pct"):
         f = {"brl": brl, "pct": pct, "x": lambda v: "n.a." if v != v else f"{num_br(v)}x"}[fmt]
-        v1, v2 = vals[0], vals[1]
-        if var == "pp":
-            vr = "n.a." if v1 != v1 or v2 != v2 else f"{num_br((v2 - v1) * 100):s} p.p."
-        elif var == "dif":
-            vr = "n.a." if v1 != v1 or v2 != v2 else f"{num_br(v2 - v1)}x"
-        else:
-            vr = "n.a." if not v1 or v1 != v1 else f"{num_br((v2 - v1) / abs(v1) * 100, 1)}%"
-        linhas.append({"Bloco": bloco, "Indicador": nome, "Fórmula": formula,
-                       "Ano 1": f(vals[0]), "Ano 2": f(vals[1]), "Ano 3": f(vals[2]),
-                       "Var. Ano 2/Ano 1": vr, "Leitura": leitura})
+        lin = {"Bloco": bloco, "Indicador": nome, "Fórmula": formula}
+        for i, a in enumerate(AN):
+            lin[f"Ano {a}"] = f(vals[i])
+        if len(AN) >= 2:
+            v1, v2 = vals[0], vals[1]
+            if var == "pp":
+                vr = "n.a." if v1 != v1 or v2 != v2 else f"{num_br((v2 - v1) * 100):s} p.p."
+            elif var == "dif":
+                vr = "n.a." if v1 != v1 or v2 != v2 else f"{num_br(v2 - v1)}x"
+            else:
+                vr = "n.a." if not v1 or v1 != v1 else f"{num_br((v2 - v1) / abs(v1) * 100, 1)}%"
+            lin["Var. Ano 2/Ano 1"] = vr
+        lin["Leitura"] = leitura
+        linhas.append(lin)
 
-    g = lambda k: [A[a][k] for a in (1, 2, 3)]
-    r = lambda n, d_: [div(A[a][n], A[a][d_]) for a in (1, 2, 3)]
+    g = lambda k: [A[a][k] for a in AN]
+    r = lambda n, d_: [div(A[a][n], A[a][d_]) for a in AN]
 
     b = "1. Rentabilidade e resultado"
     add(b, "Receita operacional bruta", "Σ preço × quantidade", g("rec_bruta"), "brl", "Faturamento antes das deduções.")
@@ -632,21 +657,21 @@ def tabela_indicadores(res: dict) -> pd.DataFrame:
     add(b, "Margem EBITDA", "EBITDA ÷ Receita líquida", r("ebitda", "rec_liquida"), "pct", "Eficiência operacional.", "pp")
     add(b, "Resultado líquido", "EBIT − juros", g("resultado"), "brl", "Lucro (ou prejuízo) do exercício.")
     add(b, "Lucratividade líquida", "Resultado líquido ÷ Receita bruta", r("resultado", "rec_bruta"), "pct", "Ganho para cada real faturado.", "pp")
-    add(b, "Rentabilidade (ROI)", "Resultado líquido ÷ Investimento total", [div(A[a]["resultado"], inv) for a in (1, 2, 3)], "pct", "Retorno contábil sobre o capital investido.", "pp")
+    add(b, "Rentabilidade (ROI)", "Resultado líquido ÷ Investimento total", [div(A[a]["resultado"], inv) for a in AN], "pct", "Retorno contábil sobre o capital investido.", "pp")
     add(b, "ROE", "Resultado líquido ÷ Patrimônio líquido", r("resultado", "pl"), "pct", "Retorno sobre o capital dos sócios.", "pp")
 
     b = "2. Endividamento e estrutura de capital"
     add(b, "Dívida bruta", "Saldo dos empréstimos no fim do ano", g("divida_bruta"), "brl", "Obrigações financeiras onerosas.")
     add(b, "Dívida líquida", "Dívida bruta − caixa", g("divida_liquida"), "brl", "Negativa indica caixa maior que a dívida.")
-    add(b, "Endividamento geral", "(PC + PNC) ÷ Ativo total", [div(A[a]["pc"] + A[a]["pnc"], A[a]["ativo_total"]) for a in (1, 2, 3)], "pct", "Parcela do ativo financiada por terceiros.", "pp")
-    add(b, "Dívida líquida ÷ EBITDA", "Dívida líquida ÷ EBITDA", [div(A[a]["divida_liquida"], A[a]["ebitda"]) if A[a]["ebitda"] > 0 else float("nan") for a in (1, 2, 3)], "x", "Anos de geração operacional para quitar a dívida.", "dif")
-    add(b, "Cobertura de juros", "EBITDA ÷ juros", [div(A[a]["ebitda"], A[a]["juros"]) if A[a]["juros"] > 0 else float("nan") for a in (1, 2, 3)], "x", "Abaixo de 1,0x a operação não paga os juros.", "dif")
+    add(b, "Endividamento geral", "(PC + PNC) ÷ Ativo total", [div(A[a]["pc"] + A[a]["pnc"], A[a]["ativo_total"]) for a in AN], "pct", "Parcela do ativo financiada por terceiros.", "pp")
+    add(b, "Dívida líquida ÷ EBITDA", "Dívida líquida ÷ EBITDA", [div(A[a]["divida_liquida"], A[a]["ebitda"]) if A[a]["ebitda"] > 0 else float("nan") for a in AN], "x", "Anos de geração operacional para quitar a dívida.", "dif")
+    add(b, "Cobertura de juros", "EBITDA ÷ juros", [div(A[a]["ebitda"], A[a]["juros"]) if A[a]["juros"] > 0 else float("nan") for a in AN], "x", "Abaixo de 1,0x a operação não paga os juros.", "dif")
 
     b = "3. Liquidez e capital de giro"
     add(b, "Liquidez corrente", "AC ÷ PC", r("ac", "pc"), "x", "Acima de 1,0x indica folga de curto prazo.", "dif")
-    add(b, "Liquidez seca", "(AC − estoques) ÷ PC", [div(A[a]["ac"] - A[a]["estoques"], A[a]["pc"]) for a in (1, 2, 3)], "x", "Capacidade de pagamento sem vender estoques.", "dif")
+    add(b, "Liquidez seca", "(AC − estoques) ÷ PC", [div(A[a]["ac"] - A[a]["estoques"], A[a]["pc"]) for a in AN], "x", "Capacidade de pagamento sem vender estoques.", "dif")
     add(b, "Liquidez imediata", "Caixa ÷ PC", r("caixa", "pc"), "x", "Disponibilidade imediata.", "dif")
-    add(b, "Capital circulante líquido", "AC − PC", [A[a]["ac"] - A[a]["pc"] for a in (1, 2, 3)], "brl", "Folga (ou falta) de recursos de curto prazo.")
+    add(b, "Capital circulante líquido", "AC − PC", [A[a]["ac"] - A[a]["pc"] for a in AN], "brl", "Folga (ou falta) de recursos de curto prazo.")
     add(b, "Caixa projetado", "Ativo − demais contas (por diferença)", g("caixa"), "brl", "Negativo indica necessidade de mais recursos.")
 
     b = "4. Viabilidade do investimento"
@@ -658,7 +683,7 @@ def tabela_indicadores(res: dict) -> pd.DataFrame:
     add(b, "PE contábil (anual)", "Custos fixos totais ÷ IMC", g("pe_contabil"), "brl", "Receita para lucro zero.")
     add(b, "PE financeiro (anual)", "(Custos fixos − depreciação) ÷ IMC", g("pe_financeiro"), "brl", "Receita para cobrir os desembolsos.")
     add(b, "PE econômico (anual)", "(Custos fixos + TMA × investimento) ÷ IMC", g("pe_economico"), "brl", "Receita para remunerar o capital à TMA.")
-    add(b, "Margem de segurança", "(Receita − PE contábil) ÷ Receita", [div(A[a]["rec_bruta"] - A[a]["pe_contabil"], A[a]["rec_bruta"]) for a in (1, 2, 3)], "pct", "Quanto a receita pode cair antes do prejuízo.", "pp")
+    add(b, "Margem de segurança", "(Receita − PE contábil) ÷ Receita", [div(A[a]["rec_bruta"] - A[a]["pe_contabil"], A[a]["rec_bruta"]) for a in AN], "pct", "Quanto a receita pode cair antes do prejuízo.", "pp")
     return pd.DataFrame(linhas)
 
 
@@ -695,7 +720,7 @@ def tabela_checagens(res: dict, d: dict) -> pd.DataFrame:
                 ((sw["ambiente"] == "Externo") & sw["natureza"].isin(["Força", "Fraqueza"]))]
     add("SWOT: ambiente coerente com a classificação", f"{len(incoer)} fator(es) incoerente(s)", incoer.empty,
         "Interno = Força/Fraqueza; Externo = Oportunidade/Ameaça.")
-    neg_cx = [k for k in (1, 2, 3) if A[k]["caixa"] < 0]
+    neg_cx = [k for k in res["ANOS"] if A[k]["caixa"] < 0]
     add("Caixa projetado não negativo", "Anos com caixa negativo: " + (", ".join(map(str, neg_cx)) or "nenhum"),
         not neg_cx, "Caixa negativo indica que as fontes não cobrem a operação.")
     lc = div(A[1]["ac"], A[1]["pc"])
@@ -909,7 +934,7 @@ def semaforo(res: dict) -> list:
         "Quanto as vendas podem cair antes de o negócio ter prejuízo. Abaixo de 0% significa que a receita prevista "
         "não cobre o ponto de equilíbrio.",
         f"({brl(a1['rec_bruta'])} − PE {brl(a1['pe_contabil'])}) ÷ {brl(a1['rec_bruta'])} = {pct(ms)}")
-    add("VPL (3 anos)", res["vpl"], brl(res["vpl"]),
+    add(f"VPL ({res['N']} anos)", res["vpl"], brl(res["vpl"]),
         "🟢" if res["vpl"] > 0 else "🔴",
         "Valor criado pelo projeto acima do retorno mínimo exigido (TMA). Positivo: o investimento compensa.",
         "Soma dos fluxos descontados: " + " + ".join(f"{brl(f)}/(1+{num_br(tma*100,1)}%)^{t}" for t, f in enumerate(res["fluxos"])))
@@ -919,7 +944,7 @@ def semaforo(res: dict) -> list:
         f"Rentabilidade anual do projeto. Deve superar a TMA de {pct(tma)}.",
         "Taxa que faz o VPL ser zero nos fluxos: " + "; ".join(brl(f) for f in res["fluxos"]))
     pb = res["payback_desc"]
-    add("Payback descontado", pb, f"{num_br(pb,1)} meses" if pb == pb else "> 36 meses",
+    add("Payback descontado", pb, f"{num_br(pb,1)} meses" if pb == pb else f"> {res['MESES']} meses",
         "🟢" if pb == pb and pb <= 24 else ("🟡" if pb == pb else "🔴"),
         "Tempo para recuperar o investimento considerando o valor do dinheiro no tempo.",
         f"Investimento de {brl(it)} recuperado pelos fluxos descontados à TMA de {pct(tma)}")

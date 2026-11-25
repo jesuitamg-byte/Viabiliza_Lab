@@ -1,6 +1,6 @@
 """
 ================================================================================
-PNBOX ACADÊMICO - CAMADA DE DADOS (pnbox_db.py)
+VIABILIZALAB - CAMADA DE DADOS (pnbox_db.py)
 ================================================================================
 Este módulo cuida de tudo o que envolve o banco de dados SQLite (.pnbox):
     - estrutura das tabelas (SCHEMA) e atualização automática de arquivos antigos;
@@ -61,6 +61,14 @@ SCHEMA = {
         ("horas_mes_pessoa", "REAL"),              # horas contratadas por pessoa da operação
         ("utilizacao_pct", "REAL"),                # % dessas horas que viram trabalho cobrável
         ("anexo_simples", "TEXT"),
+        ("verba_aquisicao_mensal", "REAL"),         # parte do gasto comercial dedicada a conquistar assinantes
+        # Identidade e estratégia (v7)
+        ("missao", "TEXT"), ("visao", "TEXT"), ("valores", "TEXT"),
+        ("canvas_relacionamento", "TEXT"), ("canvas_parcerias", "TEXT"),
+        ("bcg_limite_crescimento_pct", "REAL"),
+        # Reforma tributária (simulação)
+        ("reforma_b2b_pct", "REAL"), ("reforma_cbs_pct", "REAL"), ("reforma_ibs_pct", "REAL"),
+        ("reforma_ano", "REAL"), ("reforma_compras_credito", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL")],
@@ -106,7 +114,8 @@ SCHEMA = {
     "ficha_tecnica": [("produto", "TEXT"), ("material", "TEXT"), ("quantidade", "REAL")],
     "custos_variaveis": [("descricao", "TEXT"), ("percentual", "REAL")],
     "pessoal": [("cargo", "TEXT"), ("area", "TEXT"), ("num_empregados", "REAL"), ("salario_mensal", "REAL"),
-                ("encargos_pct", "REAL"), ("beneficios_unit", "REAL"), ("atribuicoes", "TEXT")],
+                ("encargos_pct", "REAL"), ("beneficios_unit", "REAL"), ("atribuicoes", "TEXT"),
+                ("mes_inicio", "REAL")],                 # mês do plano em que o cargo começa (contratações futuras)
     "custos_fixos": [("descricao", "TEXT"), ("classificacao", "TEXT"), ("valor_mensal", "REAL")],
     # --- novas tabelas (v5) ---
     "propostas": [("persona_nome", "TEXT"), ("valores", "TEXT"), ("que_desejam", "TEXT"),
@@ -129,6 +138,13 @@ SCHEMA = {
                     ("novos_mes1", "REAL"), ("crescimento_novos_pct", "REAL"), ("churn_mensal_pct", "REAL"),
                     ("custo_entrega_mensal", "REAL"), ("taxa_cobranca_pct", "REAL")],
     "versoes": [("nome", "TEXT"), ("data", "TEXT"), ("dados", "TEXT")],
+    # --- v7: objetivos SMART, matrizes estratégicas ---
+    "objetivos": [("objetivo", "TEXT"), ("perspectiva", "TEXT"), ("indicador", "TEXT"), ("meta", "REAL"),
+                  ("unidade", "TEXT"), ("prazo_meses", "REAL"), ("responsavel", "TEXT"), ("por_que_atingivel", "TEXT"),
+                  ("relevancia", "TEXT"), ("iniciativa", "TEXT"), ("contribui_para", "TEXT")],
+    "bcg": [("produto", "TEXT"), ("crescimento_mercado_pct", "REAL"), ("participacao_relativa", "REAL")],
+    "ge": [("unidade", "TEXT"), ("forca", "REAL"), ("justificativa", "TEXT")],
+    "porter": [("forca", "TEXT"), ("intensidade", "REAL"), ("justificativa", "TEXT"), ("estrategia", "TEXT")],
 }
 
 # Valores-padrão de um projeto em branco
@@ -143,6 +159,9 @@ PROJETO_PADRAO = {
     "cen_pess_receita_pct": 15.0, "cen_pess_custo_pct": 5.0,
     "rateio_criterio": "Custo direto", "margem_desejada_pct": 15.0,
     "tipo_negocio": "Produtos", "horas_mes_pessoa": 168.0, "utilizacao_pct": 75.0, "anexo_simples": "",
+    "verba_aquisicao_mensal": 0.0, "bcg_limite_crescimento_pct": 10.0,
+    "reforma_b2b_pct": 0.0, "reforma_cbs_pct": 11.3, "reforma_ibs_pct": 0.1, "reforma_ano": 2027.0,
+    "reforma_compras_credito": -1.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -207,6 +226,7 @@ def _migrar_versao_anterior(conn):
                  "WHERE classificacao IS NULL OR classificacao=''")
     conn.execute("UPDATE pessoal SET area='Produção / operação' WHERE area IS NULL OR area=''")
     conn.execute("UPDATE catalogo SET horas_unit=0 WHERE horas_unit IS NULL")
+    conn.execute("UPDATE pessoal SET mes_inicio=1 WHERE mes_inicio IS NULL OR mes_inicio<1")
     conn.execute("UPDATE assinaturas SET ciclo_meses=1 WHERE ciclo_meses IS NULL OR ciclo_meses<1")
     # Proposta de valor única (v1-v4) -> lista de propostas
     if conn.execute("SELECT COUNT(*) FROM propostas").fetchone()[0] == 0:
@@ -339,6 +359,7 @@ def criar_projeto_modelo(caminho: Path) -> None:
     """Cria o estudo de caso FitBox (inspirado no relatório PNBOX do Sebrae)."""
     conn = conectar(caminho)
     popular_modelo_fitbox(conn)
+    popular_estrategia(conn, "fitbox")
     conn.commit()
     conn.close()
 
@@ -347,6 +368,7 @@ def criar_projeto_cafe(caminho: Path) -> None:
     """Cria o segundo estudo de caso: Café Mucuri (cafeteria e padaria artesanal)."""
     conn = conectar(caminho)
     popular_modelo_cafe(conn)
+    popular_estrategia(conn, "cafe")
     conn.commit()
     conn.close()
 
@@ -355,5 +377,6 @@ def criar_projeto_assinatura(caminho: Path) -> None:
     """Cria o terceiro estudo de caso: Conecta Vale (aplicativo com planos de assinatura)."""
     conn = conectar(caminho)
     popular_modelo_assinatura(conn)
+    popular_estrategia(conn, "assinatura")
     conn.commit()
     conn.close()

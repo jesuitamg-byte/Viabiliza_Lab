@@ -1,5 +1,5 @@
 # ==============================================================================
-# PNBOX ACADÊMICO - INTERFACE: BASE (configuração, projetos, navegação, salvamento)
+# VIABILIZALAB - INTERFACE: BASE (configuração, projetos, navegação, salvamento)
 # ==============================================================================
 import hashlib
 import io
@@ -25,10 +25,10 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
                          composicoes, simular, sensibilidade, mercado, capacidade_demanda, semaforo,
                          tabela_checagens_v5, raio_x)
 
-st.set_page_config(page_title="PNBOX Acadêmico - Plano de Negócio", page_icon="📊", layout="wide",
+st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "6.0"
+VERSAO_PROGRAMA = "7.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -56,7 +56,7 @@ def _vigia_de_encerramento():
             elif ja_conectou:
                 desde = desde or time.time()
                 if time.time() - desde > TEMPO_ESPERA_FECHAR:
-                    print("Nenhuma aba aberta. Encerrando o PNBOX...")
+                    print("Nenhuma aba aberta. Encerrando o ViabilizaLab...")
                     os._exit(0)
 
     threading.Thread(target=vigiar, daemon=True, name="pnbox-vigia").start()
@@ -106,7 +106,14 @@ elif MODO_WEB:
             ss.sessao_web = uuid.uuid4().hex
     PASTA = Path(tempfile.gettempdir()) / "pnbox" / ss.sessao_web
 elif (APP_DIR / "instalado.txt").exists():
-    PASTA = Path.home() / "Documents" / "PNBOX"
+    PASTA = Path.home() / "Documents" / "ViabilizaLab"
+    _antiga = Path.home() / "Documents" / "PNBOX"
+    if _antiga.is_dir() and not PASTA.exists():
+        # migração da versão anterior (PNBOX Acadêmico): copia os projetos para a nova pasta
+        try:
+            shutil.copytree(_antiga, PASTA)
+        except Exception:
+            PASTA = _antiga
 else:
     PASTA = APP_DIR / "projetos"
 PASTA.mkdir(parents=True, exist_ok=True)
@@ -162,6 +169,8 @@ EMOCOES = {"Entusiasmado": "🤩", "Satisfeito": "🙂", "Neutro": "😐", "Insa
 PAGINAS = [
     ("projeto", "Identificação", "🏢", "Informações e sócios",
      "Dados do negócio, integrantes do grupo, premissas financeiras e quadro societário."),
+    ("identidade", "Identificação", "🧭", "Missão, visão, valores e objetivos",
+     "Por que a empresa existe, aonde quer chegar, em que acredita e objetivos SMART que transformam a visão em metas."),
     ("segmentos", "Cliente e mercado", "🎯", "Segmentação de mercado",
      "Liste os grupos de clientes possíveis e dê notas para descobrir qual atender primeiro."),
     ("personas", "Cliente e mercado", "🧑", "Gerador de personas",
@@ -180,6 +189,16 @@ PAGINAS = [
      "Fatores externos: tendências que ajudam e riscos que vêm do ambiente."),
     ("swot", "Estratégia", "🧩", "Análise SWOT",
      "Matriz SWOT gerada automaticamente e a estratégia indicada para o negócio."),
+    ("canvas", "Análise estratégica", "🗂️", "Business Model Canvas",
+     "O modelo de negócio em uma página, montado com o que você já preencheu."),
+    ("porter", "Análise estratégica", "⚔️", "Cinco Forças de Porter",
+     "Pressão competitiva do setor: rivalidade, novos entrantes, substitutos, clientes e fornecedores."),
+    ("ge", "Análise estratégica", "🧮", "Matriz GE / McKinsey",
+     "Atratividade de cada segmento x força competitiva da empresa: onde investir, ser seletivo ou colher."),
+    ("bcg", "Análise estratégica", "🫧", "Matriz BCG",
+     "Linhas de produto por crescimento do mercado e participação relativa: estrelas, vacas leiteiras, interrogações e abacaxis."),
+    ("bsc", "Análise estratégica", "🗺️", "Balanced Scorecard",
+     "Objetivos e indicadores nas quatro perspectivas e o mapa estratégico que liga tudo."),
     ("marketing", "Marketing e operação", "📣", "Plano de marketing (4Ps)",
      "Produto, preço, praça e promoção: como o negócio vai chegar ao cliente."),
     ("canais", "Marketing e operação", "🛒", "Canais e funil de vendas",
@@ -198,6 +217,8 @@ PAGINAS = [
      "Planos mensais, trimestrais ou anuais: assinantes, cancelamentos (churn), MRR, CAC, LTV e custos de tecnologia."),
     ("custos", "Finanças", "🧾", "Custos e despesas",
      "Custos variáveis, mão de obra (produção e administrativa) e custos fixos classificados."),
+    ("reforma", "Finanças", "🏛️", "Reforma tributária (simulação)",
+     "Simples puro ou IBS/CBS por fora a partir de 2027: imposto da empresa e crédito para os clientes empresas."),
     ("preco", "Finanças", "🏷️", "Formação de preço",
      "Custeio variável e por absorção, preço sugerido pelo markup e ponto de equilíbrio por produto."),
     ("dre", "Finanças", "📄", "DRE e projeções",
@@ -581,6 +602,15 @@ def situacao(p: str) -> str:
         "investimentos": (_tem("inv_fixos") and (_tem("socios") or _tem("emprestimos")), _tem("inv_fixos")),
         "produtos": (_tem("catalogo") and _tem("materiais"), _tem("catalogo") or _tem("materiais")),
         "custos": (_tem("pessoal") and _tem("custos_fixos"), _tem("pessoal") or _tem("custos_fixos")),
+        "identidade": (bool(proj["missao"]) and bool(proj["visao"]) and bool(proj["valores"]) and _tem("objetivos", 3) and
+                       all(all(ok for ok, _ in checar_smart(o).values()) for _, o in d["objetivos"].iterrows()),
+                       bool(proj["missao"]) or bool(proj["visao"]) or _tem("objetivos")),
+        "canvas": (bool(proj["canvas_relacionamento"]) and bool(proj["canvas_parcerias"]), _tem("segmentos") or _tem("propostas")),
+        "porter": (len(d["porter"]) >= 5 and bool((d["porter"]["intensidade"] > 0).all()) and
+                   not d["porter"]["justificativa"].astype(str).str.startswith("(sugestão)").any(), _tem("porter")),
+        "ge": (_tem("segmentos", 2) and _tem("concorrencia_notas"), _tem("segmentos")),
+        "bcg": (_tem("bcg", 2), _tem("bcg")),
+        "bsc": (set(PERSPECTIVAS) <= set(d["objetivos"]["perspectiva"]), _tem("objetivos")),
         "servicos": (bool((d["catalogo"]["horas_unit"] > 0).any()) and float(proj["utilizacao_pct"]) > 0,
                      bool((d["catalogo"]["horas_unit"] > 0).any())),
         "assinaturas": (_tem("assinaturas") and bool((d["assinaturas"]["churn_mensal_pct"] > 0).all()), _tem("assinaturas")),
@@ -601,7 +631,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto")))
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p == "reforma"
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -615,7 +645,8 @@ def completude() -> float:
 # MENU LATERAL
 # ------------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 📊 PNBOX Acadêmico")
+    st.markdown("### 📊 ViabilizaLab")
+    st.caption("Laboratório de plano de negócio e viabilidade (antigo PNBOX Acadêmico)")
     if st.button("🏠 Painel do plano", key="nav_inicio", width="stretch",
                  type="primary" if ss.pagina == "inicio" else "secondary"):
         ir("inicio")
@@ -713,7 +744,12 @@ with st.sidebar:
 # ------------------------------------------------------------------------------
 def rolar_para_topo():
     """Ao trocar de página, volta a tela para o início (útil sobretudo no celular)."""
-    import streamlit.components.v1 as components
+    try:
+        import streamlit.components.v1 as components
+    except Exception:          # recurso opcional: se a versão do Streamlit não tiver, apenas não rola a tela
+        return
+    import logging
+    logging.getLogger("streamlit").setLevel(logging.ERROR)
     components.html("""<script>
       try { const d = window.parent.document;
         for (const s of ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main']) {

@@ -1,6 +1,6 @@
 """
 ================================================================================
-PNBOX ACADÊMICO - ESTUDO DE CASO FITBOX (pnbox_modelo.py)
+VIABILIZALAB - ESTUDO DE CASO FITBOX (pnbox_modelo.py)
 ================================================================================
 Dados de exemplo inspirados no relatório PNBOX/Sebrae do projeto FitBox
 (Teófilo Otoni - MG). Servem de referência de preenchimento para os alunos.
@@ -663,3 +663,109 @@ def popular_modelo_assinatura(conn) -> None:
         ("Desenvolvimento do MVP", 1, 3, "Sócio(a) 1", 25000), ("Teste com empresas piloto", 3, 1, "Sócio(a) 2", 0),
         ("Publicação nas lojas", 4, 1, "Sócio(a) 1", 700), ("Lançamento", 4, 1, "Todos", 6000),
     ])
+
+
+# ==============================================================================
+# IDENTIDADE, OBJETIVOS SMART E MATRIZES ESTRATÉGICAS DOS TRÊS EXEMPLOS
+# ==============================================================================
+_ESTRATEGIA = {
+    "fitbox": {
+        "missao": "Oferecer refeições saudáveis, saborosas e práticas a quem tem pouco tempo, com ingredientes frescos e entrega rápida.",
+        "visao": "Ser a principal referência em alimentação saudável de Teófilo Otoni até 2030.",
+        "valores": "Qualidade; Respeito ao cliente; Transparência; Sustentabilidade; Valorização das pessoas",
+        "rel": "Atendimento personalizado pelo WhatsApp\nCardápio semanal enviado aos clientes\nPrograma de fidelidade",
+        "par": "Nutricionista parceira\nAcademias do bairro\nFornecedores de hortifrúti locais",
+        "obj": [
+            ("Atingir a receita prevista para o primeiro ano", "Financeira", "Receita bruta acumulada", 680000, "R$", 12, "Sócia administradora",
+             "Meta baseada no volume e nos preços calculados no plano.", "Sustenta a viabilidade projetada.", "Acompanhamento semanal das vendas", ""),
+            ("Fidelizar clientes com o programa de pontos", "Clientes", "Clientes que compram toda semana", 150, "clientes", 9, "Sócio comercial",
+             "Base de clientes prevista e programa de baixo custo.", "Recompra reduz o custo de aquisição.", "Cartão fidelidade digital",
+             "Atingir a receita prevista para o primeiro ano"),
+            ("Reduzir o desperdício na produção", "Processos internos", "Perdas sobre a produção", 3, "% (máximo)", 6, "Chefe de cozinha",
+             "Fichas técnicas já padronizadas.", "Desperdício corrói a margem de contribuição.", "Controle diário de sobras",
+             "Atingir a receita prevista para o primeiro ano"),
+            ("Treinar toda a equipe em boas práticas de manipulação", "Aprendizado e crescimento", "Funcionários certificados", 100, "%", 3,
+             "Sócia administradora", "Curso gratuito do Sebrae/Anvisa disponível.", "Garante a segurança alimentar prometida.",
+             "Curso de boas práticas", "Reduzir o desperdício na produção"),
+        ],
+        "bcg": [("Marmita fitness tradicional", 6, 1.4), ("Bowl de salmão", 15, 0.3), ("Suco natural 500 ml", 4, 0.6),
+                ("Shake proteico com whey", 14, 1.1)],
+        "porter": [(4, "Muitos restaurantes e marmitarias no centro.", "Diferenciar pela nutrição balanceada e pela entrega pontual."),
+                   (4, "Investimento inicial baixo e receitas fáceis de copiar.", "Construir marca e fidelizar antes da concorrência."),
+                   (3, "Cliente pode cozinhar em casa ou comprar congelados.", "Mostrar economia de tempo e variedade semanal."),
+                   (3, "Cliente compara preço pelo aplicativo.", "Combos e planos semanais com desconto."),
+                   (2, "Vários fornecedores de alimentos na região.", "Manter dois fornecedores para cada insumo crítico.")],
+    },
+    "cafe": {
+        "missao": "Servir cafés especiais e quitandas mineiras feitas na hora, valorizando os produtores do Vale do Mucuri.",
+        "visao": "Ser o café de referência do centro de Teófilo Otoni até 2029.",
+        "valores": "Compromisso com a região; Qualidade; Excelência no atendimento; Confiança",
+        "rel": "Atendimento pelo nome no balcão\nCartão fidelidade (10º café grátis)\nEventos de degustação",
+        "par": "Produtores de café do Vale\nLaticínio regional\nCoworkings do centro",
+        "obj": [
+            ("Vender a média diária de cafés prevista no plano", "Financeira", "Cafés vendidos por dia", 140, "cafés/dia", 6, "Sócio(a) 2",
+             "Fluxo de pedestres do centro e capacidade da máquina.", "O café é o produto de maior margem.", "Combos de café da manhã", ""),
+            ("Conquistar clientes recorrentes do centro", "Clientes", "Clientes com cartão fidelidade ativo", 400, "clientes", 12, "Sócio(a) 1",
+             "Cerca de 9.000 pessoas no público alcançável.", "Recompra diária sustenta a receita.", "Parcerias com escritórios",
+             "Vender a média diária de cafés prevista no plano"),
+            ("Padronizar o preparo de todas as bebidas", "Processos internos", "Bebidas com ficha de preparo", 100, "%", 3, "Sócio(a) 2",
+             "Cardápio enxuto e barista experiente.", "Qualidade constante é a promessa da marca.", "Fichas de preparo e treinamento",
+             "Conquistar clientes recorrentes do centro"),
+            ("Formar a equipe em atendimento e barismo", "Aprendizado e crescimento", "Horas de treinamento por atendente", 16, "horas", 4,
+             "Sócio(a) 2", "Treinamento interno com o sócio barista.", "Atendimento é diferencial frente às redes.",
+             "Treinamentos mensais", "Padronizar o preparo de todas as bebidas"),
+        ],
+        "canais": ["Loja física (balcão)", "Instagram", "WhatsApp (encomendas)", "Indicação (boca a boca)"],
+        "bcg": [("Café expresso", 8, 1.1), ("Pão de queijo (unidade)", 5, 1.5), ("Café coado (método)", 14, 0.5)],
+        "porter": [(3, "Padarias tradicionais e uma rede de cafeteria por perto.", "Foco em café especial e origem regional."),
+                   (3, "Abrir uma cafeteria exige investimento moderado em equipamentos.", "Fidelizar e criar marca local forte."),
+                   (3, "Café de máquina no trabalho e cafés de padaria.", "Experiência e qualidade que justificam o preço."),
+                   (3, "Cliente individual, compra pequena, mas compara com a padaria.", "Combos e programa de fidelidade."),
+                   (4, "Café especial depende de poucos produtores e o preço do grão oscila.", "Contratos trimestrais e mais de um produtor.")],
+    },
+    "assinatura": {
+        "missao": "Conectar moradores e visitantes ao que acontece no Vale do Mucuri e ajudar pequenas empresas locais a atrair clientes.",
+        "visao": "Ser o principal aplicativo de cultura, lazer e consumo local do Vale do Mucuri até 2030.",
+        "valores": "Compromisso com a região; Transparência; Inovação; Simplicidade",
+        "rel": "Gerente de conta para empresas\nRelatório mensal de resultados\nSuporte pelo WhatsApp\nComunidade de usuários no app",
+        "par": "Secretarias de cultura e turismo\nProdutores de eventos\nInfluenciadores locais\nProvedor de nuvem",
+        "obj": [
+            ("Atingir a receita recorrente mensal prevista para o fim do primeiro ano", "Financeira", "MRR", 37000, "R$/mês", 12,
+             "Sócio(a) 2", "Projeção por safras com churn e captação realistas.", "MRR sustenta a viabilidade do aplicativo.",
+             "Metas mensais de vendas por plano", ""),
+            ("Manter o cancelamento de empresas abaixo do previsto", "Clientes", "Churn mensal das empresas", 5, "% (máximo)", 12,
+             "Sócio(a) 2", "Relatórios mensais mostram resultado ao cliente.", "Cada ponto de churn reduz o LTV.",
+             "Programa de sucesso do cliente", "Atingir a receita recorrente mensal prevista para o fim do primeiro ano"),
+            ("Publicar as divulgações das empresas em até 24 horas", "Processos internos", "Publicações no prazo", 95, "%", 6,
+             "Atendimento e conteúdo", "Fluxo de aprovação simples e equipe dedicada.", "Agilidade é o que as empresas cobram.",
+             "Fila de publicação com prazos", "Manter o cancelamento de empresas abaixo do previsto"),
+            ("Lançar uma melhoria do aplicativo por mês", "Aprendizado e crescimento", "Versões publicadas", 12, "versões/ano", 12,
+             "Sócio(a) 1", "Equipe técnica própria e ciclo curto de desenvolvimento.", "Produto melhor reduz o churn.",
+             "Roteiro mensal de melhorias", "Publicar as divulgações das empresas em até 24 horas"),
+        ],
+        "canais": ["Aplicativo (Google Play e App Store)", "Venda consultiva às empresas", "Instagram", "Acordos e Parcerias"],
+        "bcg": [("Cobertura de evento patrocinado", 18, 0.3), ("Produção de conteúdo avulso (post e vídeo)", 12, 0.2),
+                ("Assinaturas (todos os planos)", 25, 0.6)],
+        "porter": [(3, "Plataformas nacionais e perfis locais de Instagram disputam a atenção.", "Conteúdo hiperlocal e relatórios de resultado."),
+                   (4, "Criar um aplicativo é relativamente barato; a barreira é a base de usuários.", "Crescer rápido a comunidade e as parcerias."),
+                   (4, "Redes sociais gratuitas cumprem parte da função.", "Mostrar resultado medido (cupons usados, visitas)."),
+                   (3, "Empresas pequenas cancelam com facilidade.", "Plano anual com desconto e acompanhamento mensal."),
+                   (3, "Dependência de lojas de aplicativos e provedor de nuvem.", "Cobrar empresas fora da loja e evitar dependência de um só provedor.")],
+    },
+}
+
+
+def popular_estrategia(conn, qual: str) -> None:
+    e = _ESTRATEGIA[qual]
+    conn.execute("UPDATE projeto SET missao=?, visao=?, valores=?, canvas_relacionamento=?, canvas_parcerias=? WHERE id=1",
+                 (e["missao"], e["visao"], e["valores"], e["rel"], e["par"]))
+    conn.executemany("""INSERT INTO objetivos (objetivo, perspectiva, indicador, meta, unidade, prazo_meses, responsavel,
+                        por_que_atingivel, relevancia, iniciativa, contribui_para) VALUES (?,?,?,?,?,?,?,?,?,?,?)""", e["obj"])
+    conn.executemany("INSERT INTO bcg (produto, crescimento_mercado_pct, participacao_relativa) VALUES (?,?,?)", e["bcg"])
+    if e.get("canais") and conn.execute("SELECT COUNT(*) FROM canais").fetchone()[0] == 0:
+        conn.executemany("INSERT INTO canais (canal, atratividade, alcance, cliente, relacionamento, viabilidade) VALUES (?,?,?,?,?,?)",
+                         [(c, 8, 7, 8, 7, 8) for c in e["canais"]])
+    forcas = ["Rivalidade entre concorrentes", "Ameaça de novos entrantes", "Ameaça de produtos substitutos",
+              "Poder de barganha dos clientes", "Poder de barganha dos fornecedores"]
+    conn.executemany("INSERT INTO porter (forca, intensidade, justificativa, estrategia) VALUES (?,?,?,?)",
+                     [(f, *v) for f, v in zip(forcas, e["porter"])])
