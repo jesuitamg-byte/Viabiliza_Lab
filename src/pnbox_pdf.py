@@ -16,6 +16,8 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from fpdf.fonts import FontFace
 
+from pnbox_validacao import *  # noqa
+
 AZUL = (28, 49, 80)
 def _fontes_matplotlib():
     try:
@@ -340,6 +342,184 @@ def _texto_caixa(pdf, nome, itens, x, y, w, h):
         txt = pdf.t("• " + str(it))
         pdf.multi_cell(w - 2.4, 3.1, txt[:160], align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         yy = pdf.get_y() + 0.6
+
+
+# ------------------------------------------------------------------------------
+# FIGURAS E SEÇÕES DA VALIDAÇÃO, MARKETING, INCERTEZA E DEFESA (v7.1)
+# ------------------------------------------------------------------------------
+def _plt():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    return plt
+
+
+def png_vw(vw: dict, preco: float) -> bytes:
+    plt = _plt()
+    cv = vw["curvas"]
+    fig, ax = plt.subplots(figsize=(6.6, 3.6))
+    ax.axvspan(vw["pmc"], vw["pme"], color="#27ae60", alpha=0.12, label="faixa aceitável")
+    for c, cor in (("Muito barato", "#7fb3d5"), ("Barato", "#2471a3"), ("Caro", "#e59866"), ("Muito caro", "#c0392b")):
+        ax.plot(cv["Preço"], cv[c] * 100, color=cor, lw=2, label=c)
+    if preco == preco:
+        ax.axvline(preco, color="black", ls="--", lw=1, label="preço do plano")
+    ax.set_xlabel("Preço (R$)")
+    ax.set_ylabel("% dos respondentes")
+    ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.18), frameon=False)
+    return _fig_png(fig)
+
+
+def png_hist_mc(vpl) -> bytes:
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(6.6, 3.0))
+    n_, bins, patches = ax.hist(vpl, bins=45)
+    for b_, p_ in zip(bins, patches):
+        p_.set_facecolor("#27ae60" if b_ >= 0 else "#c0392b")
+    ax.axvline(0, color="black", lw=1)
+    from matplotlib.ticker import FuncFormatter
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v / 1000:,.0f}".replace(",", ".")))
+    ax.set_xlabel("VPL (R$ mil)")
+    ax.set_ylabel("Cenários")
+    return _fig_png(fig)
+
+
+def png_curva_valor(cv: pd.DataFrame) -> bytes:
+    plt = _plt()
+    ordem = list(dict.fromkeys(cv["Atributo"]))
+    fig, ax = plt.subplots(figsize=(6.8, 3.4))
+    for emp, g in cv.groupby("Empresa", sort=False):
+        g = g.set_index("Atributo").reindex(ordem)
+        novo = emp == "Nova curva (ERRC)"
+        ax.plot(range(len(ordem)), g["Nota"], marker="o", lw=3 if novo else 1.4, ls="-" if novo else "--",
+                color="#e67e22" if novo else None, label=emp[:28])
+    ax.set_xticks(range(len(ordem)))
+    ax.set_xticklabels([o[:18] for o in ordem], rotation=35, ha="right", fontsize=7)
+    ax.set_ylim(0, 10.5)
+    ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.38), frameon=False)
+    return _fig_png(fig)
+
+
+def png_bass(tb: pd.DataFrame) -> bytes:
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(6.4, 2.8))
+    ax.plot(tb["Ano"], tb["Adotantes acumulados"], marker="o", lw=2.5, label="Adoção prevista (Bass)")
+    if "Clientes no plano" in tb:
+        ax.plot(tb["Ano"], tb["Clientes no plano"], marker="s", lw=2.5, label="Clientes no plano")
+    ax.set_xlabel("Ano")
+    ax.set_ylabel("Clientes")
+    ax.set_xticks(list(tb["Ano"]))
+    ax.legend(fontsize=8, frameon=False)
+    return _fig_png(fig)
+
+
+def secoes_v71(pdf, proj, d, res):
+    preco = preco_referencia(proj, res)
+    # ---- Validação do mercado
+    pl = placar_evidencias(proj, d, res)
+    pdf.secao("VALIDAÇÃO: PLACAR DE EVIDÊNCIAS", nova_pagina=True)
+    pdf.paragrafo(f"{pct(pl['score'], 0)} do resultado está apoiado em premissas pesquisadas ou testadas com clientes. "
+                  f"Premissa a validar primeiro: {pl['proxima'] or 'nenhuma'}.", "B", 9)
+    tb = pl["tabela"]
+    pdf.tabela(pd.DataFrame({"Premissa": tb["premissa"], "Valor no plano": tb["valor_plano"], "Peso": tb["peso"].map(lambda v: pct(v, 0)),
+                             "Origem": tb["status"].map(STATUS_CURTO), "Fonte": tb["fonte"]}),
+               larguras=(46, 46, 14, 20, 54), alinhar=("LEFT", "LEFT", "RIGHT", "CENTER", "LEFT"), tam=7.2)
+    ent = resumo_entrevistas(d, preco)
+    if ent["n"]:
+        pdf.subtitulo(f"Entrevistas com clientes ({ent['n']})")
+        pdf.paragrafo(f"Pagariam: {pct(ent['pct_sim'], 0)} sim e {pct(ent['pct_talvez'], 0)} talvez. Valor mediano citado: "
+                      f"{brl(ent['mediana_valor'])} (preço de referência do plano: {brl(preco)}).", "", 8.5)
+        pdf.tabela(ent["dores"].assign(**{"% das entrevistas": ent["dores"]["% das entrevistas"].map(lambda v: pct(v, 0))}),
+                   larguras=(120, 25, 35), alinhar=("LEFT", "RIGHT", "RIGHT"), tam=7.5)
+    vw = van_westendorp(d.get("precos_vw"))
+    if vw and vw.get("ok"):
+        pdf.subtitulo(f"Teste de preço Van Westendorp ({vw['n']} respostas)")
+        pdf.image(io.BytesIO(png_vw(vw, preco)), x=30, w=150)
+        pdf.paragrafo(f"Faixa aceitável: {brl(vw['pmc'])} a {brl(vw['pme'])}. Preço ótimo: {brl(vw['opp'])}. Indiferença: "
+                      f"{brl(vw['ipp'])}. Preço do plano: {brl(preco)}.", "", 8.5)
+    ia = intencao_ajustada(proj, res)
+    if ia["ok"]:
+        pdf.paragrafo(f"Intenção de compra ajustada: {num_br(ia['ajustados'], 0)} clientes prováveis x "
+                      f"{num_br(ia['plano'], 0)} clientes supostos pelo plano no Ano 1.", "", 8.5)
+    # ---- Marketing estratégico
+    tem_vpc = any(proj.get(k) for k, _, _ in BLOCOS_VPC)
+    frase = frase_posicionamento(proj)
+    if tem_vpc or frase or not d["errc"].empty:
+        pdf.secao("PROPOSTA DE VALOR, POSICIONAMENTO E CURVA DE VALOR", nova_pagina=True)
+        if proj.get("vpc_job"):
+            pdf.campo("Trabalho do cliente (job)", proj["vpc_job"])
+        if tem_vpc:
+            lin = [(rot, "; ".join(linhas_txt(proj.get(k_)))) for k_, rot, _ in BLOCOS_VPC]
+            pdf.tabela(pd.DataFrame(lin, columns=["Bloco", "Itens"]), larguras=(45, 135), alinhar=("LEFT", "LEFT"), tam=7.5)
+            enc = encaixe_vpc(proj, d)
+            if enc["total"]:
+                pdf.paragrafo(f"Encaixe: {enc['cobertos']} de {enc['total']} dores e ganhos têm resposta na oferta.", "I", 8)
+        if frase:
+            pdf.subtitulo("Declaração de posicionamento")
+            pdf.paragrafo(frase, "", 9)
+        if not d["errc"].empty:
+            pdf.subtitulo("Curva de valor e matriz ERRC")
+            pdf.image(io.BytesIO(png_curva_valor(curva_valor(d))), x=28, w=154)
+            pdf.tabela(d["errc"].assign(nova_nota=d["errc"]["nova_nota"].map(lambda v: num_br(v, 1))).rename(columns={
+                "atributo": "Atributo", "acao": "Ação", "nova_nota": "Nova nota", "justificativa": "Justificativa"}),
+                larguras=(45, 22, 20, 93), alinhar=("LEFT", "CENTER", "CENTER", "LEFT"), tam=7.5)
+            pdf.paragrafo(leitura_errc(d), "I", 8)
+    oc = orcamento_canais(proj, d, res)
+    if not oc.empty or not d["aarrr"].empty:
+        pdf.secao("ORÇAMENTO DE MARKETING E FUNIL DE CRESCIMENTO", nova_pagina=True)
+        if not oc.empty:
+            pdf.tabela(pd.DataFrame({"Canal": oc["Canal"], "Gasto mensal": oc["Gasto mensal"].map(brl),
+                                     "Clientes/mês": oc["Clientes novos/mês"].map(lambda v: num_br(v, 0)),
+                                     "CAC": oc["CAC"].map(lambda v: brl(v) if v == v else "n.a."),
+                                     "Retorno por R$ 1": oc["Retorno por R$ 1"].map(lambda v: f"R$ {num_br(v, 2)}" if v == v else "n.a.")}),
+                       larguras=(62, 30, 24, 30, 34), alinhar=("LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"), tam=7.5)
+            pdf.paragrafo(f"Valor do cliente usado no retorno: {oc.attrs.get('rotulo_valor', '')} ({brl(float(oc['Valor do cliente'].iloc[0]))}).", "I", 7.5)
+        if not d["aarrr"].empty:
+            pdf.subtitulo("Funil AARRR")
+            pdf.tabela(d["aarrr"].rename(columns={"etapa": "Etapa", "metrica": "Métrica", "meta": "Meta", "acao": "Ação"}),
+                       larguras=(24, 50, 34, 72), alinhar=("LEFT",) * 4, tam=7.5)
+        pdf.paragrafo(f"Meta de NPS no primeiro ano: {num_br(proj.get('nps_meta') or 0, 0)}.", "", 8.5)
+    # ---- Incerteza
+    if res["anos"][1]["rec_bruta"] > 0:
+        mc = monte_carlo(res, faixas_mc(d))
+        pdf.secao("INCERTEZA: SIMULAÇÃO DE MONTE CARLO E PERDA ACEITÁVEL", nova_pagina=True)
+        pdf.paragrafo(f"{mc['n']} cenários sorteados (distribuição triangular). Chance de VPL positivo: {pct(mc['p_vpl_pos'], 0)}. "
+                      f"VPL nos 5% piores casos: {brl(mc['p5'])}; mediano: {brl(mc['p50'])}; nos 5% melhores: {brl(mc['p95'])}. "
+                      f"Chance de caixa negativo no Ano 1: {pct(mc['p_caixa_neg'], 0)}.", "", 8.5)
+        pdf.image(io.BytesIO(png_hist_mc(mc["vpl"])), x=30, w=150)
+        fx = faixas_mc(d)
+        pdf.tabela(pd.DataFrame({"Variável": fx["variavel"], "Pior caso": fx["minimo_pct"].map(lambda v: f"{num_br(v, 0)}%"),
+                                 "Melhor caso": fx["maximo_pct"].map(lambda v: f"{num_br(v, 0)}%")}),
+                   larguras=(100, 40, 40), alinhar=("LEFT", "RIGHT", "RIGHT"), tam=7.5)
+        pdf.paragrafo(leitura_mc(mc), "I", 8)
+        pa = perda_aceitavel(proj, d, res)
+        pdf.paragrafo(f"Perda potencial se o negócio fechar: {brl(pa['potencial'])} (capital dos sócios + empréstimos − venda dos bens). "
+                      f"Perda aceitável informada pelos sócios: {brl(pa['aceitavel'])}.", "", 8.5)
+        bc = bass_comparacao(proj, res)
+        if bc["ok"]:
+            pdf.subtitulo(f"Curva de adoção de Bass (p = {num_br(bc['p'], 3)}; q = {num_br(bc['q'], 2)}; mercado potencial "
+                          f"{num_br(bc['m'], 0)})")
+            pdf.image(io.BytesIO(png_bass(bc["tabela"])), x=32, w=146)
+        # ---- Defesa
+        pr = avaliar_prontidao(proj, d, res, mc, preco)
+        pdf.secao("PRONTIDÃO, BANCA SIMULADA E FORMALIZAÇÃO", nova_pagina=True)
+        pdf.tabela(pd.DataFrame({"Nível": [str(k) for k, _, _ in NIVEIS_PRONTIDAO], "Degrau": [n for _, n, _ in NIVEIS_PRONTIDAO],
+                                 "Critério": [c for _, _, c in NIVEIS_PRONTIDAO],
+                                 "Situação": ["atingido" if k <= pr["nivel"] else ("próximo" if k == pr["nivel"] + 1 else "-")
+                                              for k, _, _ in NIVEIS_PRONTIDAO]}),
+                   larguras=(12, 48, 100, 20), alinhar=("CENTER", "LEFT", "LEFT", "CENTER"), tam=7.2)
+        pdf.paragrafo(f"Nível de prontidão do negócio: {pr['nivel']} de 9.", "B", 9)
+        perg = perguntas_banca(proj, d, res, mc, preco)
+        resp = {str(r["pergunta"]): str(r["resposta"]) for _, r in d["banca_respostas"].iterrows()}
+        pdf.subtitulo("Banca simulada")
+        for i, q in enumerate(perg, start=1):
+            pdf.paragrafo(f"{i}. [{q['tema']}] {q['pergunta']}", "B", 8.3)
+            pdf.paragrafo("Resposta do grupo: " + (resp.get(q["pergunta"]) or "(sem resposta)"), "", 8.3)
+    ps = porte_sugerido(res, d)
+    pdf.subtitulo("Formalização")
+    pdf.paragrafo(f"Enquadramento sugerido pela receita do Ano 1 ({brl(ps['receita'])}): {ps['porte']}.", "", 8.5)
+    if not d["formalizacao"].empty:
+        pdf.tabela(d["formalizacao"].rename(columns={"item": "Item", "status": "Situação", "observacao": "Observação"}),
+                   larguras=(100, 26, 54), alinhar=("LEFT", "CENTER", "LEFT"), tam=7.5)
 
 
 def graficos_png(comp: dict) -> list:
@@ -1086,6 +1266,8 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                                 brl(rr["hib_credito_cliente"])]}), larguras=(80, 50, 50), alinhar=("LEFT", "RIGHT", "RIGHT"))
         pdf.paragrafo("Simulação didática e simplificada. Fontes: LC 214/2025, art. 41; partilha do DAS da LC 123/2006; CBS de "
                       "referência de 11,3% para 2027 calculada pelo TCU, sujeita à definição do Senado. Confirme com um contador.", "I", 7.5)
+
+    secoes_v71(pdf, proj, d, res)
 
     if str(proj.get("conclusao") or "").strip():
         pdf.secao("CONCLUSÃO E PARECER FINAL", nova_pagina=True)

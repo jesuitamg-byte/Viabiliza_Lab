@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "7.0"
+VERSAO_PROGRAMA = "7.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -177,12 +177,20 @@ PAGINAS = [
      "Crie personagens que representam o cliente ideal: dados, características, rotina e insights."),
     ("jornada", "Cliente e mercado", "🧭", "Jornada do cliente",
      "Descreva o que a persona faz, pensa e sente antes, durante e depois da compra."),
+    ("entrevistas", "Cliente e mercado", "🎙️", "Entrevistas com clientes",
+     "Roteiro de entrevista de descoberta e registro das conversas: quais dores se repetem e quanto pagariam."),
     ("mercado", "Cliente e mercado", "📐", "Tamanho do mercado",
      "Estime o mercado total (TAM), o alcançável (SAM) e o conquistável (SOM) e confira se a meta de vendas é realista."),
     ("proposta", "Problema e solução", "❤️", "Proposta de valor",
      "Defina, para cada persona, os benefícios que o negócio entrega e o que o diferencia."),
+    ("vpc", "Problema e solução", "🎁", "Canvas da proposta de valor",
+     "Tarefas, dores e ganhos do cliente x produtos, aliviadores e criadores de ganho, e o encaixe entre eles."),
     ("concorrencia", "Problema e solução", "🔍", "Análise da concorrência",
      "Compare o seu negócio com os concorrentes em notas de 0 a 10 por atributo."),
+    ("oceano", "Problema e solução", "🌊", "Curva de valor e ERRC",
+     "Compare a sua curva com a dos concorrentes e decida o que eliminar, reduzir, elevar e criar (oceano azul)."),
+    ("posicionamento", "Problema e solução", "📍", "Posicionamento e mapa perceptual",
+     "A frase que diz para quem, o que e por que é diferente, e onde a marca fica frente aos concorrentes."),
     ("forcas", "Estratégia", "💪", "Forças e fraquezas",
      "Fatores internos: o que o negócio faz bem e o que precisa melhorar."),
     ("oportunidades", "Estratégia", "💡", "Oportunidades e ameaças",
@@ -203,6 +211,8 @@ PAGINAS = [
      "Produto, preço, praça e promoção: como o negócio vai chegar ao cliente."),
     ("canais", "Marketing e operação", "🛒", "Canais e funil de vendas",
      "Avalie os canais de aquisição e acompanhe a conversão do funil."),
+    ("orcamento_mkt", "Marketing e operação", "💸", "Orçamento de marketing e funil AARRR",
+     "Gasto e CAC por canal, retorno de cada canal, funil de crescimento, calendário de ações e meta de NPS."),
     ("operacional", "Marketing e operação", "🏭", "Plano operacional",
      "Localização, layout, processos, capacidade produtiva e organograma."),
     ("fornecedores", "Marketing e operação", "🚚", "Fornecedores",
@@ -221,6 +231,8 @@ PAGINAS = [
      "Simples puro ou IBS/CBS por fora a partir de 2027: imposto da empresa e crédito para os clientes empresas."),
     ("preco", "Finanças", "🏷️", "Formação de preço",
      "Custeio variável e por absorção, preço sugerido pelo markup e ponto de equilíbrio por produto."),
+    ("teste_preco", "Finanças", "🙋", "Teste de preço e demanda",
+     "Faixa de preço aceitável pelo método Van Westendorp e demanda ajustada pela intenção de compra."),
     ("dre", "Finanças", "📄", "DRE e projeções",
      "Demonstração do resultado dos Anos 1 a 3 e a projeção mês a mês."),
     ("fluxo", "Finanças", "💵", "Fluxo de caixa mensal",
@@ -231,6 +243,10 @@ PAGINAS = [
      "Composição do investimento, dos custos e da receita, ponto de equilíbrio e payback."),
     ("simulador", "Ferramentas complementares", "🎚️", "Simulador de resultados",
      "Cenários otimista e pessimista, simulador “e se?” e análise de sensibilidade."),
+    ("montecarlo", "Ferramentas complementares", "🎲", "Monte Carlo e perda aceitável",
+     "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
+    ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
+     "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
     ("experimentos", "Ferramentas complementares", "🧪", "Quadro de experimentação",
      "Hipóteses e testes para validar a ideia antes de investir."),
     ("riscos", "Ferramentas complementares", "⚠️", "Riscos e contingência",
@@ -241,6 +257,14 @@ PAGINAS = [
      "Depois de abrir, lance os números reais e compare com o planejado."),
     ("ia", "Ferramentas complementares", "🤖", "Analisar com IA",
      "Monte o texto pronto para colar no ChatGPT, Gemini ou Claude e receber análises e estratégias."),
+    ("evidencias", "Validação e defesa", "🔬", "Placar de evidências",
+     "Quais números do plano são palpite, pesquisa ou teste com clientes, e qual premissa validar primeiro."),
+    ("prontidao", "Validação e defesa", "🪜", "Régua de prontidão",
+     "Em que degrau, de 1 a 9, o negócio está: da ideia descrita ao pronto para lançar ou buscar investimento."),
+    ("banca", "Validação e defesa", "🧑‍⚖️", "Banca simulada",
+     "Perguntas difíceis geradas a partir dos pontos fracos do plano, para treinar a defesa."),
+    ("formalizacao", "Validação e defesa", "📋", "Checklist de formalização",
+     "Enquadramento (MEI, ME, EPP), registros, licenças, LGPD e marca."),
     ("sumario", "Conclusão e entrega", "📝", "Sumário executivo",
      "Resumo do plano gerado automaticamente, para revisar e completar."),
     ("apresentacao", "Conclusão e entrega", "🎤", "Modo apresentação",
@@ -626,12 +650,13 @@ def situacao(p: str) -> str:
         "realizado": (_tem("realizado", 1), _tem("realizado")),
         "sumario": (len(proj["sumario_executivo"]) > 200, bool(proj["sumario_executivo"])),
     }
+    regras.update(regras_v71(proj, d))
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p == "reforma"
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")

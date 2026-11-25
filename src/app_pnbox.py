@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v7 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v7.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -72,6 +72,7 @@ if __name__ == "__main__" and not _no_streamlit():
                  f"--server.port={_porta}", "--server.address=localhost",
                  "--browser.gatherUsageStats=false", "--server.headless=false"]
     _sys.exit(_stcli.main())
+from collections import Counter
 from datetime import date
 from datetime import datetime
 from fpdf import FPDF
@@ -84,6 +85,7 @@ import io
 import json
 import math
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import pandas as pd
 import re
@@ -154,9 +156,18 @@ SCHEMA = {
         # Reforma tributária (simulação)
         ("reforma_b2b_pct", "REAL"), ("reforma_cbs_pct", "REAL"), ("reforma_ibs_pct", "REAL"),
         ("reforma_ano", "REAL"), ("reforma_compras_credito", "REAL"),
+        # Validação, marketing e incerteza (v7.1)
+        ("intencao_certamente_pct", "REAL"), ("intencao_provavel_pct", "REAL"),
+        ("fator_certamente_pct", "REAL"), ("fator_provavel_pct", "REAL"), ("vw_produto", "TEXT"),
+        ("vpc_job", "TEXT"), ("vpc_tarefas", "TEXT"), ("vpc_dores", "TEXT"), ("vpc_ganhos", "TEXT"),
+        ("vpc_produtos", "TEXT"), ("vpc_aliviadores", "TEXT"), ("vpc_criadores", "TEXT"),
+        ("posic_segmento", "TEXT"), ("posic_necessidade", "TEXT"), ("posic_marca", "TEXT"), ("posic_categoria", "TEXT"),
+        ("posic_beneficio", "TEXT"), ("posic_concorrente", "TEXT"), ("posic_diferencial", "TEXT"),
+        ("mapa_eixo_x", "TEXT"), ("mapa_eixo_y", "TEXT"), ("nps_meta", "REAL"),
+        ("bass_mercado", "REAL"), ("bass_p", "REAL"), ("bass_q", "REAL"), ("revenda_ativos_pct", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
-               ("perfil", "TEXT"), ("capital_integralizado", "REAL")],
+               ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
     "segmentos": [("nome", "TEXT"), ("descricao", "TEXT"), ("nota_tamanho", "REAL"),
                   ("nota_lucro", "REAL"), ("nota_longevidade", "REAL"),
                   ("nota_concorrencia", "REAL"), ("nota_aderencia", "REAL")],
@@ -230,6 +241,21 @@ SCHEMA = {
     "bcg": [("produto", "TEXT"), ("crescimento_mercado_pct", "REAL"), ("participacao_relativa", "REAL")],
     "ge": [("unidade", "TEXT"), ("forca", "REAL"), ("justificativa", "TEXT")],
     "porter": [("forca", "TEXT"), ("intensidade", "REAL"), ("justificativa", "TEXT"), ("estrategia", "TEXT")],
+    # --- v7.1: validação, marketing, incerteza e defesa ---
+    "evidencias": [("premissa", "TEXT"), ("status", "TEXT"), ("fonte", "TEXT"), ("observacao", "TEXT")],
+    "entrevistas": [("data", "TEXT"), ("entrevistado", "TEXT"), ("perfil", "TEXT"), ("dores", "TEXT"),
+                    ("solucao_atual", "TEXT"), ("pagaria", "TEXT"), ("valor_pagaria", "REAL"), ("aprendizado", "TEXT")],
+    "precos_vw": [("respondente", "TEXT"), ("muito_barato", "REAL"), ("barato", "REAL"), ("caro", "REAL"),
+                  ("muito_caro", "REAL")],
+    "vpc_encaixe": [("item", "TEXT"), ("tipo", "TEXT"), ("resposta", "TEXT")],
+    "errc": [("atributo", "TEXT"), ("acao", "TEXT"), ("nova_nota", "REAL"), ("justificativa", "TEXT")],
+    "mapa_perceptual": [("marca", "TEXT"), ("eixo_x", "REAL"), ("eixo_y", "REAL")],
+    "orcamento_canais": [("canal", "TEXT"), ("gasto_mensal", "REAL"), ("clientes_mes", "REAL"), ("observacao", "TEXT")],
+    "aarrr": [("etapa", "TEXT"), ("metrica", "TEXT"), ("meta", "TEXT"), ("acao", "TEXT")],
+    "calendario_mkt": [("mes", "REAL"), ("acao", "TEXT"), ("canal", "TEXT"), ("custo", "REAL")],
+    "mc_faixas": [("variavel", "TEXT"), ("minimo_pct", "REAL"), ("maximo_pct", "REAL")],
+    "formalizacao": [("item", "TEXT"), ("status", "TEXT"), ("observacao", "TEXT")],
+    "banca_respostas": [("pergunta", "TEXT"), ("resposta", "TEXT")],
 }
 
 # Valores-padrão de um projeto em branco
@@ -247,6 +273,9 @@ PROJETO_PADRAO = {
     "verba_aquisicao_mensal": 0.0, "bcg_limite_crescimento_pct": 10.0,
     "reforma_b2b_pct": 0.0, "reforma_cbs_pct": 11.3, "reforma_ibs_pct": 0.1, "reforma_ano": 2027.0,
     "reforma_compras_credito": -1.0,
+    "intencao_certamente_pct": 0.0, "intencao_provavel_pct": 0.0, "fator_certamente_pct": 70.0, "fator_provavel_pct": 30.0,
+    "nps_meta": 50.0, "bass_mercado": 0.0, "bass_p": 0.03, "bass_q": 0.38, "revenda_ativos_pct": 40.0,
+    "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -1232,6 +1261,153 @@ def popular_estrategia(conn, qual: str) -> None:
               "Poder de barganha dos clientes", "Poder de barganha dos fornecedores"]
     conn.executemany("INSERT INTO porter (forca, intensidade, justificativa, estrategia) VALUES (?,?,?,?)",
                      [(f, *v) for f, v in zip(forcas, e["porter"])])
+    popular_validacao(conn, qual)
+
+
+# ------------------------------------------------------------------------------
+# DADOS DE EXEMPLO DAS FERRAMENTAS DE VALIDAÇÃO E MARKETING (v7.1) - fictícios
+# ------------------------------------------------------------------------------
+def _respostas_vw(preco: float, n: int, semente: int) -> list:
+    """Respostas fictícias e coerentes do teste de Van Westendorp em torno de um preço."""
+    import random
+    rnd = random.Random(semente)
+    linhas = []
+    for i in range(n):
+        base = preco * rnd.uniform(0.75, 1.25)
+        mb = round(base * rnd.uniform(0.45, 0.65), 0)
+        ba = round(base * rnd.uniform(0.75, 0.9), 0)
+        ca = round(base * rnd.uniform(1.05, 1.25), 0)
+        mc = round(base * rnd.uniform(1.35, 1.7), 0)
+        linhas.append((f"R{i + 1:02d}", mb, max(ba, mb), max(ca, ba), max(mc, ca)))
+    return linhas
+
+
+_VALIDACAO = {
+    "fitbox": {
+        "vw_produto": "Assinatura semanal - 5 marmitas tradicionais", "vw_preco": 129.9, "vw_n": 32,
+        "intencao": (18.0, 31.0),
+        "entrevistas": [
+            ("03/02", "E01", "Trabalhadora de escritório", "falta de tempo; comida pouco saudável perto do trabalho", "marmita de casa", "Sim", 130, "Quer variar o cardápio na semana"),
+            ("03/02", "E02", "Praticante de academia", "dificuldade de controlar macros; falta de tempo", "prepara no domingo", "Sim", 150, "Valoriza tabela nutricional"),
+            ("04/02", "E03", "Estudante universitário", "preço alto; comida pouco saudável perto do trabalho", "restaurante a quilo", "Talvez", 90, "Sensível a preço"),
+            ("04/02", "E04", "Profissional liberal", "falta de tempo; enjoa da mesma comida", "aplicativo de delivery", "Sim", 140, "Pediu entrega até 11h"),
+            ("05/02", "E05", "Mãe que trabalha fora", "falta de tempo; dificuldade de controlar macros", "congela comida", "Sim", 120, "Quer opção para a família"),
+            ("05/02", "E06", "Praticante de corrida", "dificuldade de controlar macros", "marmitaria fitness", "Talvez", 110, "Já usa concorrente"),
+            ("06/02", "E07", "Servidor público", "comida pouco saudável perto do trabalho; falta de tempo", "restaurante a quilo", "Sim", 130, "Almoça no trabalho"),
+            ("06/02", "E08", "Estudante universitário", "preço alto", "lanche", "Não", 60, "Não é o público prioritário"),
+            ("07/02", "E09", "Trabalhadora de escritório", "falta de tempo; enjoa da mesma comida", "marmita de casa", "Sim", 125, "Indicaria a colegas"),
+            ("07/02", "E10", "Personal trainer", "dificuldade de controlar macros", "prepara em casa", "Talvez", 140, "Possível parceiro de indicação"),
+            ("08/02", "E11", "Profissional de saúde", "falta de tempo; comida pouco saudável perto do trabalho", "aplicativo de delivery", "Sim", 135, "Plantões longos"),
+            ("08/02", "E12", "Praticante de academia", "falta de tempo; dificuldade de controlar macros", "marmitaria fitness", "Sim", 145, "Quer suplementos junto"),
+        ],
+        "evidencias": {"Preço de venda": ("Testada com clientes (entrevista, pré-venda, piloto)", "32 respostas do teste de preço e 12 entrevistas (fev.)"),
+                       "Custo de materiais e mercadorias": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Orçamentos de 3 fornecedores"),
+                       "Salários e encargos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Piso da categoria e tabela do contador"),
+                       "Demais custos fixos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Aluguel e contas cotados")},
+        "vpc": ("Quando tenho pouco tempo no almoço, quero comer algo saudável e saboroso, para manter a dieta sem perder o horário.",
+                "Almoçar em pouco tempo\nSeguir a dieta da nutricionista\nPlanejar a alimentação da semana",
+                "Falta de tempo\nComida pouco saudável perto do trabalho\nDificuldade de controlar macros\nEnjoa da mesma comida",
+                "Sentir mais disposição\nVer resultado no treino\nEconomizar com delivery caro",
+                "Marmitas fitness\nAssinatura semanal e mensal\nCoffee break saudável",
+                "Entrega no trabalho até 11h\nTabela nutricional em cada marmita\nCardápio que muda toda semana",
+                "Acompanhamento com nutricionista parceira\nPreço de assinatura menor que o delivery"),
+        "encaixe": [("Falta de tempo", "Dor", "Entrega no trabalho até 11h"),
+                    ("Comida pouco saudável perto do trabalho", "Dor", "Tabela nutricional em cada marmita"),
+                    ("Dificuldade de controlar macros", "Dor", "Tabela nutricional em cada marmita"),
+                    ("Enjoa da mesma comida", "Dor", "Cardápio que muda toda semana"),
+                    ("Ver resultado no treino", "Ganho", "Acompanhamento com nutricionista parceira"),
+                    ("Economizar com delivery caro", "Ganho", "Preço de assinatura menor que o delivery")],
+        "errc": [("Variedade", "Reduzir", 6, "Cardápio enxuto e rotativo reduz custo e desperdício"),
+                 ("Design", "Reduzir", 5, "Embalagem simples e reciclável"),
+                 ("Transparência nutricional", "Elevar", 10, "Tabela completa e macros em cada marmita"),
+                 ("Conveniência", "Elevar", 9, "Entrega programada no trabalho"),
+                 ("Personalização", "Criar", 8, "Ajuste de porções conforme o objetivo do cliente")],
+        "posic": ("trabalhadores e praticantes de atividade física de Teófilo Otoni", "não têm tempo de preparar refeições saudáveis",
+                  "FitBox", "uma assinatura de refeições saudáveis", "entrega no trabalho refeições balanceadas com controle de macros",
+                  "marmitarias comuns e aplicativos de delivery", "cada marmita traz a tabela nutricional e o cardápio é planejado por nutricionista"),
+        "mapa": ("Preço (baixo → alto)", "Saudabilidade (baixa → alta)",
+                 [("FitBox", 6, 9), ("Concorrente A (marmitaria fitness)", 7, 7), ("Concorrente B (restaurante natural)", 8, 8),
+                  ("Concorrente C (loja de suplementos)", 5, 6), ("Restaurante a quilo", 4, 4)]),
+        "orc": [("Publicidade em Redes Sociais", 1500, 45, "Cupom por anúncio"), ("Acordos e Parcerias", 600, 25, "Código de academia parceira"),
+                ("Marketing de Conteúdo", 400, 12, "Link na bio"), ("Eventos", 800, 10, "Inscrições no estande")],
+        "aarrr": [("Aquisição", "Visitas ao perfil e cadastros", "300 cadastros/mês", "Anúncios e parcerias com academias"),
+                  ("Ativação", "Primeiro pedido em 7 dias", "40% dos cadastros", "Cupom de primeira semana"),
+                  ("Retenção", "Assinantes que renovam no mês", "75%", "Cardápio rotativo e avaliação semanal"),
+                  ("Receita", "Ticket médio mensal", "R$ 450", "Upgrade para plano mensal"),
+                  ("Indicação", "Clientes vindos de indicação", "20%", "Uma marmita grátis por indicação")],
+        "cal": [(1, "Lançamento com degustação em academias", "Eventos", 1200), (1, "Campanha de anúncios de abertura", "Redes sociais", 1500),
+                (3, "Parceria com nutricionistas", "Parcerias", 600), (6, "Campanha de indicação", "Indicação", 500)],
+        "perda": [40000, 30000, 25000, 15000],
+        "formal": {"Contratar contador ou escritório contábil": "Concluído",
+                   "Consultar a viabilidade do endereço na prefeitura (zoneamento)": "Em andamento",
+                   "Escolher a natureza jurídica (MEI, empresário individual, SLU ou LTDA)": "Concluído"},
+        "banca": [("Por que este é o momento certo para abrir este negócio?",
+                   "A procura por alimentação saudável cresce na cidade e nenhum concorrente entrega no local de trabalho com controle de macros. "
+                   "As 12 entrevistas mostraram que falta de tempo é a dor mais citada.")],
+    },
+    "cafe": {
+        "vw_produto": "Cappuccino", "vw_preco": 11.0, "vw_n": 20, "intencao": (12.0, 25.0), "entrevistas": [],
+        "evidencias": {"Demais custos fixos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Aluguel cotado")},
+        "vpc": ("Quando quero uma pausa no meio da tarde, quero um café de qualidade num lugar agradável, para descansar e encontrar amigos.",
+                "Fazer uma pausa no trabalho\nEncontrar amigos\nComprar pão para casa",
+                "Café fraco ou requentado\nFila na padaria\nPoucos lugares para sentar", "Ambiente acolhedor\nProdutos artesanais",
+                "Cafés especiais\nPães de fermentação natural\nBolos caseiros", "Café moído na hora\nAtendimento rápido no balcão",
+                "Ambiente com mesas e Wi-Fi\nProdutos da região"),
+        "errc": [("Rapidez", "Manter", 0, ""), ("Ambiente", "Elevar", 9, "Mesas, tomadas e Wi-Fi"),
+                 ("Presença digital", "Elevar", 8, "Encomendas pelo WhatsApp")],
+        "posic": ("moradores e trabalhadores do centro", "querem um café de qualidade sem pagar preço de rede", "Café Mucuri",
+                  "uma cafeteria de bairro", "serve café especial e pães artesanais com preço justo",
+                  "padarias tradicionais e redes de cafeteria", "usamos grãos e farinhas de produtores da região"),
+        "mapa": ("Preço (baixo → alto)", "Qualidade do café (baixa → alta)",
+                 [("Café Mucuri", 5, 8), ("Padaria tradicional do centro", 3, 4), ("Rede de cafeteria", 8, 8)]),
+        "orc": [("Instagram", 600, 30, "Cupom do perfil"), ("Indicação (boca a boca)", 200, 20, "Cartão fidelidade")],
+        "aarrr": [], "cal": [], "perda": [35000, 25000], "formal": {}, "banca": [],
+    },
+    "assinatura": {
+        "vw_produto": "Assinatura (ticket médio)", "vw_preco": 0, "vw_n": 0, "intencao": (8.0, 20.0), "entrevistas": [],
+        "evidencias": {"Cancelamento mensal (churn)": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Referências de SaaS para pequenas empresas")},
+        "vpc": ("Quando organizo um evento na cidade, quero que o público certo saiba dele, para encher o evento sem gastar muito com anúncios.",
+                "Divulgar eventos\nAtrair público local\nMedir o resultado da divulgação",
+                "Anúncio caro e pouco segmentado\nNão sabe se a divulgação deu resultado", "Público certo no evento\nRelatório para os patrocinadores",
+                "Aplicativo de agenda local\nPlanos de parceiro\nCobertura de eventos", "Público segmentado por cidade e interesse\nRelatório mensal de visualizações",
+                "Selo de parceiro destaque\nCobertura em vídeo"),
+        "errc": [("Conteúdo local", "Elevar", 10, "Agenda completa do Vale"), ("Relatórios de resultado", "Criar", 8, "Relatório mensal ao parceiro")],
+        "posic": ("produtores de eventos e pequenos comércios do Vale do Mucuri", "querem divulgar para o público local", "Conecta Vale",
+                  "um aplicativo de agenda e divulgação local", "leva o evento ao público certo com relatório de resultado",
+                  "perfis locais no Instagram", "o parceiro recebe todo mês o relatório de visualizações e cliques"),
+        "mapa": ("Preço (baixo → alto)", "Alcance local (baixo → alto)",
+                 [("Conecta Vale", 4, 8), ("Plataforma nacional de eventos", 7, 4), ("Perfis locais no Instagram", 3, 6)]),
+        "orc": [("Venda consultiva às empresas", 1200, 8, "Contratos fechados"), ("Instagram", 500, 4, "Cadastros pelo link")],
+        "aarrr": [], "cal": [], "perda": [30000, 30000], "formal": {}, "banca": [],
+    },
+}
+
+
+def popular_validacao(conn, qual: str) -> None:
+    v = _VALIDACAO[qual]
+    vpc = v["vpc"]
+    conn.execute("""UPDATE projeto SET vw_produto=?, intencao_certamente_pct=?, intencao_provavel_pct=?, vpc_job=?, vpc_tarefas=?,
+                    vpc_dores=?, vpc_ganhos=?, vpc_produtos=?, vpc_aliviadores=?, vpc_criadores=?, posic_segmento=?,
+                    posic_necessidade=?, posic_marca=?, posic_categoria=?, posic_beneficio=?, posic_concorrente=?,
+                    posic_diferencial=?, mapa_eixo_x=?, mapa_eixo_y=? WHERE id=1""",
+                 (v["vw_produto"], *v["intencao"], *vpc, *v["posic"], v["mapa"][0], v["mapa"][1]))
+    if v["vw_n"]:
+        conn.executemany("INSERT INTO precos_vw (respondente, muito_barato, barato, caro, muito_caro) VALUES (?,?,?,?,?)",
+                         _respostas_vw(v["vw_preco"], v["vw_n"], 7))
+    conn.executemany("""INSERT INTO entrevistas (data, entrevistado, perfil, dores, solucao_atual, pagaria, valor_pagaria, aprendizado)
+                        VALUES (?,?,?,?,?,?,?,?)""", v["entrevistas"])
+    conn.executemany("INSERT INTO evidencias (premissa, status, fonte, observacao) VALUES (?,?,?,'')",
+                     [(k, s, f) for k, (s, f) in v["evidencias"].items()])
+    conn.executemany("INSERT INTO vpc_encaixe (item, tipo, resposta) VALUES (?,?,?)", v.get("encaixe", []))
+    conn.executemany("INSERT INTO errc (atributo, acao, nova_nota, justificativa) VALUES (?,?,?,?)", v["errc"])
+    conn.executemany("INSERT INTO mapa_perceptual (marca, eixo_x, eixo_y) VALUES (?,?,?)", v["mapa"][2])
+    conn.executemany("INSERT INTO orcamento_canais (canal, gasto_mensal, clientes_mes, observacao) VALUES (?,?,?,?)", v["orc"])
+    conn.executemany("INSERT INTO aarrr (etapa, metrica, meta, acao) VALUES (?,?,?,?)", v["aarrr"])
+    conn.executemany("INSERT INTO calendario_mkt (mes, acao, canal, custo) VALUES (?,?,?,?)", v["cal"])
+    ids = [r[0] for r in conn.execute("SELECT id FROM socios ORDER BY id")]
+    conn.executemany("UPDATE socios SET perda_aceitavel=? WHERE id=?", list(zip(v["perda"], ids)))
+    conn.executemany("INSERT INTO formalizacao (item, status, observacao) VALUES (?,?,'')", list(v["formal"].items()))
+    conn.executemany("INSERT INTO banca_respostas (pergunta, resposta) VALUES (?,?)", v["banca"])
 
 # ##############################################################################
 # PARTE: pnbox_motor.py
@@ -1779,6 +1955,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         payback_simples=payback_simples, payback_desc=payback_desc, resumo=resumo, tma=tma,
         ass=ass_df, ass_planos=ass_planos, recorrencia=rec_ind, g_a=g_a, inf=inf,
         N=N, ANOS=ANOS, MESES=MESES, pes_serie=pes_serie, folha_ano1=sum(sal_enc_serie[:12]),
+        recupera_giro=bool(proj.get("recuperar_giro")),
     )
 
 
@@ -2718,8 +2895,607 @@ def simular_reforma(receita: float, aliq_simples: float, anexo: str, ano: int, c
             "custo_liquido_cliente_puro": -puro_credito_cliente, "custo_liquido_cliente_hib": -hib_credito_cliente}
 
 # ##############################################################################
+# PARTE: pnbox_validacao.py
+# ##############################################################################
+
+
+
+
+# ------------------------------------------------------------------------------
+# 1. PLACAR DE EVIDÊNCIAS
+# ------------------------------------------------------------------------------
+STATUS_EVIDENCIA = {
+    "Estimada (sem fonte)": 0.0,
+    "Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)": 0.5,
+    "Testada com clientes (entrevista, pré-venda, piloto)": 1.0,
+}
+STATUS_CURTO = {"Estimada (sem fonte)": "estimada",
+                "Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)": "pesquisada",
+                "Testada com clientes (entrevista, pré-venda, piloto)": "testada"}
+
+
+def premissas_plano(proj: dict, d: dict, res: dict) -> pd.DataFrame:
+    """Premissas que movem o resultado, com o valor usado no plano e o peso de cada uma (soma 100%)."""
+    a1 = res["anos"][1]
+    sens = sensibilidade(res) if a1["rec_bruta"] > 0 else pd.DataFrame(columns=["Variável", "Impacto absoluto"])
+    imp = dict(zip(sens["Variável"], sens["Impacto absoluto"]))
+    base = float(np.mean(list(imp.values()))) if imp else 1.0
+    base = base if base > 0 else 1.0
+    cat = res.get("cat", pd.DataFrame())
+    qtd = float(cat["qtd_mensal"].sum()) if "qtd_mensal" in cat else 0.0
+    ticket = div(float((cat["preco_venda"] * cat["qtd_mensal"]).sum()), qtd) if qtd else float("nan")
+    linhas = [
+        ("Preço de venda", f"preço médio {brl(ticket)}" if ticket == ticket else "assinaturas", imp.get("Preço de venda", base)),
+        ("Volume de vendas do Ano 1", f"receita {brl(a1['rec_bruta'])}", imp.get("Volume de vendas", base)),
+        ("Custo de materiais e mercadorias", brl(a1["custo_dir"]), imp.get("Custo de materiais e mercadorias", base)),
+        ("Salários e encargos", brl(a1["pessoal"]), imp.get("Salários e encargos", base)),
+        ("Demais custos fixos", brl(a1["fixos"]), imp.get("Demais custos fixos", base)),
+        ("Crescimento das vendas", f"{num_br(proj.get('crescimento_mensal_ano1_pct') or 0, 1)}% a.m. no Ano 1; "
+                                   f"{num_br(proj.get('crescimento_anual_pct') or 0, 1)}% a.a. depois",
+         0.5 * imp.get("Volume de vendas", base)),
+    ]
+    m = mercado(proj, res)
+    if m["preenchido"]:
+        linhas.append(("Participação de mercado (SOM)", f"{num_br(proj.get('som_pct') or 0, 1)}% do SAM", 0.4 * base))
+    if not d["funil_vendas"].empty:
+        linhas.append(("Conversão do funil de vendas", "taxas do funil", 0.4 * base))
+    rec = res.get("recorrencia", {})
+    if rec.get("tem"):
+        linhas.append(("Cancelamento mensal (churn)", pct(rec.get("churn", 0)), 0.8 * base))
+        linhas.append(("Custo de aquisição (CAC)", brl(rec.get("cac", 0)), 0.4 * base))
+    linhas.append(("Prazo de recebimento das vendas", "prazos do capital de giro", 0.2 * base))
+    df = pd.DataFrame(linhas, columns=["premissa", "valor_plano", "peso"])
+    df["peso"] = df["peso"].clip(lower=0) / max(df["peso"].clip(lower=0).sum(), 1e-9)
+    return df
+
+
+def placar_evidencias(proj: dict, d: dict, res: dict) -> dict:
+    pr = premissas_plano(proj, d, res)
+    ev = d.get("evidencias", pd.DataFrame(columns=["premissa", "status", "fonte", "observacao"]))
+    mapa = {str(r["premissa"]): r for _, r in ev.iterrows()}
+    st_, fo = [], []
+    for p in pr["premissa"]:
+        r = mapa.get(p)
+        s = str(r["status"]) if r is not None and str(r["status"]) in STATUS_EVIDENCIA else "Estimada (sem fonte)"
+        st_.append(s)
+        fo.append(str(r["fonte"]) if r is not None else "")
+    pr["status"], pr["fonte"] = st_, fo
+    pr["nota"] = pr["status"].map(STATUS_EVIDENCIA)
+    score = float((pr["peso"] * pr["nota"]).sum())
+    pend = pr[pr["nota"] < 1].sort_values("peso", ascending=False)
+    prox = pend.iloc[0]["premissa"] if not pend.empty else ""
+    return {"tabela": pr, "score": score, "proxima": prox,
+            "testadas": int((pr["nota"] == 1).sum()), "n": len(pr)}
+
+
+# ------------------------------------------------------------------------------
+# 2. ENTREVISTAS, VAN WESTENDORP E INTENÇÃO DE COMPRA
+# ------------------------------------------------------------------------------
+PAGARIA = ["Sim", "Talvez", "Não"]
+
+ROTEIRO_ENTREVISTA = """**Antes:** converse com pessoas do segmento-alvo, uma de cada vez, sem apresentar a sua ideia no começo.
+Pergunte sobre o **passado e o comportamento real**, não sobre opiniões e intenções futuras (Fitzpatrick, 2013).
+
+1. Conte a última vez que você precisou resolver [o problema]. O que aconteceu?
+2. O que foi mais difícil ou chato nisso? Por quê?
+3. O que você já tentou para resolver? Quanto gastou com isso (dinheiro e tempo)?
+4. O que você usa hoje? O que gosta e o que não gosta nessa solução?
+5. Com que frequência isso acontece?
+6. *(Só agora apresente a ideia em uma frase.)* O que achou? O que faltaria para você usar?
+7. Quanto pagaria por isso? Pagaria hoje, com um pré-cadastro ou sinal?
+8. Quem mais você conhece que tem esse problema? Pode me apresentar?
+
+**Sinais fortes:** a pessoa já gasta dinheiro ou tempo com o problema, pede para ser avisada, aceita pagar um sinal ou indica
+outras pessoas. **Sinais fracos:** elogios ("que ideia legal!") e promessas sobre o futuro ("eu compraria, com certeza")."""
+
+
+def _itens(txt) -> list:
+    return [re.sub(r"\s+", " ", x).strip().lower() for x in re.split(r"[;\n,]", str(txt or "")) if x.strip()]
+
+
+def resumo_entrevistas(d: dict, preco_ref: float = float("nan")) -> dict:
+    e = d.get("entrevistas", pd.DataFrame())
+    e = e[e["entrevistado"].astype(str).str.strip() != ""] if not e.empty else e
+    n = len(e)
+    if n == 0:
+        return {"n": 0}
+    dores = Counter(x for t in e["dores"] for x in set(_itens(t)))
+    tab_dores = pd.DataFrame([{"Dor citada": k, "Entrevistas": v, "% das entrevistas": v / n}
+                              for k, v in dores.most_common(12)])
+    pag = e["pagaria"].astype(str)
+    vals = pd.to_numeric(e["valor_pagaria"], errors="coerce")
+    vals = vals[vals > 0]
+    med = float(vals.median()) if len(vals) else float("nan")
+    return {"n": n, "dores": tab_dores, "dor_top": dores.most_common(1)[0] if dores else ("", 0),
+            "pct_sim": float((pag == "Sim").mean()), "pct_talvez": float((pag == "Talvez").mean()),
+            "pct_nao": float((pag == "Não").mean()), "mediana_valor": med,
+            "valor_vs_preco": div(med, preco_ref) if preco_ref == preco_ref and preco_ref > 0 else float("nan")}
+
+
+def van_westendorp(df: pd.DataFrame) -> dict | None:
+    """Price Sensitivity Meter (Van Westendorp, 1976). Retorna as curvas e os quatro pontos de preço."""
+    if df is None or df.empty:
+        return None
+    x = df[["muito_barato", "barato", "caro", "muito_caro"]].apply(pd.to_numeric, errors="coerce")
+    x = x[(x > 0).all(axis=1)]
+    # descarta respostas incoerentes (a ordem precisa ser muito barato <= barato <= caro <= muito caro)
+    x = x[(x["muito_barato"] <= x["barato"]) & (x["barato"] <= x["caro"]) & (x["caro"] <= x["muito_caro"])]
+    n = len(x)
+    if n < 5:
+        return {"n": n, "ok": False}
+    lo, hi = float(x.values.min()) * 0.8, float(x.values.max()) * 1.1
+    grade = np.linspace(lo, hi, 400)
+    mb = np.array([(x["muito_barato"] >= p).mean() for p in grade])
+    ba = np.array([(x["barato"] >= p).mean() for p in grade])
+    ca = np.array([(x["caro"] <= p).mean() for p in grade])
+    mc = np.array([(x["muito_caro"] <= p).mean() for p in grade])
+    nao_barato, nao_caro = 1 - ba, 1 - ca
+
+    def cruz(a, b):
+        dif = a - b
+        idx = np.where(np.diff(np.sign(dif)) != 0)[0]
+        if len(idx) == 0:
+            return float("nan")
+        i = idx[0]
+        t = dif[i] / (dif[i] - dif[i + 1]) if dif[i] != dif[i + 1] else 0.0
+        return float(grade[i] + t * (grade[i + 1] - grade[i]))
+
+    curvas = pd.DataFrame({"Preço": grade, "Muito barato": mb, "Barato": ba, "Caro": ca, "Muito caro": mc,
+                           "Não é barato": nao_barato, "Não é caro": nao_caro})
+    return {"n": n, "ok": True, "curvas": curvas,
+            "pmc": cruz(mb, nao_barato),      # preço marginal barato (limite inferior)
+            "pme": cruz(mc, nao_caro),        # preço marginal caro (limite superior)
+            "opp": cruz(mb, mc),              # preço ótimo
+            "ipp": cruz(nao_barato, nao_caro)}  # preço de indiferença
+
+
+def intencao_ajustada(proj: dict, res: dict) -> dict:
+    """Converte intenção de compra declarada em clientes prováveis (fatores editáveis)."""
+    base = float(proj.get("sam_clientes") or 0)
+    c, p = float(proj.get("intencao_certamente_pct") or 0) / 100, float(proj.get("intencao_provavel_pct") or 0) / 100
+    fc, fp = float(proj.get("fator_certamente_pct") or 70) / 100, float(proj.get("fator_provavel_pct") or 30) / 100
+    declarados = base * (c + p)
+    ajustados = base * (c * fc + p * fp)
+    gasto = float(proj.get("gasto_anual_cliente") or 0)
+    plano = div(res["anos"][1]["rec_bruta"], gasto) if gasto > 0 else float("nan")
+    return {"base": base, "declarados": declarados, "ajustados": ajustados, "plano": plano,
+            "cobertura": div(ajustados, plano) if plano == plano and plano > 0 else float("nan"),
+            "ok": base > 0 and (c + p) > 0}
+
+
+# ------------------------------------------------------------------------------
+# 3. MARKETING: PROPOSTA DE VALOR, CURVA DE VALOR, POSICIONAMENTO, CANAIS
+# ------------------------------------------------------------------------------
+BLOCOS_VPC = [("vpc_tarefas", "Tarefas do cliente (jobs)", "O que o cliente tenta resolver ou realizar"),
+              ("vpc_dores", "Dores", "O que incomoda, atrapalha ou gera risco antes, durante e depois da tarefa"),
+              ("vpc_ganhos", "Ganhos", "Resultados e benefícios que o cliente quer ou que o surpreenderiam"),
+              ("vpc_produtos", "Produtos e serviços", "O que a empresa oferece"),
+              ("vpc_aliviadores", "Aliviadores de dores", "Como a oferta elimina ou reduz cada dor"),
+              ("vpc_criadores", "Criadores de ganhos", "Como a oferta produz cada ganho")]
+
+
+def linhas_txt(t) -> list:
+    return [x.strip(" -•\t") for x in str(t or "").splitlines() if x.strip(" -•\t")]
+
+
+def encaixe_vpc(proj: dict, d: dict) -> dict:
+    dores, ganhos = linhas_txt(proj.get("vpc_dores")), linhas_txt(proj.get("vpc_ganhos"))
+    enc = d.get("vpc_encaixe", pd.DataFrame(columns=["item", "tipo", "resposta"]))
+    resp = {(str(r["tipo"]), str(r["item"])): str(r["resposta"]) for _, r in enc.iterrows()}
+    linhas = [{"tipo": "Dor", "item": x, "resposta": resp.get(("Dor", x), "")} for x in dores] + \
+             [{"tipo": "Ganho", "item": x, "resposta": resp.get(("Ganho", x), "")} for x in ganhos]
+    tab = pd.DataFrame(linhas, columns=["tipo", "item", "resposta"])
+    cobertos = int((tab["resposta"].astype(str).str.strip() != "").sum()) if not tab.empty else 0
+    return {"tabela": tab, "cobertos": cobertos, "total": len(tab), "encaixe": div(cobertos, len(tab)) if len(tab) else float("nan")}
+
+
+ACOES_ERRC = ["Manter", "Eliminar", "Reduzir", "Elevar", "Criar"]
+
+
+def curva_valor(d: dict) -> pd.DataFrame:
+    """Notas da concorrência (formato longo) + nova curva proposta pelo ERRC."""
+    notas = d["concorrencia_notas"].copy()
+    notas = notas[notas["atributo"].astype(str).str.strip() != ""]
+    errc = d.get("errc", pd.DataFrame(columns=["atributo", "acao", "nova_nota", "justificativa"]))
+    novos = errc[errc["atributo"].astype(str).str.strip() != ""]
+    linhas = [{"Atributo": r["atributo"], "Empresa": r["empresa"], "Nota": float(r["nota"])} for _, r in notas.iterrows()]
+    nossa = {r["atributo"]: float(r["nota"]) for _, r in notas[notas["empresa"] == "Nossa Empresa"].iterrows()}
+    for _, r in novos.iterrows():
+        a = r["atributo"]
+        if str(r["acao"]) == "Eliminar":
+            v = 0.0
+        elif float(r["nova_nota"] or 0) > 0 or str(r["acao"]) in ("Criar", "Reduzir"):
+            v = float(r["nova_nota"] or 0)
+        else:
+            v = nossa.get(a, 0.0)
+        linhas.append({"Atributo": a, "Empresa": "Nova curva (ERRC)", "Nota": v})
+    for a, v in nossa.items():
+        if a not in set(novos["atributo"]):
+            linhas.append({"Atributo": a, "Empresa": "Nova curva (ERRC)", "Nota": v})
+    df = pd.DataFrame(linhas, columns=["Atributo", "Empresa", "Nota"])
+    ordem = list(dict.fromkeys(list(notas["atributo"]) + list(novos["atributo"])))
+    df["ordem"] = df["Atributo"].map({a: i for i, a in enumerate(ordem)})
+    return df.sort_values(["ordem", "Empresa"]).drop(columns="ordem").reset_index(drop=True)
+
+
+def leitura_errc(d: dict) -> str:
+    errc = d.get("errc", pd.DataFrame())
+    if errc.empty:
+        return ""
+    cont = Counter(str(a) for a in errc["acao"])
+    if cont.get("Criar", 0) == 0 and cont.get("Eliminar", 0) + cont.get("Reduzir", 0) == 0:
+        return ("A nova curva só eleva ou mantém atributos: isso tende a aumentar custos sem diferenciar. "
+                "Procure o que eliminar ou reduzir (o que o cliente não valoriza) e algo novo para criar.")
+    if cont.get("Criar", 0) == 0:
+        return "Há cortes de atributos, mas nada novo foi criado: que fator, que o setor não oferece, poderia atrair não clientes?"
+    return (f"A nova curva elimina ou reduz {cont.get('Eliminar', 0) + cont.get('Reduzir', 0)} atributo(s), eleva "
+            f"{cont.get('Elevar', 0)} e cria {cont.get('Criar', 0)}: é o movimento de diferenciação com custo controlado "
+            "proposto pela estratégia do oceano azul.")
+
+
+def frase_posicionamento(proj: dict) -> str:
+    c = {k: str(proj.get(k) or "").strip() for k in ("posic_segmento", "posic_necessidade", "posic_marca", "posic_categoria",
+                                                       "posic_beneficio", "posic_concorrente", "posic_diferencial")}
+    if not (c["posic_segmento"] and c["posic_beneficio"]):
+        return ""
+    return (f"Para {c['posic_segmento']} que {c['posic_necessidade'] or '...'}, {c['posic_marca'] or proj.get('nome_negocio', '')} "
+            f"é {c['posic_categoria'] or '...'} que {c['posic_beneficio']}. Diferentemente de {c['posic_concorrente'] or '...'}, "
+            f"{c['posic_diferencial'] or '...'}.")
+
+
+def orcamento_canais(proj: dict, d: dict, res: dict) -> pd.DataFrame:
+    oc = d.get("orcamento_canais", pd.DataFrame())
+    oc = oc[oc["canal"].astype(str).str.strip() != ""] if not oc.empty else oc
+    if oc.empty:
+        return pd.DataFrame()
+    rec = res.get("recorrencia", {})
+    valor = float(rec.get("ltv") or 0) if rec.get("tem") and rec.get("ltv", 0) == rec.get("ltv", 0) else 0.0
+    rotulo = "LTV"
+    if valor <= 0:
+        valor, rotulo = float(proj.get("gasto_anual_cliente") or 0), "gasto anual"
+    out = pd.DataFrame({"Canal": oc["canal"], "Gasto mensal": oc["gasto_mensal"], "Clientes novos/mês": oc["clientes_mes"]})
+    out["CAC"] = [div(g, c) if c > 0 else float("nan") for g, c in zip(out["Gasto mensal"], out["Clientes novos/mês"])]
+    out["Valor do cliente"] = valor
+    out["Retorno por R$ 1"] = [div(c * valor, g) if g > 0 else float("nan") for g, c in zip(out["Gasto mensal"], out["Clientes novos/mês"])]
+    out.attrs["rotulo_valor"] = rotulo
+    return out
+
+
+ETAPAS_AARRR = [("Aquisição", "Como as pessoas descobrem o negócio?"),
+                ("Ativação", "Qual é a primeira boa experiência do cliente?"),
+                ("Retenção", "O que faz o cliente voltar ou continuar assinando?"),
+                ("Receita", "Como e quando o cliente paga?"),
+                ("Indicação", "Por que o cliente indicaria o negócio a outras pessoas?")]
+
+
+# ------------------------------------------------------------------------------
+# 4. INCERTEZA: MONTE CARLO, BASS E PERDA ACEITÁVEL
+# ------------------------------------------------------------------------------
+VARIAVEIS_MC = [("Preço de venda", -10.0, 5.0), ("Volume de vendas", -30.0, 15.0),
+                ("Custo de materiais e mercadorias", -5.0, 15.0), ("Salários e encargos", 0.0, 10.0),
+                ("Demais custos fixos", -5.0, 15.0), ("Crescimento anual (pontos percentuais)", -5.0, 3.0)]
+
+
+def faixas_mc(d: dict) -> pd.DataFrame:
+    f = d.get("mc_faixas", pd.DataFrame(columns=["variavel", "minimo_pct", "maximo_pct"]))
+    mapa = {str(r["variavel"]): (float(r["minimo_pct"]), float(r["maximo_pct"])) for _, r in f.iterrows()}
+    return pd.DataFrame([{"variavel": v, "minimo_pct": mapa.get(v, (a, b))[0], "maximo_pct": mapa.get(v, (a, b))[1]}
+                         for v, a, b in VARIAVEIS_MC])
+
+
+def monte_carlo(res: dict, faixas: pd.DataFrame, n: int = 3000, seed: int = 42) -> dict:
+    """
+    Sorteia variações (distribuição triangular: mínimo, 0 = provável, máximo) e recalcula o VPL do projeto
+    e o menor saldo de caixa do Ano 1 com a mesma lógica do motor (fluxo do projeto = EBITDA).
+    """
+    rng = np.random.default_rng(seed)
+    fx = {r["variavel"]: (float(r["minimo_pct"]) / 100, float(r["maximo_pct"]) / 100) for _, r in faixas.iterrows()}
+
+    def sorteio(nome):
+        a, b = fx.get(nome, (0.0, 0.0))
+        a, b = min(a, 0.0), max(b, 0.0)
+        if a == b:
+            return np.zeros(n)
+        return rng.triangular(a, 0.0, b, n)
+
+    fp, fv = 1 + sorteio("Preço de venda"), 1 + sorteio("Volume de vendas")
+    fm, fs = 1 + sorteio("Custo de materiais e mercadorias"), 1 + sorteio("Salários e encargos")
+    ff, dg = 1 + sorteio("Demais custos fixos"), sorteio("Crescimento anual (pontos percentuais)")
+    g_a, tma, N = res["g_a"], res["tma"], res["N"]
+    adj = (1 + g_a + dg) / (1 + g_a)
+    vpl = -res["investimento_total"] * np.ones(n)
+    fluxo_anos = []
+    for k in res["ANOS"]:
+        a = res["anos"][k]
+        gk = adj ** (k - 1)
+        rec = a["rec_bruta"] * fp * fv * gk
+        var_ratio = div(a["impostos"] + a["outras_var"], a["rec_bruta"]) if a["rec_bruta"] else 0.0
+        ebitda = rec - a["custo_dir"] * fv * fm * gk - rec * var_ratio - a["pessoal"] * fs - a["fixos"] * ff
+        if k == N and res.get("recupera_giro"):
+            ebitda = ebitda + res.get("capital_giro", 0.0)
+        fluxo_anos.append(ebitda)
+        vpl = vpl + ebitda / (1 + tma) ** k
+    # caixa mês a mês do Ano 1
+    fm_df = res["fluxo_mensal"]
+    a1 = res["anos"][1]
+    w_s = div(a1["pessoal"], a1["pessoal"] + a1["fixos"]) if (a1["pessoal"] + a1["fixos"]) else 0.5
+    saldo = float(fm_df["Saldo inicial"].iloc[0]) * np.ones(n)
+    minimo = np.full(n, np.inf)
+    for _, r in fm_df.iterrows():
+        saldo = saldo + r["Recebimentos"] * fp * fv - r["Fornecedores"] * fv * fm - r["Impostos e desp. variáveis"] * fp * fv \
+            - r["Pessoal e custos fixos"] * (w_s * fs + (1 - w_s) * ff) - r["Parcelas de empréstimos"]
+        minimo = np.minimum(minimo, saldo)
+    return {"vpl": vpl, "caixa_min": minimo, "n": n,
+            "p_vpl_pos": float((vpl > 0).mean()), "p_caixa_neg": float((minimo < 0).mean()),
+            "p5": float(np.percentile(vpl, 5)), "p50": float(np.percentile(vpl, 50)), "p95": float(np.percentile(vpl, 95)),
+            "caixa_p5": float(np.percentile(minimo, 5)), "vpl_medio": float(vpl.mean())}
+
+
+def leitura_mc(mc: dict) -> str:
+    p = mc["p_vpl_pos"]
+    if p >= 0.8:
+        txt = "O projeto é robusto: na grande maioria dos cenários sorteados ele cria valor."
+    elif p >= 0.6:
+        txt = "O projeto tende a criar valor, mas há uma chance relevante de fracasso: proteja-se das variáveis mais sensíveis."
+    elif p >= 0.4:
+        txt = "Resultado incerto, quase uma aposta: valide as premissas críticas antes de investir."
+    else:
+        txt = "Na maior parte dos cenários o projeto destrói valor: o modelo de negócio precisa ser revisto."
+    if mc["p_caixa_neg"] > 0.2:
+        txt += f" Em {pct(mc['p_caixa_neg'], 0)} dos cenários o caixa fica negativo no Ano 1: aumente a reserva ou o capital de giro."
+    return txt
+
+
+def bass_curva(m: float, p: float, q: float, anos: int) -> pd.DataFrame:
+    """Modelo de difusão de Bass (1969): adotantes acumulados ao fim de cada ano."""
+    linhas = []
+    for t in range(1, anos + 1):
+        F = (1 - math.exp(-(p + q) * t)) / (1 + (q / p) * math.exp(-(p + q) * t)) if p > 0 else 0.0
+        linhas.append({"Ano": t, "Adotantes acumulados": m * F, "% do mercado potencial": F})
+    df = pd.DataFrame(linhas)
+    df["Novos adotantes no ano"] = df["Adotantes acumulados"].diff().fillna(df["Adotantes acumulados"])
+    return df
+
+
+def bass_comparacao(proj: dict, res: dict) -> dict:
+    m = float(proj.get("bass_mercado") or 0) or float(proj.get("sam_clientes") or 0)
+    p, q = float(proj.get("bass_p") or 0.03), float(proj.get("bass_q") or 0.38)
+    gasto = float(proj.get("gasto_anual_cliente") or 0)
+    if m <= 0:
+        return {"ok": False}
+    cv = bass_curva(m, p, q, res["N"])
+    if gasto > 0:
+        cv["Clientes no plano"] = [div(res["anos"][k]["rec_bruta"], gasto) for k in res["ANOS"]]
+        cv["Plano ÷ Bass"] = [div(a, b) for a, b in zip(cv["Clientes no plano"], cv["Adotantes acumulados"])]
+    return {"ok": True, "m": m, "p": p, "q": q, "tabela": cv, "tem_plano": gasto > 0}
+
+
+def perda_aceitavel(proj: dict, d: dict, res: dict) -> dict:
+    soc = d["socios"]
+    aceit = float(soc["perda_aceitavel"].sum()) if "perda_aceitavel" in soc else 0.0
+    proprio = float(soc["capital_integralizado"].sum())
+    divida = float(d["emprestimos"]["valor"].sum())
+    revenda = float(proj.get("revenda_ativos_pct") if proj.get("revenda_ativos_pct") is not None else 40) / 100
+    inv_fixo = float((d["inv_fixos"]["quantidade"] * d["inv_fixos"]["valor_unitario"]).sum())
+    potencial = max(proprio + divida - inv_fixo * revenda, 0.0)
+    return {"aceitavel": aceit, "proprio": proprio, "divida": divida, "revenda": inv_fixo * revenda,
+            "potencial": potencial, "ok": aceit > 0, "cabe": aceit >= potencial}
+
+
+# ------------------------------------------------------------------------------
+# 5. DEFESA: FORMALIZAÇÃO, PRONTIDÃO E BANCA SIMULADA
+# ------------------------------------------------------------------------------
+LIMITE_MEI, LIMITE_ME, LIMITE_EPP = 81_000.0, 360_000.0, 4_800_000.0
+STATUS_FORMAL = ["Pendente", "Em andamento", "Concluído", "Não se aplica"]
+
+
+def itens_formalizacao(proj: dict, d: dict) -> list:
+    tipo = str(proj.get("tipo_negocio") or "")
+    setor = (str(proj.get("setor_atuacao") or "") + " " + str(proj.get("nome_negocio") or "")).lower()
+    itens = ["Escolher a natureza jurídica (MEI, empresário individual, SLU ou LTDA)",
+             "Definir as atividades (CNAE) e conferir se são permitidas no Simples/MEI",
+             "Consultar a viabilidade do endereço na prefeitura (zoneamento)",
+             "Registrar a empresa (Junta Comercial / Redesim) e obter o CNPJ",
+             "Inscrição municipal e alvará de funcionamento",
+             "Optar pelo Simples Nacional (prazo no início da atividade)",
+             "Contratar contador ou escritório contábil",
+             "Abrir conta bancária PJ e meios de pagamento",
+             "Contrato social com acordo de sócios (entrada, saída, divisão de lucros)",
+             "Registrar a marca no INPI"]
+    if any(w in setor for w in ("aliment", "café", "cafe", "restaurante", "lanche", "refei", "fit", "padaria", "bebida")):
+        itens.append("Licença sanitária (Vigilância Sanitária) e boas práticas de manipulação")
+    if float(proj.get("loc_area_m2") or 0) > 0 or proj.get("loc_endereco"):
+        itens.append("Auto de vistoria / licença do Corpo de Bombeiros")
+    if not d["pessoal"].empty:
+        itens.append("Registro de empregados (eSocial), exames admissionais e segurança do trabalho")
+    if tipo.startswith(("Assinatura", "Serviço", "Misto")) or "app" in setor or "aplicativo" in setor:
+        itens += ["LGPD: política de privacidade, bases legais e encarregado de dados",
+                  "Termos de uso e contrato de assinatura (renovação, cancelamento, reembolso)"]
+    return itens
+
+
+def porte_sugerido(res: dict, d: dict) -> dict:
+    rec = res["anos"][1]["rec_bruta"]
+    n_soc = len(d["socios"])
+    n_emp = float(d["pessoal"]["num_empregados"].sum()) if not d["pessoal"].empty else 0
+    if rec <= LIMITE_MEI and n_soc <= 1 and n_emp <= 1:
+        porte = "MEI (se a atividade for permitida)"
+    elif rec <= LIMITE_ME:
+        porte = "Microempresa (ME)"
+    elif rec <= LIMITE_EPP:
+        porte = "Empresa de Pequeno Porte (EPP)"
+    else:
+        porte = "Acima do limite do Simples Nacional (Lucro Presumido ou Real)"
+    obs = []
+    if rec <= LIMITE_MEI and n_soc > 1:
+        obs.append("O MEI não admite sócios: com mais de um sócio, o caminho é ME (LTDA).")
+    return {"porte": porte, "receita": rec, "obs": obs}
+
+
+NIVEIS_PRONTIDAO = [
+    (1, "Ideia descrita", "Missão, proposta de valor e segmento definidos."),
+    (2, "Mercado dimensionado", "TAM, SAM e SOM estimados e meta de vendas coerente com o SOM."),
+    (3, "Hipóteses mapeadas", "Canvas, premissas listadas e status de evidência informado."),
+    (4, "Problema validado", "Pelo menos 10 entrevistas e uma dor citada por metade ou mais dos entrevistados."),
+    (5, "Solução e preço validados", "Preço dentro da faixa aceitável (Van Westendorp) ou 40% ou mais dispostos a pagar."),
+    (6, "Modelo econômico viável", "VPL positivo e caixa do Ano 1 sem ficar negativo."),
+    (7, "Viabilidade robusta", "Chance de VPL positivo de 70% ou mais (Monte Carlo) e placar de evidências de 50% ou mais."),
+    (8, "Plano de execução", "Objetivos SMART, cronograma, riscos e 60% ou mais do checklist de formalização encaminhado."),
+    (9, "Pronto para lançar ou buscar investimento", "Placar de 75% ou mais, perda aceitável coberta e perguntas da banca respondidas."),
+]
+
+
+def avaliar_prontidao(proj: dict, d: dict, res: dict, mc: dict | None, preco_ref: float) -> dict:
+    a1 = res["anos"][1]
+    pl = placar_evidencias(proj, d, res)
+    ent = resumo_entrevistas(d, preco_ref)
+    vw = van_westendorp(d.get("precos_vw"))
+    m = mercado(proj, res)
+    fo = d.get("formalizacao", pd.DataFrame())
+    fo_ok = div(float(fo["status"].isin(["Concluído", "Em andamento", "Não se aplica"]).sum()), len(fo)) if len(fo) else 0.0
+    perda = perda_aceitavel(proj, d, res)
+    resp = d.get("banca_respostas", pd.DataFrame())
+    n_resp = int((resp["resposta"].astype(str).str.len() > 20).sum()) if not resp.empty else 0
+    preco_ok = False
+    if vw and vw.get("ok") and preco_ref == preco_ref:
+        preco_ok = vw["pmc"] <= preco_ref <= vw["pme"]
+    cond = {
+        1: bool(proj.get("missao")) and not d["propostas"].empty and not d["segmentos"].empty,
+        2: m["preenchido"] and (m["pct_som"] != m["pct_som"] or m["pct_som"] <= 1.0),
+        3: (d.get("evidencias") is not None and len(d["evidencias"]) >= 3),
+        4: ent["n"] >= 10 and ent.get("dor_top", ("", 0))[1] >= ent["n"] / 2,
+        5: preco_ok or (ent["n"] >= 10 and ent.get("pct_sim", 0) >= 0.4),
+        6: res["vpl"] > 0 and float(res["fluxo_mensal"]["Saldo final"].min()) >= 0,
+        7: mc is not None and mc["p_vpl_pos"] >= 0.7 and pl["score"] >= 0.5,
+        8: len(d["objetivos"]) >= 3 and len(d["cronograma"]) >= 3 and len(d["riscos"]) >= 3 and fo_ok >= 0.6,
+        9: pl["score"] >= 0.75 and perda["ok"] and perda["cabe"] and n_resp >= 5,
+    }
+    nivel = 0
+    for k in range(1, 10):
+        if cond[k]:
+            nivel = k
+        else:
+            break
+    return {"nivel": nivel, "cond": cond, "a_rec": a1["rec_bruta"]}
+
+
+def perguntas_banca(proj: dict, d: dict, res: dict, mc: dict | None, preco_ref: float) -> list:
+    """Perguntas que uma banca faria, geradas a partir das fragilidades do próprio plano."""
+    P = []
+
+    def add(tema, pergunta, motivo):
+        P.append({"tema": tema, "pergunta": pergunta, "motivo": motivo})
+
+    a1 = res["anos"][1]
+    rec = a1["rec_bruta"]
+    m = mercado(proj, res)
+    pl = placar_evidencias(proj, d, res)
+    ent = resumo_entrevistas(d, preco_ref)
+    vw = van_westendorp(d.get("precos_vw"))
+    rr = res.get("recorrencia", {})
+    if pl["score"] < 0.5:
+        add("Evidências", f"Quais números do plano foram testados com clientes reais? Por que devemos acreditar em "
+                          f"\"{pl['proxima']}\"?", f"Placar de evidências em {pct(pl['score'], 0)}.")
+    if ent["n"] < 10:
+        add("Cliente", "Com quantos clientes do segmento-alvo vocês conversaram? O que aprenderam que mudou o plano?",
+            f"{ent['n']} entrevista(s) registrada(s).")
+    if vw and vw.get("ok") and preco_ref == preco_ref and not (vw["pmc"] <= preco_ref <= vw["pme"]):
+        lado = "acima" if preco_ref > vw["pme"] else "abaixo"
+        add("Preço", f"O preço médio ({brl(preco_ref)}) está {lado} da faixa que os clientes consideram aceitável "
+                     f"({brl(vw['pmc'])} a {brl(vw['pme'])}). Como justificam?", "Teste de Van Westendorp.")
+    if m["preenchido"] and m["pct_som"] == m["pct_som"] and m["pct_som"] > 1:
+        add("Mercado", "A receita do Ano 1 é maior que o mercado que vocês dizem conseguir conquistar (SOM). De onde vêm esses clientes?",
+            f"Receita = {pct(m['pct_som'], 0)} do SOM.")
+    if res["vpl"] <= 0:
+        add("Viabilidade", "O VPL é negativo. O que mudaria no modelo de negócio para torná-lo viável, e por que ainda vale a pena?",
+            f"VPL de {brl(res['vpl'])}.")
+    tir = res.get("tir")
+    if tir == tir and tir is not None and res["vpl"] > 0 and tir < res["tma"] * 1.3:
+        add("Retorno", "A TIR é pouco maior que a TMA. Por que não deixar o dinheiro aplicado, com menos risco?",
+            f"TIR {pct(tir)} x TMA {pct(res['tma'])}.")
+    minimo = float(res["fluxo_mensal"]["Saldo final"].min())
+    if minimo < 0:
+        add("Caixa", "O caixa fica negativo no primeiro ano. Quem cobre esse buraco e em que mês?", f"Menor saldo: {brl(minimo)}.")
+    if a1["imc"] == a1["imc"] and a1["imc"] < 0.3:
+        add("Margem", "A margem de contribuição é baixa. O que acontece se o fornecedor aumentar o preço em 10%?",
+            f"Margem de contribuição de {pct(a1['imc'])}.")
+    if rec > 0 and div(a1["pessoal"], rec) > 0.45:
+        add("Equipe", "A folha consome quase metade da receita. A equipe não está grande demais para o início?",
+            f"Pessoal = {pct(div(a1['pessoal'], rec), 0)} da receita.")
+    if rr.get("tem"):
+        if rr.get("churn", 0) > 0.05:
+            add("Retenção", "O churn mensal passa de 5%. O que fará o assinante continuar depois do terceiro mês?",
+                f"Churn de {pct(rr['churn'])} ao mês.")
+        lc = rr.get("ltv_cac", float("nan"))
+        if lc == lc and lc < 3:
+            add("Aquisição", "O LTV é menor que três vezes o CAC. O crescimento não vai queimar caixa?", f"LTV/CAC = {num_br(lc, 1)}.")
+    if mc is not None and mc["p_vpl_pos"] < 0.6:
+        add("Risco", "Em quase metade das simulações o negócio não se paga. Qual é o plano B?",
+            f"Chance de VPL positivo: {pct(mc['p_vpl_pos'], 0)}.")
+    perda = perda_aceitavel(proj, d, res)
+    if perda["ok"] and not perda["cabe"]:
+        add("Sócios", "Se der errado, vocês podem perder mais do que disseram aceitar. Como reduzir o investimento inicial?",
+            f"Perda potencial {brl(perda['potencial'])} x aceitável {brl(perda['aceitavel'])}.")
+    errc = d.get("errc", pd.DataFrame())
+    if errc.empty or not (errc["acao"] == "Criar").any():
+        add("Diferenciação", "O que vocês oferecem que nenhum concorrente oferece? Por que um concorrente grande não copiaria amanhã?",
+            "Nenhum atributo novo na curva de valor.")
+    forn = d["fornecedores"]
+    if not forn.empty and int(forn["critico"].sum()) >= 1 and len(forn) <= 2:
+        add("Operação", "Há dependência de poucos fornecedores críticos. O que acontece se o principal falhar?", "Fornecedores críticos.")
+    add("Timing", "Por que este é o momento certo para abrir este negócio?", "Pergunta clássica de banca.")
+    add("Equipe", "Por que este grupo é o mais capaz de executar este plano?", "Pergunta clássica de banca.")
+    return P
+
+
+def preco_referencia(proj: dict, res: dict) -> float:
+    """Preço do produto escolhido no teste de preço; sem escolha, preço médio ponderado (ou ARPU das assinaturas)."""
+    cat = res.get("cat", pd.DataFrame())
+    alvo = str(proj.get("vw_produto") or "")
+    if alvo and not cat.empty and alvo in set(cat["descricao"]):
+        return float(cat.loc[cat["descricao"] == alvo, "preco_venda"].iloc[0])
+    if alvo.startswith("Assinatura") or (cat.empty and res.get("recorrencia", {}).get("tem")):
+        return float(res["recorrencia"].get("arpu", float("nan")))
+    if cat.empty or float(cat["qtd_mensal"].sum()) <= 0:
+        return float("nan")
+    return div(float((cat["preco_venda"] * cat["qtd_mensal"]).sum()), float(cat["qtd_mensal"].sum()))
+
+
+def regras_v71(proj: dict, d: dict) -> dict:
+    """Situação de preenchimento das ferramentas novas: (completo, iniciado)."""
+    def n(t):
+        x = d.get(t)
+        return 0 if x is None else len(x)
+    pos = [proj.get(k) for k in ("posic_segmento", "posic_beneficio", "posic_diferencial")]
+    vpc = [proj.get(k) for k, _, _ in BLOCOS_VPC]
+    ev = d.get("evidencias", pd.DataFrame(columns=["status"]))
+    fo = d.get("formalizacao", pd.DataFrame(columns=["status"]))
+    resp = d.get("banca_respostas", pd.DataFrame(columns=["resposta"]))
+    n_resp = int((resp["resposta"].astype(str).str.len() > 20).sum()) if len(resp) else 0
+    errc = d.get("errc", pd.DataFrame(columns=["acao"]))
+    rec = n("catalogo") > 0 or n("assinaturas") > 0
+    return {
+        "entrevistas": (n("entrevistas") >= 10, n("entrevistas") >= 1),
+        "vpc": (all(vpc), any(vpc)),
+        "oceano": (n("errc") >= 3 and bool((errc["acao"] == "Criar").any()), n("errc") >= 1),
+        "posicionamento": (all(pos) and n("mapa_perceptual") >= 2, any(pos) or n("mapa_perceptual") >= 1),
+        "orcamento_mkt": (n("orcamento_canais") >= 1 and n("aarrr") >= 5, n("orcamento_canais") >= 1 or n("calendario_mkt") >= 1),
+        "teste_preco": (n("precos_vw") >= 5 or float(proj.get("intencao_certamente_pct") or 0) > 0,
+                        n("precos_vw") >= 1 or float(proj.get("intencao_certamente_pct") or 0) > 0),
+        "montecarlo": (rec and float(d["socios"]["perda_aceitavel"].sum()) > 0, rec),
+        "adocao": (float(proj.get("sam_clientes") or 0) > 0 and float(proj.get("gasto_anual_cliente") or 0) > 0,
+                   float(proj.get("sam_clientes") or 0) > 0 or float(proj.get("bass_mercado") or 0) > 0),
+        "evidencias": (len(ev) >= 3 and bool((ev["status"] != "Estimada (sem fonte)").any()), len(ev) >= 1),
+        "banca": (n_resp >= 5, n_resp >= 1),
+        "formalizacao": (len(fo) > 0 and float(fo["status"].isin(["Concluído", "Em andamento", "Não se aplica"]).mean()) >= 0.6,
+                         len(fo) >= 1),
+    }
+
+# ##############################################################################
 # PARTE: pnbox_pdf.py
 # ##############################################################################
+
+
 
 
 
@@ -3047,6 +3823,184 @@ def _texto_caixa(pdf, nome, itens, x, y, w, h):
         txt = pdf.t("• " + str(it))
         pdf.multi_cell(w - 2.4, 3.1, txt[:160], align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         yy = pdf.get_y() + 0.6
+
+
+# ------------------------------------------------------------------------------
+# FIGURAS E SEÇÕES DA VALIDAÇÃO, MARKETING, INCERTEZA E DEFESA (v7.1)
+# ------------------------------------------------------------------------------
+def _plt():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    return plt
+
+
+def png_vw(vw: dict, preco: float) -> bytes:
+    plt = _plt()
+    cv = vw["curvas"]
+    fig, ax = plt.subplots(figsize=(6.6, 3.6))
+    ax.axvspan(vw["pmc"], vw["pme"], color="#27ae60", alpha=0.12, label="faixa aceitável")
+    for c, cor in (("Muito barato", "#7fb3d5"), ("Barato", "#2471a3"), ("Caro", "#e59866"), ("Muito caro", "#c0392b")):
+        ax.plot(cv["Preço"], cv[c] * 100, color=cor, lw=2, label=c)
+    if preco == preco:
+        ax.axvline(preco, color="black", ls="--", lw=1, label="preço do plano")
+    ax.set_xlabel("Preço (R$)")
+    ax.set_ylabel("% dos respondentes")
+    ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.18), frameon=False)
+    return _fig_png(fig)
+
+
+def png_hist_mc(vpl) -> bytes:
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(6.6, 3.0))
+    n_, bins, patches = ax.hist(vpl, bins=45)
+    for b_, p_ in zip(bins, patches):
+        p_.set_facecolor("#27ae60" if b_ >= 0 else "#c0392b")
+    ax.axvline(0, color="black", lw=1)
+    from matplotlib.ticker import FuncFormatter
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v / 1000:,.0f}".replace(",", ".")))
+    ax.set_xlabel("VPL (R$ mil)")
+    ax.set_ylabel("Cenários")
+    return _fig_png(fig)
+
+
+def png_curva_valor(cv: pd.DataFrame) -> bytes:
+    plt = _plt()
+    ordem = list(dict.fromkeys(cv["Atributo"]))
+    fig, ax = plt.subplots(figsize=(6.8, 3.4))
+    for emp, g in cv.groupby("Empresa", sort=False):
+        g = g.set_index("Atributo").reindex(ordem)
+        novo = emp == "Nova curva (ERRC)"
+        ax.plot(range(len(ordem)), g["Nota"], marker="o", lw=3 if novo else 1.4, ls="-" if novo else "--",
+                color="#e67e22" if novo else None, label=emp[:28])
+    ax.set_xticks(range(len(ordem)))
+    ax.set_xticklabels([o[:18] for o in ordem], rotation=35, ha="right", fontsize=7)
+    ax.set_ylim(0, 10.5)
+    ax.legend(fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.38), frameon=False)
+    return _fig_png(fig)
+
+
+def png_bass(tb: pd.DataFrame) -> bytes:
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(6.4, 2.8))
+    ax.plot(tb["Ano"], tb["Adotantes acumulados"], marker="o", lw=2.5, label="Adoção prevista (Bass)")
+    if "Clientes no plano" in tb:
+        ax.plot(tb["Ano"], tb["Clientes no plano"], marker="s", lw=2.5, label="Clientes no plano")
+    ax.set_xlabel("Ano")
+    ax.set_ylabel("Clientes")
+    ax.set_xticks(list(tb["Ano"]))
+    ax.legend(fontsize=8, frameon=False)
+    return _fig_png(fig)
+
+
+def secoes_v71(pdf, proj, d, res):
+    preco = preco_referencia(proj, res)
+    # ---- Validação do mercado
+    pl = placar_evidencias(proj, d, res)
+    pdf.secao("VALIDAÇÃO: PLACAR DE EVIDÊNCIAS", nova_pagina=True)
+    pdf.paragrafo(f"{pct(pl['score'], 0)} do resultado está apoiado em premissas pesquisadas ou testadas com clientes. "
+                  f"Premissa a validar primeiro: {pl['proxima'] or 'nenhuma'}.", "B", 9)
+    tb = pl["tabela"]
+    pdf.tabela(pd.DataFrame({"Premissa": tb["premissa"], "Valor no plano": tb["valor_plano"], "Peso": tb["peso"].map(lambda v: pct(v, 0)),
+                             "Origem": tb["status"].map(STATUS_CURTO), "Fonte": tb["fonte"]}),
+               larguras=(46, 46, 14, 20, 54), alinhar=("LEFT", "LEFT", "RIGHT", "CENTER", "LEFT"), tam=7.2)
+    ent = resumo_entrevistas(d, preco)
+    if ent["n"]:
+        pdf.subtitulo(f"Entrevistas com clientes ({ent['n']})")
+        pdf.paragrafo(f"Pagariam: {pct(ent['pct_sim'], 0)} sim e {pct(ent['pct_talvez'], 0)} talvez. Valor mediano citado: "
+                      f"{brl(ent['mediana_valor'])} (preço de referência do plano: {brl(preco)}).", "", 8.5)
+        pdf.tabela(ent["dores"].assign(**{"% das entrevistas": ent["dores"]["% das entrevistas"].map(lambda v: pct(v, 0))}),
+                   larguras=(120, 25, 35), alinhar=("LEFT", "RIGHT", "RIGHT"), tam=7.5)
+    vw = van_westendorp(d.get("precos_vw"))
+    if vw and vw.get("ok"):
+        pdf.subtitulo(f"Teste de preço Van Westendorp ({vw['n']} respostas)")
+        pdf.image(io.BytesIO(png_vw(vw, preco)), x=30, w=150)
+        pdf.paragrafo(f"Faixa aceitável: {brl(vw['pmc'])} a {brl(vw['pme'])}. Preço ótimo: {brl(vw['opp'])}. Indiferença: "
+                      f"{brl(vw['ipp'])}. Preço do plano: {brl(preco)}.", "", 8.5)
+    ia = intencao_ajustada(proj, res)
+    if ia["ok"]:
+        pdf.paragrafo(f"Intenção de compra ajustada: {num_br(ia['ajustados'], 0)} clientes prováveis x "
+                      f"{num_br(ia['plano'], 0)} clientes supostos pelo plano no Ano 1.", "", 8.5)
+    # ---- Marketing estratégico
+    tem_vpc = any(proj.get(k) for k, _, _ in BLOCOS_VPC)
+    frase = frase_posicionamento(proj)
+    if tem_vpc or frase or not d["errc"].empty:
+        pdf.secao("PROPOSTA DE VALOR, POSICIONAMENTO E CURVA DE VALOR", nova_pagina=True)
+        if proj.get("vpc_job"):
+            pdf.campo("Trabalho do cliente (job)", proj["vpc_job"])
+        if tem_vpc:
+            lin = [(rot, "; ".join(linhas_txt(proj.get(k_)))) for k_, rot, _ in BLOCOS_VPC]
+            pdf.tabela(pd.DataFrame(lin, columns=["Bloco", "Itens"]), larguras=(45, 135), alinhar=("LEFT", "LEFT"), tam=7.5)
+            enc = encaixe_vpc(proj, d)
+            if enc["total"]:
+                pdf.paragrafo(f"Encaixe: {enc['cobertos']} de {enc['total']} dores e ganhos têm resposta na oferta.", "I", 8)
+        if frase:
+            pdf.subtitulo("Declaração de posicionamento")
+            pdf.paragrafo(frase, "", 9)
+        if not d["errc"].empty:
+            pdf.subtitulo("Curva de valor e matriz ERRC")
+            pdf.image(io.BytesIO(png_curva_valor(curva_valor(d))), x=28, w=154)
+            pdf.tabela(d["errc"].assign(nova_nota=d["errc"]["nova_nota"].map(lambda v: num_br(v, 1))).rename(columns={
+                "atributo": "Atributo", "acao": "Ação", "nova_nota": "Nova nota", "justificativa": "Justificativa"}),
+                larguras=(45, 22, 20, 93), alinhar=("LEFT", "CENTER", "CENTER", "LEFT"), tam=7.5)
+            pdf.paragrafo(leitura_errc(d), "I", 8)
+    oc = orcamento_canais(proj, d, res)
+    if not oc.empty or not d["aarrr"].empty:
+        pdf.secao("ORÇAMENTO DE MARKETING E FUNIL DE CRESCIMENTO", nova_pagina=True)
+        if not oc.empty:
+            pdf.tabela(pd.DataFrame({"Canal": oc["Canal"], "Gasto mensal": oc["Gasto mensal"].map(brl),
+                                     "Clientes/mês": oc["Clientes novos/mês"].map(lambda v: num_br(v, 0)),
+                                     "CAC": oc["CAC"].map(lambda v: brl(v) if v == v else "n.a."),
+                                     "Retorno por R$ 1": oc["Retorno por R$ 1"].map(lambda v: f"R$ {num_br(v, 2)}" if v == v else "n.a.")}),
+                       larguras=(62, 30, 24, 30, 34), alinhar=("LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"), tam=7.5)
+            pdf.paragrafo(f"Valor do cliente usado no retorno: {oc.attrs.get('rotulo_valor', '')} ({brl(float(oc['Valor do cliente'].iloc[0]))}).", "I", 7.5)
+        if not d["aarrr"].empty:
+            pdf.subtitulo("Funil AARRR")
+            pdf.tabela(d["aarrr"].rename(columns={"etapa": "Etapa", "metrica": "Métrica", "meta": "Meta", "acao": "Ação"}),
+                       larguras=(24, 50, 34, 72), alinhar=("LEFT",) * 4, tam=7.5)
+        pdf.paragrafo(f"Meta de NPS no primeiro ano: {num_br(proj.get('nps_meta') or 0, 0)}.", "", 8.5)
+    # ---- Incerteza
+    if res["anos"][1]["rec_bruta"] > 0:
+        mc = monte_carlo(res, faixas_mc(d))
+        pdf.secao("INCERTEZA: SIMULAÇÃO DE MONTE CARLO E PERDA ACEITÁVEL", nova_pagina=True)
+        pdf.paragrafo(f"{mc['n']} cenários sorteados (distribuição triangular). Chance de VPL positivo: {pct(mc['p_vpl_pos'], 0)}. "
+                      f"VPL nos 5% piores casos: {brl(mc['p5'])}; mediano: {brl(mc['p50'])}; nos 5% melhores: {brl(mc['p95'])}. "
+                      f"Chance de caixa negativo no Ano 1: {pct(mc['p_caixa_neg'], 0)}.", "", 8.5)
+        pdf.image(io.BytesIO(png_hist_mc(mc["vpl"])), x=30, w=150)
+        fx = faixas_mc(d)
+        pdf.tabela(pd.DataFrame({"Variável": fx["variavel"], "Pior caso": fx["minimo_pct"].map(lambda v: f"{num_br(v, 0)}%"),
+                                 "Melhor caso": fx["maximo_pct"].map(lambda v: f"{num_br(v, 0)}%")}),
+                   larguras=(100, 40, 40), alinhar=("LEFT", "RIGHT", "RIGHT"), tam=7.5)
+        pdf.paragrafo(leitura_mc(mc), "I", 8)
+        pa = perda_aceitavel(proj, d, res)
+        pdf.paragrafo(f"Perda potencial se o negócio fechar: {brl(pa['potencial'])} (capital dos sócios + empréstimos − venda dos bens). "
+                      f"Perda aceitável informada pelos sócios: {brl(pa['aceitavel'])}.", "", 8.5)
+        bc = bass_comparacao(proj, res)
+        if bc["ok"]:
+            pdf.subtitulo(f"Curva de adoção de Bass (p = {num_br(bc['p'], 3)}; q = {num_br(bc['q'], 2)}; mercado potencial "
+                          f"{num_br(bc['m'], 0)})")
+            pdf.image(io.BytesIO(png_bass(bc["tabela"])), x=32, w=146)
+        # ---- Defesa
+        pr = avaliar_prontidao(proj, d, res, mc, preco)
+        pdf.secao("PRONTIDÃO, BANCA SIMULADA E FORMALIZAÇÃO", nova_pagina=True)
+        pdf.tabela(pd.DataFrame({"Nível": [str(k) for k, _, _ in NIVEIS_PRONTIDAO], "Degrau": [n for _, n, _ in NIVEIS_PRONTIDAO],
+                                 "Critério": [c for _, _, c in NIVEIS_PRONTIDAO],
+                                 "Situação": ["atingido" if k <= pr["nivel"] else ("próximo" if k == pr["nivel"] + 1 else "-")
+                                              for k, _, _ in NIVEIS_PRONTIDAO]}),
+                   larguras=(12, 48, 100, 20), alinhar=("CENTER", "LEFT", "LEFT", "CENTER"), tam=7.2)
+        pdf.paragrafo(f"Nível de prontidão do negócio: {pr['nivel']} de 9.", "B", 9)
+        perg = perguntas_banca(proj, d, res, mc, preco)
+        resp = {str(r["pergunta"]): str(r["resposta"]) for _, r in d["banca_respostas"].iterrows()}
+        pdf.subtitulo("Banca simulada")
+        for i, q in enumerate(perg, start=1):
+            pdf.paragrafo(f"{i}. [{q['tema']}] {q['pergunta']}", "B", 8.3)
+            pdf.paragrafo("Resposta do grupo: " + (resp.get(q["pergunta"]) or "(sem resposta)"), "", 8.3)
+    ps = porte_sugerido(res, d)
+    pdf.subtitulo("Formalização")
+    pdf.paragrafo(f"Enquadramento sugerido pela receita do Ano 1 ({brl(ps['receita'])}): {ps['porte']}.", "", 8.5)
+    if not d["formalizacao"].empty:
+        pdf.tabela(d["formalizacao"].rename(columns={"item": "Item", "status": "Situação", "observacao": "Observação"}),
+                   larguras=(100, 26, 54), alinhar=("LEFT", "CENTER", "LEFT"), tam=7.5)
 
 
 def graficos_png(comp: dict) -> list:
@@ -3794,6 +4748,8 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
         pdf.paragrafo("Simulação didática e simplificada. Fontes: LC 214/2025, art. 41; partilha do DAS da LC 123/2006; CBS de "
                       "referência de 11,3% para 2027 calculada pelo TCU, sujeita à definição do Senado. Confirme com um contador.", "I", 7.5)
 
+    secoes_v71(pdf, proj, d, res)
+
     if str(proj.get("conclusao") or "").strip():
         pdf.secao("CONCLUSÃO E PARECER FINAL", nova_pagina=True)
         for par in str(proj["conclusao"]).split("\n"):
@@ -3865,6 +4821,7 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "cronograma": (tem("cronograma", 3), tem("cronograma")),
         "realizado": (tem("realizado"), tem("realizado")),
         "sumario": (len(str(proj["sumario_executivo"])) > 200, bool(proj["sumario_executivo"])),
+        **regras_v71(proj, d),
     }
 
 
@@ -3872,7 +4829,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado"}
+    fora = {"realizado", "adocao"}
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -3943,6 +4900,8 @@ def gerar_sumario(proj: dict, d: dict, res: dict) -> str:
 # 3. TEXTO PARA ANÁLISE COM IA (copiar e colar no ChatGPT, Gemini, Claude...)
 # ------------------------------------------------------------------------------
 TAREFAS_IA = {
+    "viabilidade_real": "Teste de viabilidade real: premissas comparadas com o mercado, cenário realista, veredito e ajustes para viabilizar",
+    "validacao": "Plano de validação de 90 dias para as premissas mais arriscadas",
     "indicadores": "Diagnóstico de cada indicador: situação atual, o que significa para a saúde do negócio e sinais de alerta",
     "concorrencia": "Estratégias para se diferenciar e superar os concorrentes",
     "custos": "Plano de redução de custos e de melhoria de margens",
@@ -3950,12 +4909,13 @@ TAREFAS_IA = {
     "marketing": "Plano de marketing e de aquisição de clientes para os primeiros 6 meses",
     "riscos": "Principais riscos do plano e como mitigá-los",
     "graficos": "Gráficos interpretativos dos principais números",
-    "banca": "Simulação de banca examinadora: perguntas difíceis sobre o plano",
+    "banca": "Simulação de banca examinadora: avaliação das respostas do grupo e novas perguntas difíceis",
     "recorrencia": "Assinaturas e serviços: churn, LTV/CAC, preço dos planos e custo da hora",
     "smart": "Revisão da missão, visão, valores e objetivos SMART",
     "estrategia": "Análise estratégica integrada: Canvas, Cinco Forças, GE/McKinsey, BCG e Balanced Scorecard",
     "coerencia": "Coerência entre as ferramentas (mercado x vendas x capacidade x equipe x finanças)",
     "reforma": "Efeito da reforma tributária e escolha entre Simples puro e híbrido",
+    "posicionamento": "Proposta de valor, posicionamento, curva de valor (ERRC) e orçamento de marketing por canal",
 }
 
 
@@ -3968,6 +4928,98 @@ def _md_tabela(df: pd.DataFrame, max_linhas=40) -> str:
     for _, r in df.iterrows():
         linhas.append("| " + " | ".join(str(r[c]).replace("|", "/").replace("\n", " ") for c in cols) + " |")
     return "\n".join(linhas)
+
+
+def _prompt_v71(proj: dict, d: dict, res: dict) -> list:
+    """Seções do prompt com validação, marketing, incerteza e defesa (v7.1)."""
+    b = []
+    preco = preco_referencia(proj, res)
+    pl = placar_evidencias(proj, d, res)
+    b.append(f"\n## 12. Placar de evidências ({pct(pl['score'], 0)} do resultado apoiado em premissas validadas)")
+    tb = pl["tabela"].assign(peso=pl["tabela"]["peso"].map(lambda v: pct(v, 0)), status=pl["tabela"]["status"].map(STATUS_CURTO))
+    b.append(_md_tabela(tb[["premissa", "valor_plano", "peso", "status", "fonte"]].rename(columns={
+        "premissa": "Premissa", "valor_plano": "Valor no plano", "peso": "Peso no resultado", "status": "Origem", "fonte": "Fonte"})))
+    ent = resumo_entrevistas(d, preco)
+    if ent["n"]:
+        b.append(f"\n## 12. Entrevistas com clientes ({ent['n']})")
+        b.append(f"- Pagariam: {pct(ent['pct_sim'], 0)} sim, {pct(ent['pct_talvez'], 0)} talvez, {pct(ent['pct_nao'], 0)} não; "
+                 f"valor mediano citado {brl(ent['mediana_valor'])} x preço de referência do plano {brl(preco)}.")
+        b.append(_md_tabela(ent["dores"].assign(**{"% das entrevistas": ent["dores"]["% das entrevistas"].map(lambda v: pct(v, 0))})))
+        b.append(_md_tabela(d["entrevistas"][["perfil", "dores", "solucao_atual", "pagaria", "valor_pagaria", "aprendizado"]], 20))
+    vw = van_westendorp(d.get("precos_vw"))
+    if vw and vw.get("ok"):
+        b.append(f"\n## 12. Teste de preço Van Westendorp ({vw['n']} respostas, produto: {proj.get('vw_produto') or 'preço médio'})")
+        b.append(f"- Faixa aceitável {brl(vw['pmc'])} a {brl(vw['pme'])}; preço ótimo {brl(vw['opp'])}; indiferença {brl(vw['ipp'])}; "
+                 f"preço do plano {brl(preco)}.")
+    ia = intencao_ajustada(proj, res)
+    if ia["ok"]:
+        b.append(f"- Intenção de compra: {num_br(proj.get('intencao_certamente_pct'), 0)}% certamente e "
+                 f"{num_br(proj.get('intencao_provavel_pct'), 0)}% provavelmente; após fatores de "
+                 f"{num_br(proj.get('fator_certamente_pct'), 0)}% e {num_br(proj.get('fator_provavel_pct'), 0)}%: "
+                 f"{num_br(ia['ajustados'], 0)} clientes x {num_br(ia['plano'], 0)} clientes supostos pelo plano no Ano 1.")
+    if proj.get("vpc_job") or proj.get("vpc_dores"):
+        b.append("\n## 12. Canvas da proposta de valor")
+        b.append(f"- Job do cliente: {proj.get('vpc_job') or ''}")
+        for k_, rot, _ in BLOCOS_VPC:
+            if proj.get(k_):
+                b.append(f"- {rot}: " + "; ".join(linhas_txt(proj[k_])))
+        enc = encaixe_vpc(proj, d)
+        if enc["total"]:
+            b.append(f"- Encaixe: {enc['cobertos']} de {enc['total']} dores e ganhos têm resposta na oferta.")
+    frase = frase_posicionamento(proj)
+    if frase:
+        b.append(f"\n## 12. Posicionamento\n{frase}")
+    if not d["mapa_perceptual"].empty:
+        b.append(f"Mapa perceptual (eixo X: {proj.get('mapa_eixo_x')}; eixo Y: {proj.get('mapa_eixo_y')}):")
+        b.append(_md_tabela(d["mapa_perceptual"]))
+    if not d["errc"].empty:
+        b.append("\n## 12. Curva de valor e matriz ERRC (oceano azul)")
+        b.append(_md_tabela(d["errc"]))
+        b.append(leitura_errc(d))
+    oc = orcamento_canais(proj, d, res)
+    if not oc.empty:
+        b.append("\n## 12. Orçamento de marketing por canal")
+        b.append(_md_tabela(oc.assign(**{c: oc[c].map(lambda x: brl(x) if x == x else "n.a.") for c in ("Gasto mensal", "CAC", "Valor do cliente")},
+                                      **{"Retorno por R$ 1": oc["Retorno por R$ 1"].map(lambda x: num_br(x, 2) if x == x else "n.a.")})))
+    if not d["aarrr"].empty:
+        b.append("Funil AARRR:")
+        b.append(_md_tabela(d["aarrr"]))
+    b.append(f"- Meta de NPS no primeiro ano: {num_br(proj.get('nps_meta') or 0, 0)}.")
+    if res["anos"][1]["rec_bruta"] > 0:
+        mc = monte_carlo(res, faixas_mc(d))
+        b.append(f"\n## 12. Simulação de Monte Carlo ({mc['n']} cenários, distribuição triangular)")
+        b.append(_md_tabela(faixas_mc(d).rename(columns={"variavel": "Variável", "minimo_pct": "Pior caso (%)", "maximo_pct": "Melhor caso (%)"})))
+        b.append(f"- Chance de VPL positivo: {pct(mc['p_vpl_pos'], 0)}; VPL em 5% / 50% / 95%: {brl(mc['p5'])} / {brl(mc['p50'])} / "
+                 f"{brl(mc['p95'])}; chance de caixa negativo no Ano 1: {pct(mc['p_caixa_neg'], 0)}. {leitura_mc(mc)}")
+        pr = avaliar_prontidao(proj, d, res, mc, preco)
+        perg = perguntas_banca(proj, d, res, mc, preco)
+    else:
+        pr, perg = None, []
+    pa = perda_aceitavel(proj, d, res)
+    b.append(f"- Perda potencial se o negócio fechar: {brl(pa['potencial'])}; perda aceitável informada pelos sócios: {brl(pa['aceitavel'])}.")
+    bc = bass_comparacao(proj, res)
+    if bc["ok"]:
+        b.append(f"\n## 12. Curva de adoção de Bass (mercado potencial {num_br(bc['m'], 0)}, p = {num_br(bc['p'], 3)}, q = {num_br(bc['q'], 2)})")
+        tbb = bc["tabela"].copy()
+        for c in tbb.columns:
+            if c != "Ano":
+                tbb[c] = tbb[c].map(lambda x: num_br(x, 2))
+        b.append(_md_tabela(tbb))
+    if pr is not None:
+        nome = next(n for k, n, _ in NIVEIS_PRONTIDAO if k == max(pr["nivel"], 1))
+        prox = next(((n, c) for k, n, c in NIVEIS_PRONTIDAO if k == pr["nivel"] + 1), None)
+        b.append(f"\n## 12. Régua de prontidão: nível {pr['nivel']} de 9 ({nome})"
+                 + (f"; próximo degrau: {prox[0]} ({prox[1]})" if prox else ""))
+    if perg:
+        resp = {str(r["pergunta"]): str(r["resposta"]) for _, r in d["banca_respostas"].iterrows()}
+        b.append("\n## 12. Banca simulada (perguntas geradas pelo programa e respostas do grupo)")
+        for q in perg:
+            b.append(f"- [{q['tema']}] {q['pergunta']} ({q['motivo']}) Resposta do grupo: {resp.get(q['pergunta']) or '(sem resposta)'}")
+    ps = porte_sugerido(res, d)
+    b.append(f"\n## 12. Formalização\n- Enquadramento sugerido pela receita do Ano 1: {ps['porte']}.")
+    if not d["formalizacao"].empty:
+        b.append(_md_tabela(d["formalizacao"][["item", "status"]]))
+    return b
 
 
 def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estudante de Administração",
@@ -4161,6 +5213,7 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
     for k_, tit in (("sumario_executivo", "Sumário executivo escrito pelo grupo"), ("conclusao", "Conclusão do grupo")):
         if str(proj.get(k_) or "").strip():
             b.append(f"\n## 12. {tit}\n{proj[k_]}")
+    b.extend(_prompt_v71(proj, d, res))
     pend = chk[chk["Situação"] != "OK"]
     if not pend.empty:
         b.append("\n## 13. Inconsistências apontadas pelo programa")
@@ -4205,11 +5258,36 @@ def gerar_prompt_ia(proj: dict, d: dict, res: dict, tarefas: list, publico="estu
                        "e o payback do CAC são saudáveis? Os preços dos planos e o desconto dos planos longos fazem sentido? O custo "
                        "da hora cobre a equipe? Proponha 5 ações para reduzir cancelamentos e aumentar a receita por cliente, com o "
                        "efeito estimado no MRR.",
-        "banca": "Faça o papel de uma banca examinadora: elabore 10 perguntas difíceis sobre este plano (mercado, números, premissas, "
-                 "riscos) e, para cada uma, indique o que uma boa resposta deveria conter.",
+        "banca": "Faça o papel de uma banca examinadora. Avalie as respostas que o grupo já deu na seção Banca simulada (nota de 0 a 10, "
+                 "o que faltou e uma versão melhor usando os números do plano). Depois elabore mais 5 perguntas difíceis que o "
+                 "programa não fez e indique o que uma boa resposta deveria conter.",
+        "viabilidade_real": "TESTE DE VIABILIDADE REAL. Atue ao mesmo tempo como investidor-anjo cético e analista de crédito de um banco. "
+                            "(1) Para cada premissa do Placar de evidências, compare o valor do plano com referências do setor no Brasil "
+                            "e na região (Sebrae, IBGE, associações setoriais, preços praticados por concorrentes), citando a fonte e o seu "
+                            "grau de confiança; quando não tiver uma referência confiável, diga isso claramente em vez de inventar um número. "
+                            "Classifique cada premissa como realista, otimista ou pessimista. (2) Monte um CENÁRIO REALISTA trocando as "
+                            "premissas otimistas pelos valores que considera mais prováveis e recalcule, mostrando as contas: receita do Ano 1, "
+                            "margem de contribuição, resultado operacional, ponto de equilíbrio, payback e uma estimativa do VPL com a TMA "
+                            "informada. (3) Use as entrevistas, o teste de preço, a intenção de compra ajustada, a curva de Bass e a "
+                            "simulação de Monte Carlo para confirmar ou contestar esse cenário. (4) Dê um veredito único: VIÁVEL, VIÁVEL COM "
+                            "AJUSTES ou INVIÁVEL NO FORMATO ATUAL, com as 3 razões principais. (5) Liste os ajustes que tornariam o negócio "
+                            "viável na prática (preço, mix de produtos, custos, tamanho do investimento inicial, começar com um produto mínimo, "
+                            "canais, equipe, financiamento), em ordem de impacto, com o efeito estimado em R$ no resultado anual ou no VPL. "
+                            "(6) Defina os critérios de parada: que resultado, nos primeiros 90 dias de testes ou de operação, mostraria que o "
+                            "negócio não deve continuar ou precisa mudar de rumo. (7) Diga se a perda potencial cabe na perda aceitável dos sócios.",
+        "validacao": "Monte um plano de validação de 90 dias para as premissas de maior peso que ainda não foram testadas com clientes "
+                     "(veja o Placar de evidências). Para cada uma: experimento barato (entrevista, página de pré-cadastro, pré-venda, "
+                     "piloto, venda manual antes de automatizar), métrica, critério de sucesso definido antes do teste, custo, prazo e o "
+                     "que fazer se o resultado for ruim.",
+        "posicionamento": "Avalie o Canvas da proposta de valor (as dores mais importantes têm resposta?), a declaração de posicionamento "
+                          "(é específica e defensável?), a curva de valor e a matriz ERRC (há diferenciação real ou só mais custo?) e o "
+                          "orçamento por canal (CAC, retorno e coerência com o gasto comercial da DRE). Proponha uma versão melhor do "
+                          "posicionamento e uma redistribuição do orçamento entre os canais.",
     }
     for i, t in enumerate([t for t in tarefas if t in pedidos], start=1):
         b.append(f"{i}. {pedidos[t]}")
+    if "viabilidade_real" in tarefas:
+        b.append("\nComece a resposta pelo veredito do teste de viabilidade real, em uma frase, antes das demais análises.")
     b.append("\nOrganize a resposta com títulos, use tabelas quando ajudar e termine com uma lista de próximos passos.")
     texto = "\n".join(b)
     cont = iter(range(1, 200))
@@ -4555,6 +5633,43 @@ def gerar_docx(proj: dict, d: dict, res: dict, piv_conc=None) -> bytes | None:
         for tit, png in imgs:
             doc.add_picture(io.BytesIO(png), width=Cm(14))
             doc.add_paragraph(f"Figura - {tit}. Fonte: elaborado pelos autores com o ViabilizaLab.").runs[0].italic = True
+    doc.add_heading("6.5 Validação, incerteza e defesa", 2)
+    preco = preco_referencia(proj, res)
+    pl = placar_evidencias(proj, d, res)
+    doc.add_paragraph(f"Placar de evidências: {pct(pl['score'], 0)} do resultado apoiado em premissas pesquisadas ou testadas. "
+                      f"Premissa a validar primeiro: {pl['proxima'] or 'nenhuma'}.")
+    tabela(pl["tabela"].assign(peso=pl["tabela"]["peso"].map(lambda v: pct(v, 0)), status=pl["tabela"]["status"].map(STATUS_CURTO))[
+        ["premissa", "valor_plano", "peso", "status", "fonte"]].rename(columns={"premissa": "Premissa", "valor_plano": "Valor no plano",
+                                                                              "peso": "Peso", "status": "Origem", "fonte": "Fonte"}))
+    ent = resumo_entrevistas(d, preco)
+    if ent["n"]:
+        doc.add_paragraph(f"Entrevistas: {ent['n']}; pagariam {pct(ent['pct_sim'], 0)} (sim) e {pct(ent['pct_talvez'], 0)} (talvez); "
+                          f"dor mais citada: {ent['dor_top'][0]} ({ent['dor_top'][1]} entrevistas).")
+    vw = van_westendorp(d.get("precos_vw"))
+    if vw and vw.get("ok"):
+        doc.add_picture(io.BytesIO(png_vw(vw, preco)), width=Cm(14))
+        doc.add_paragraph(f"Figura - Teste de preço Van Westendorp ({vw['n']} respostas): faixa aceitável de {brl(vw['pmc'])} a "
+                          f"{brl(vw['pme'])}, preço ótimo {brl(vw['opp'])}. Fonte: elaborado pelos autores com o ViabilizaLab.").runs[0].italic = True
+    frase = frase_posicionamento(proj)
+    if frase:
+        doc.add_paragraph("Posicionamento: " + frase)
+    if not d["errc"].empty:
+        tabela(d["errc"].rename(columns={"atributo": "Atributo", "acao": "Ação", "nova_nota": "Nova nota", "justificativa": "Justificativa"}))
+    oc = orcamento_canais(proj, d, res)
+    if not oc.empty:
+        tabela(oc.assign(**{c: oc[c].map(lambda x: brl(x) if x == x else "n.a.") for c in ("Gasto mensal", "CAC", "Valor do cliente")},
+                         **{"Retorno por R$ 1": oc["Retorno por R$ 1"].map(lambda x: num_br(x, 2) if x == x else "n.a.")}))
+    if res["anos"][1]["rec_bruta"] > 0:
+        mc = monte_carlo(res, faixas_mc(d))
+        doc.add_picture(io.BytesIO(png_hist_mc(mc["vpl"])), width=Cm(14))
+        doc.add_paragraph(f"Figura - Distribuição do VPL em {mc['n']} cenários (Monte Carlo). Chance de VPL positivo: "
+                          f"{pct(mc['p_vpl_pos'], 0)}. Fonte: elaborado pelos autores com o ViabilizaLab.").runs[0].italic = True
+        doc.add_paragraph(leitura_mc(mc))
+        pr = avaliar_prontidao(proj, d, res, mc, preco)
+        doc.add_paragraph(f"Régua de prontidão: nível {pr['nivel']} de 9.")
+    pa = perda_aceitavel(proj, d, res)
+    doc.add_paragraph(f"Perda potencial: {brl(pa['potencial'])}; perda aceitável dos sócios: {brl(pa['aceitavel'])}. "
+                      f"Enquadramento sugerido: {porte_sugerido(res, d)['porte']}.")
     doc.add_heading("7. Conclusão", 1)
     doc.add_paragraph(str(proj.get("conclusao") or "Escreva aqui a conclusão do grupo sobre a viabilidade do negócio."))
     buf = io.BytesIO()
@@ -4682,7 +5797,7 @@ def ficha_avaliacao_pdf(avaliacoes: list, rubrica=RUBRICA_PADRAO, professor="", 
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "7.0"
+VERSAO_PROGRAMA = "7.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -4831,12 +5946,20 @@ PAGINAS = [
      "Crie personagens que representam o cliente ideal: dados, características, rotina e insights."),
     ("jornada", "Cliente e mercado", "🧭", "Jornada do cliente",
      "Descreva o que a persona faz, pensa e sente antes, durante e depois da compra."),
+    ("entrevistas", "Cliente e mercado", "🎙️", "Entrevistas com clientes",
+     "Roteiro de entrevista de descoberta e registro das conversas: quais dores se repetem e quanto pagariam."),
     ("mercado", "Cliente e mercado", "📐", "Tamanho do mercado",
      "Estime o mercado total (TAM), o alcançável (SAM) e o conquistável (SOM) e confira se a meta de vendas é realista."),
     ("proposta", "Problema e solução", "❤️", "Proposta de valor",
      "Defina, para cada persona, os benefícios que o negócio entrega e o que o diferencia."),
+    ("vpc", "Problema e solução", "🎁", "Canvas da proposta de valor",
+     "Tarefas, dores e ganhos do cliente x produtos, aliviadores e criadores de ganho, e o encaixe entre eles."),
     ("concorrencia", "Problema e solução", "🔍", "Análise da concorrência",
      "Compare o seu negócio com os concorrentes em notas de 0 a 10 por atributo."),
+    ("oceano", "Problema e solução", "🌊", "Curva de valor e ERRC",
+     "Compare a sua curva com a dos concorrentes e decida o que eliminar, reduzir, elevar e criar (oceano azul)."),
+    ("posicionamento", "Problema e solução", "📍", "Posicionamento e mapa perceptual",
+     "A frase que diz para quem, o que e por que é diferente, e onde a marca fica frente aos concorrentes."),
     ("forcas", "Estratégia", "💪", "Forças e fraquezas",
      "Fatores internos: o que o negócio faz bem e o que precisa melhorar."),
     ("oportunidades", "Estratégia", "💡", "Oportunidades e ameaças",
@@ -4857,6 +5980,8 @@ PAGINAS = [
      "Produto, preço, praça e promoção: como o negócio vai chegar ao cliente."),
     ("canais", "Marketing e operação", "🛒", "Canais e funil de vendas",
      "Avalie os canais de aquisição e acompanhe a conversão do funil."),
+    ("orcamento_mkt", "Marketing e operação", "💸", "Orçamento de marketing e funil AARRR",
+     "Gasto e CAC por canal, retorno de cada canal, funil de crescimento, calendário de ações e meta de NPS."),
     ("operacional", "Marketing e operação", "🏭", "Plano operacional",
      "Localização, layout, processos, capacidade produtiva e organograma."),
     ("fornecedores", "Marketing e operação", "🚚", "Fornecedores",
@@ -4875,6 +6000,8 @@ PAGINAS = [
      "Simples puro ou IBS/CBS por fora a partir de 2027: imposto da empresa e crédito para os clientes empresas."),
     ("preco", "Finanças", "🏷️", "Formação de preço",
      "Custeio variável e por absorção, preço sugerido pelo markup e ponto de equilíbrio por produto."),
+    ("teste_preco", "Finanças", "🙋", "Teste de preço e demanda",
+     "Faixa de preço aceitável pelo método Van Westendorp e demanda ajustada pela intenção de compra."),
     ("dre", "Finanças", "📄", "DRE e projeções",
      "Demonstração do resultado dos Anos 1 a 3 e a projeção mês a mês."),
     ("fluxo", "Finanças", "💵", "Fluxo de caixa mensal",
@@ -4885,6 +6012,10 @@ PAGINAS = [
      "Composição do investimento, dos custos e da receita, ponto de equilíbrio e payback."),
     ("simulador", "Ferramentas complementares", "🎚️", "Simulador de resultados",
      "Cenários otimista e pessimista, simulador “e se?” e análise de sensibilidade."),
+    ("montecarlo", "Ferramentas complementares", "🎲", "Monte Carlo e perda aceitável",
+     "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
+    ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
+     "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
     ("experimentos", "Ferramentas complementares", "🧪", "Quadro de experimentação",
      "Hipóteses e testes para validar a ideia antes de investir."),
     ("riscos", "Ferramentas complementares", "⚠️", "Riscos e contingência",
@@ -4895,6 +6026,14 @@ PAGINAS = [
      "Depois de abrir, lance os números reais e compare com o planejado."),
     ("ia", "Ferramentas complementares", "🤖", "Analisar com IA",
      "Monte o texto pronto para colar no ChatGPT, Gemini ou Claude e receber análises e estratégias."),
+    ("evidencias", "Validação e defesa", "🔬", "Placar de evidências",
+     "Quais números do plano são palpite, pesquisa ou teste com clientes, e qual premissa validar primeiro."),
+    ("prontidao", "Validação e defesa", "🪜", "Régua de prontidão",
+     "Em que degrau, de 1 a 9, o negócio está: da ideia descrita ao pronto para lançar ou buscar investimento."),
+    ("banca", "Validação e defesa", "🧑‍⚖️", "Banca simulada",
+     "Perguntas difíceis geradas a partir dos pontos fracos do plano, para treinar a defesa."),
+    ("formalizacao", "Validação e defesa", "📋", "Checklist de formalização",
+     "Enquadramento (MEI, ME, EPP), registros, licenças, LGPD e marca."),
     ("sumario", "Conclusão e entrega", "📝", "Sumário executivo",
      "Resumo do plano gerado automaticamente, para revisar e completar."),
     ("apresentacao", "Conclusão e entrega", "🎤", "Modo apresentação",
@@ -5280,12 +6419,13 @@ def situacao(p: str) -> str:
         "realizado": (_tem("realizado", 1), _tem("realizado")),
         "sumario": (len(proj["sumario_executivo"]) > 200, bool(proj["sumario_executivo"])),
     }
+    regras.update(regras_v71(proj, d))
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p == "reforma"
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -5690,8 +6830,11 @@ def pg_projeto():
     st.subheader("👥 Sócios")
     editor("socios", {"nome": T("Nome", required=True), "funcao": T("Função"), "contato": T("Contato"),
                       "perfil": T("Minicurrículo / atribuições", width="large"),
-                      "capital_integralizado": moeda("Capital investido (R$)")}, "nome")
-    st.caption(f"Capital próprio total: **{brl(d['socios']['capital_integralizado'].sum())}**")
+                      "capital_integralizado": moeda("Capital investido (R$)"),
+                      "perda_aceitavel": moeda("Perda aceitável (R$)", help="Quanto este sócio aceita perder se o negócio não "
+                                               "der certo, sem comprometer a vida pessoal (Sarasvathy, 2001).")}, "nome")
+    st.caption(f"Capital próprio total: **{brl(d['socios']['capital_integralizado'].sum())}** · perda aceitável somada: "
+               f"**{brl(d['socios']['perda_aceitavel'].sum())}** (usada em Monte Carlo e perda aceitável)")
     proxima("projeto")
 
 
@@ -7632,6 +8775,615 @@ em vendas B2B. Esta simulação é didática e simplificada: confirme a decisão
     proxima("reforma")
 
 # ##############################################################################
+# PARTE: pnbox_ui_paginas6.py
+# ##############################################################################
+# ==============================================================================
+# VIABILIZALAB - INTERFACE: VALIDAÇÃO, MARKETING, INCERTEZA E DEFESA (v7.1)
+# ==============================================================================
+
+
+def MC() -> dict:
+    """Simulação de Monte Carlo com os dados atuais (recalcula quando algo muda)."""
+    if "mc" not in _CACHE:
+        res = R()
+        _CACHE["mc"] = monte_carlo(res, faixas_mc(d)) if res["anos"][1]["rec_bruta"] > 0 else None
+    return _CACHE["mc"]
+
+
+def _semear(tabela: str, linhas: list, chave_: str):
+    recarregar_tabela(tabela, pd.concat([d[tabela], pd.DataFrame(linhas)], ignore_index=True), chave_)
+    st.rerun()
+
+
+def _ir_botao(rotulo: str, destino: str, chave_: str):
+    if st.button(rotulo, key=chave_):
+        ir(destino)
+        st.rerun()
+
+
+# ------------------------------------------------------------------------------
+# PLACAR DE EVIDÊNCIAS
+# ------------------------------------------------------------------------------
+def pg_evidencias():
+    cabecalho("evidencias")
+    res = R()
+    st.markdown("""<div class="pn-card-info">Um plano de negócio é um conjunto de <b>hipóteses</b> até que os números sejam testados
+com clientes reais (Ries, 2012; Blank, 2013). Marque a origem de cada premissa. O <b>peso</b> vem da análise de sensibilidade:
+quanto mais a premissa mexe no resultado, mais ela conta no placar.</div>""", unsafe_allow_html=True)
+    st.write("")
+    pr = premissas_plano(proj, d, res)
+    faltam = [p for p in pr["premissa"] if p not in set(d["evidencias"]["premissa"])]
+    if faltam:
+        recarregar_tabela("evidencias", pd.concat([d["evidencias"], pd.DataFrame(
+            {"premissa": faltam, "status": "Estimada (sem fonte)", "fonte": "", "observacao": ""})], ignore_index=True), "premissa")
+        st.rerun()
+    pl = placar_evidencias(proj, d, res)
+    k = st.columns(3)
+    k[0].metric("Placar de evidências", pct(pl["score"], 0), help="Média das notas (estimada = 0; pesquisada = 0,5; testada = 1) "
+                                                                  "ponderada pelo impacto de cada premissa no resultado.")
+    k[1].metric("Premissas testadas com clientes", f"{pl['testadas']} de {pl['n']}")
+    k[2].metric("Valide primeiro", pl["proxima"] or "tudo testado")
+    st.progress(min(max(pl["score"], 0.0), 1.0))
+    vis = pl["tabela"][["premissa", "valor_plano", "peso", "status"]].rename(columns={
+        "premissa": "Premissa", "valor_plano": "Valor no plano", "peso": "Peso", "status": "Origem"})
+    vis["Peso"] = vis["Peso"].map(lambda v: pct(v, 0))
+    vis["Origem"] = vis["Origem"].map(STATUS_CURTO)
+    st.dataframe(vis, hide_index=True, width="stretch")
+    st.subheader("Informe a origem de cada premissa")
+    ev = d["evidencias"][d["evidencias"]["premissa"].isin(set(pr["premissa"]))].reset_index(drop=True)
+
+    def _salvar(x):
+        outras = d["evidencias"][~d["evidencias"]["premissa"].isin(set(x["premissa"]))]
+        completo = pd.concat([outras, x], ignore_index=True)
+        salvar(conn, "evidencias", completo, "premissa")
+        d["evidencias"] = limpar(completo.reset_index(drop=True), "evidencias")
+
+    tabela_editavel(ev, {"premissa": T("Premissa", disabled=True, width="medium"),
+                         "status": S("Origem do número", options=list(STATUS_EVIDENCIA), required=True, width="large"),
+                         "fonte": T("Fonte (quem, onde, quando)", width="large"),
+                         "observacao": T("O que o teste mostrou", width="large")},
+                    "evidencias", "placar", normalizar=lambda x: limpar(x, "evidencias"), salvar_fn=_salvar, adicionar=False)
+    st.caption("Exemplos de evidência: entrevistas registradas, respostas do teste de preço, pré-vendas, lista de espera, "
+               "orçamentos de fornecedores, dados do IBGE ou do Sebrae, preços dos concorrentes.")
+    c = st.columns(3)
+    with c[0]:
+        _ir_botao("🎙️ Registrar entrevistas", "entrevistas", "ev_ent")
+    with c[1]:
+        _ir_botao("🙋 Testar o preço", "teste_preco", "ev_vw")
+    with c[2]:
+        _ir_botao("🧪 Planejar experimentos", "experimentos", "ev_exp")
+    proxima("evidencias")
+
+
+# ------------------------------------------------------------------------------
+# ENTREVISTAS COM CLIENTES
+# ------------------------------------------------------------------------------
+def pg_entrevistas():
+    cabecalho("entrevistas")
+    res = R()
+    with st.expander("📋 Roteiro de entrevista de descoberta", expanded=d["entrevistas"].empty):
+        st.markdown(ROTEIRO_ENTREVISTA)
+    st.caption("Registre uma linha por pessoa. Em **dores**, separe as dores por ponto e vírgula e use sempre as mesmas palavras "
+               "para a mesma dor: assim o programa consegue contá-las.")
+    editor("entrevistas", {"data": T("Data"), "entrevistado": T("Entrevistado (nome ou código)", required=True),
+                           "perfil": T("Perfil / segmento"), "dores": T("Dores citadas (separe com ;)", width="large"),
+                           "solucao_atual": T("O que usa hoje", width="medium"),
+                           "pagaria": S("Pagaria?", options=PAGARIA), "valor_pagaria": moeda("Quanto pagaria"),
+                           "aprendizado": T("Principal aprendizado", width="large")}, "entrevistado")
+    preco = preco_referencia(proj, res)
+    r = resumo_entrevistas(d, preco)
+    if r["n"] == 0:
+        return proxima("entrevistas")
+    k = st.columns(4)
+    k[0].metric("Entrevistas", r["n"], help="Recomenda-se ao menos 10 a 15 por segmento antes de confiar nos padrões.")
+    k[1].metric("Pagariam", pct(r["pct_sim"], 0), f"+ {pct(r['pct_talvez'], 0)} talvez", delta_color="off")
+    k[2].metric("Valor mediano citado", brl(r["mediana_valor"]) if r["mediana_valor"] == r["mediana_valor"] else "n.a.")
+    k[3].metric("Preço do plano", brl(preco) if preco == preco else "n.a.",
+                f"{pct(r['valor_vs_preco'] - 1, 0)} vs. citado" if r["valor_vs_preco"] == r["valor_vs_preco"] else None,
+                delta_color="off")
+    if not r["dores"].empty:
+        g = r["dores"].assign(Pct=r["dores"]["% das entrevistas"] * 100)
+        st.altair_chart(alt.Chart(g).mark_bar(color="#2f6fd0").encode(
+            x=alt.X("Pct:Q", title="% das entrevistas", scale=alt.Scale(domain=[0, 100])),
+            y=alt.Y("Dor citada:N", sort="-x", title=None), tooltip=["Dor citada", "Entrevistas"]).properties(height=34 * len(g) + 40),
+            width="stretch")
+        top, qt = r["dor_top"]
+        if qt >= r["n"] / 2:
+            st.success(f"A dor **\"{top}\"** apareceu em {qt} de {r['n']} entrevistas: é um problema recorrente, bom sinal para a proposta de valor.")
+        else:
+            st.warning("Nenhuma dor apareceu em metade das entrevistas. Talvez o segmento esteja amplo demais ou o problema não seja tão forte.")
+    if r["n"] < 10:
+        st.info(f"Faltam {10 - r['n']} entrevista(s) para chegar ao mínimo de 10 usado na régua de prontidão.")
+    proxima("entrevistas")
+
+
+# ------------------------------------------------------------------------------
+# TESTE DE PREÇO (VAN WESTENDORP) E INTENÇÃO DE COMPRA
+# ------------------------------------------------------------------------------
+def _grafico_vw(vw: dict, preco: float):
+    cv = vw["curvas"].melt(id_vars="Preço", value_vars=["Muito barato", "Barato", "Caro", "Muito caro"],
+                           var_name="Curva", value_name="Proporção")
+    linhas = alt.Chart(cv).mark_line(strokeWidth=2.5).encode(
+        x=alt.X("Preço:Q", title="Preço (R$)"), y=alt.Y("Proporção:Q", axis=alt.Axis(format="%"), title="% dos respondentes"),
+        color=alt.Color("Curva:N", scale=alt.Scale(domain=["Muito barato", "Barato", "Caro", "Muito caro"],
+                                                   range=["#7fb3d5", "#2471a3", "#e59866", "#c0392b"]),
+                        legend=alt.Legend(orient="bottom", title=None)))
+    faixa = alt.Chart(pd.DataFrame({"a": [vw["pmc"]], "b": [vw["pme"]]})).mark_rect(opacity=0.12, color="#27ae60").encode(x="a:Q", x2="b:Q")
+    camadas = faixa + linhas
+    if preco == preco:
+        camadas += alt.Chart(pd.DataFrame({"p": [preco], "t": ["preço do plano"]})).mark_rule(strokeDash=[5, 4], color="black").encode(
+            x="p:Q", tooltip=["t"])
+    st.altair_chart(camadas.properties(height=380), width="stretch")
+
+
+def pg_teste_preco():
+    cabecalho("teste_preco")
+    res = R()
+    t1, t2 = st.tabs(["🙋 Teste de preço (Van Westendorp)", "📊 Intenção de compra ajustada"])
+    with t1:
+        st.caption("Pergunte a pessoas do público-alvo as quatro questões abaixo, sobre o mesmo produto, e lance as respostas. "
+                   "O método (Van Westendorp, 1976) mostra a faixa de preço que os clientes consideram aceitável.")
+        produtos = [p for p in res["cat"]["descricao"].astype(str) if p.strip()]
+        if res.get("recorrencia", {}).get("tem"):
+            produtos.append("Assinatura (ticket médio)")
+        opcoes = ["(preço médio do plano)"] + produtos
+        atual = proj["vw_produto"] if proj["vw_produto"] in opcoes else "(preço médio do plano)"
+        esc = st.selectbox("Produto testado", opcoes, index=opcoes.index(atual), key=wk("vw_prod"))
+        auto_unica("projeto", {"vw_produto": "" if esc.startswith("(") else esc})
+        nome = esc if not esc.startswith("(") else "o produto"
+        with st.expander("📝 Perguntas prontas para o Google Forms"):
+            st.code(f"1. A que preço você acharia {nome} tão barato que duvidaria da qualidade?\n"
+                    f"2. A que preço você acharia {nome} barato, uma boa compra?\n"
+                    f"3. A que preço {nome} começaria a parecer caro, mas ainda pensaria em comprar?\n"
+                    f"4. A que preço {nome} ficaria caro demais, e você não compraria de jeito nenhum?", language=None)
+            st.caption("Use respostas numéricas (R$). Exporte as respostas para planilha e cole nas colunas abaixo.")
+        editor("precos_vw", {"respondente": T("Respondente", required=True), "muito_barato": moeda("1. Barato demais"),
+                             "barato": moeda("2. Barato"), "caro": moeda("3. Caro"), "muito_caro": moeda("4. Caro demais")},
+               "respondente")
+        preco = preco_referencia(proj, res)
+        vw = van_westendorp(d["precos_vw"])
+        if vw is None:
+            st.info("Lance pelo menos 5 respostas para ver as curvas.")
+        elif not vw["ok"]:
+            st.info(f"{vw['n']} resposta(s) válida(s). São necessárias pelo menos 5 (de preferência 30 ou mais). "
+                    "Respostas fora de ordem (barato maior que caro, por exemplo) são descartadas.")
+        else:
+            _grafico_vw(vw, preco)
+            k = st.columns(4)
+            k[0].metric("Limite inferior (PMC)", brl(vw["pmc"]), help="Abaixo disso o cliente desconfia da qualidade.")
+            k[1].metric("Preço ótimo (OPP)", brl(vw["opp"]), help="Menos pessoas acham barato demais ou caro demais.")
+            k[2].metric("Preço de indiferença (IPP)", brl(vw["ipp"]), help="Tantos acham caro quanto barato.")
+            k[3].metric("Limite superior (PME)", brl(vw["pme"]), help="Acima disso a maioria considera caro demais.")
+            if preco == preco:
+                if vw["pmc"] <= preco <= vw["pme"]:
+                    st.success(f"O preço do plano ({brl(preco)}) está dentro da faixa aceitável. Com {vw['n']} respostas, "
+                               "esta premissa pode ser marcada como **testada com clientes** no placar de evidências.")
+                elif preco > vw["pme"]:
+                    st.error(f"O preço do plano ({brl(preco)}) está **acima** do que os clientes aceitam ({brl(vw['pme'])}). "
+                             "Reveja custos, a proposta de valor ou o público.")
+                else:
+                    st.warning(f"O preço do plano ({brl(preco)}) está **abaixo** da faixa ({brl(vw['pmc'])}): há espaço para "
+                               "cobrar mais, e preço baixo demais pode passar impressão de baixa qualidade.")
+            if vw["n"] < 30:
+                st.caption(f"Com {vw['n']} respostas o resultado é exploratório. Amostras de 30 ou mais tornam as curvas mais estáveis.")
+    with t2:
+        st.caption("Pesquisas de intenção superestimam a demanda: quem diz que \"certamente compraria\" nem sempre compra. "
+                   "Aplique fatores de conversão à intenção declarada e compare com o número de clientes do plano.")
+        c = st.columns(4)
+        ic = c[0].number_input("Certamente compraria (%)", 0.0, 100.0, float(proj["intencao_certamente_pct"] or 0), 1.0, key=wk("int_c"))
+        ip = c[1].number_input("Provavelmente compraria (%)", 0.0, 100.0, float(proj["intencao_provavel_pct"] or 0), 1.0, key=wk("int_p"))
+        fc = c[2].number_input("Dos que \"certamente\", quantos compram (%)", 0.0, 100.0, float(proj["fator_certamente_pct"] or 70),
+                               5.0, key=wk("fat_c"))
+        fp = c[3].number_input("Dos que \"provavelmente\", quantos compram (%)", 0.0, 100.0, float(proj["fator_provavel_pct"] or 30),
+                               5.0, key=wk("fat_p"))
+        auto_unica("projeto", {"intencao_certamente_pct": ic, "intencao_provavel_pct": ip, "fator_certamente_pct": fc,
+                               "fator_provavel_pct": fp})
+        ia = intencao_ajustada(proj, res)
+        if not ia["ok"]:
+            st.info("Preencha o SAM (clientes alcançáveis) em Tamanho do mercado e os percentuais da pesquisa.")
+        else:
+            k = st.columns(3)
+            k[0].metric("Clientes pela intenção declarada", num_br(ia["declarados"], 0))
+            k[1].metric("Clientes após o ajuste", num_br(ia["ajustados"], 0))
+            k[2].metric("Clientes que o plano supõe no Ano 1", num_br(ia["plano"], 0) if ia["plano"] == ia["plano"] else "n.a.",
+                        help="Receita do Ano 1 ÷ gasto anual por cliente (Tamanho do mercado).")
+            if ia["cobertura"] == ia["cobertura"]:
+                if ia["cobertura"] >= 1:
+                    st.success(f"A demanda ajustada cobre {pct(ia['cobertura'], 0)} dos clientes do plano.")
+                else:
+                    st.warning(f"A demanda ajustada cobre só {pct(ia['cobertura'], 0)} dos clientes do plano: a meta de vendas parece otimista.")
+        st.caption("Fatores sugeridos (70% e 30%) são uma regra prática de pesquisa de mercado; ajuste conforme o setor e o preço.")
+    proxima("teste_preco")
+
+
+# ------------------------------------------------------------------------------
+# CANVAS DA PROPOSTA DE VALOR
+# ------------------------------------------------------------------------------
+def pg_vpc():
+    cabecalho("vpc")
+    st.caption("Lado direito: o **perfil do cliente**. Lado esquerdo: o **mapa de valor** da empresa (Osterwalder et al., 2014). "
+               "Escreva um item por linha. O encaixe acontece quando cada dor e ganho importante tem uma resposta da oferta.")
+    job = st.text_input("Que trabalho (job) o cliente contrata o seu produto para fazer?", proj["vpc_job"], key=wk("vpc_job"),
+                        placeholder="Quando estou sem tempo no almoço, quero comer algo saudável, para manter a dieta sem perder o horário.",
+                        help="Formato de Christensen et al. (2016): quando [situação], quero [motivação], para [resultado].")
+    v = {"vpc_job": job}
+    ce, cd = st.columns(2)
+    with cd:
+        st.markdown("##### 🙂 Perfil do cliente")
+        for k_ in ("vpc_tarefas", "vpc_dores", "vpc_ganhos"):
+            _, rot, ajuda = next(b for b in BLOCOS_VPC if b[0] == k_)
+            v[k_] = st.text_area(rot, proj[k_], height=130, key=wk(k_), help=ajuda)
+    with ce:
+        st.markdown("##### 🎁 Mapa de valor")
+        for k_ in ("vpc_produtos", "vpc_aliviadores", "vpc_criadores"):
+            _, rot, ajuda = next(b for b in BLOCOS_VPC if b[0] == k_)
+            v[k_] = st.text_area(rot, proj[k_], height=130, key=wk(k_), help=ajuda)
+    auto_unica("projeto", v)
+    salvo_txt()
+    enc = encaixe_vpc(proj, d)
+    if enc["total"] == 0:
+        return proxima("vpc")
+    st.subheader("Encaixe: como a oferta responde a cada dor e ganho")
+    opcoes = [""] + linhas_txt(proj["vpc_aliviadores"]) + linhas_txt(proj["vpc_criadores"])
+
+    def _salvar(x):
+        salvar(conn, "vpc_encaixe", x, "item")
+        d["vpc_encaixe"] = limpar(x.reset_index(drop=True), "vpc_encaixe")
+
+    tabela_editavel(enc["tabela"][["item", "tipo", "resposta"]], {
+        "item": T("Dor ou ganho do cliente", disabled=True, width="large"), "tipo": T("Tipo", disabled=True, width="small"),
+        "resposta": S("Respondido por", options=opcoes, width="large")}, "vpc_encaixe",
+        "|".join(enc["tabela"]["item"])[:200], normalizar=lambda x: limpar(x, "vpc_encaixe"), salvar_fn=_salvar, adicionar=False)
+    enc = encaixe_vpc(proj, d)
+    st.metric("Encaixe produto-cliente", pct(enc["encaixe"], 0), f"{enc['cobertos']} de {enc['total']} itens respondidos",
+              delta_color="off")
+    if enc["encaixe"] < 0.6:
+        st.warning("Muitas dores e ganhos ainda não têm resposta na oferta. Ou a oferta precisa mudar, ou esses itens não são prioridade.")
+    proxima("vpc")
+
+
+# ------------------------------------------------------------------------------
+# CURVA DE VALOR E ERRC (OCEANO AZUL)
+# ------------------------------------------------------------------------------
+def pg_oceano():
+    cabecalho("oceano")
+    st.caption("A **curva de valor** mostra como cada empresa se sai nos atributos que o setor oferece (notas da Análise da "
+               "concorrência). A matriz **ERRC** propõe uma curva nova: o que **E**liminar, **R**eduzir, **E**levar e **C**riar "
+               "para se diferenciar sem aumentar custos (Kim; Mauborgne, 2005).")
+    atributos = list(dict.fromkeys(d["concorrencia_notas"]["atributo"].astype(str)))
+    if not atributos:
+        st.warning("Primeiro dê notas aos atributos na Análise da concorrência.")
+        _ir_botao("Ir para Análise da concorrência →", "concorrencia", "oc_conc")
+        return proxima("oceano")
+    editor("errc", {"atributo": S("Atributo (escolha ou digite um novo para Criar)", options=atributos, required=True, width="medium"),
+                    "acao": S("Ação", options=ACOES_ERRC, required=True),
+                    "nova_nota": N("Nova nota (0 a 10)", min_value=0.0, max_value=10.0, step=0.5),
+                    "justificativa": T("Por quê?", width="large")}, "atributo")
+    st.caption("Para **criar** um atributo novo, que nenhum concorrente oferece, escreva-o primeiro na Análise da concorrência "
+               "com nota 0 para todos e depois marque aqui a ação Criar com a nota pretendida.")
+    cv = curva_valor(d)
+    ordem = list(dict.fromkeys(cv["Atributo"]))
+    st.altair_chart(alt.Chart(cv).mark_line(point=True).encode(
+        x=alt.X("Atributo:N", sort=ordem, title=None, axis=alt.Axis(labelAngle=-30)), y=alt.Y("Nota:Q", scale=alt.Scale(domain=[0, 10])),
+        color=alt.Color("Empresa:N", legend=alt.Legend(orient="bottom", title=None)),
+        strokeDash=alt.condition(alt.datum.Empresa == "Nova curva (ERRC)", alt.value([1, 0]), alt.value([4, 3])),
+        strokeWidth=alt.condition(alt.datum.Empresa == "Nova curva (ERRC)", alt.value(4), alt.value(1.6)),
+        tooltip=["Empresa", "Atributo", "Nota"]).properties(height=380), width="stretch")
+    errc = d["errc"]
+    if not errc.empty:
+        cols = st.columns(4)
+        for c_, (ac, ic) in zip(cols, [("Eliminar", "✂️"), ("Reduzir", "⬇️"), ("Elevar", "⬆️"), ("Criar", "✨")]):
+            with c_.container(border=True):
+                st.markdown(f"**{ic} {ac}**")
+                for a in errc.loc[errc["acao"] == ac, "atributo"]:
+                    st.markdown(f"- {a}")
+        st.info(leitura_errc(d))
+    proxima("oceano")
+
+
+# ------------------------------------------------------------------------------
+# POSICIONAMENTO E MAPA PERCEPTUAL
+# ------------------------------------------------------------------------------
+def pg_posicionamento():
+    cabecalho("posicionamento")
+    st.caption("A declaração de posicionamento diz, em uma frase, **para quem** é o negócio, **o que** entrega e **por que** é "
+               "diferente (modelo de Moore, 1991). O mapa perceptual mostra onde a marca fica na cabeça do cliente.")
+    c = st.columns(2)
+    v = {}
+    v["posic_segmento"] = c[0].text_input("Para (público-alvo)", proj["posic_segmento"], key=wk("ps_seg"))
+    v["posic_necessidade"] = c[1].text_input("que (necessidade ou problema)", proj["posic_necessidade"], key=wk("ps_nec"))
+    v["posic_marca"] = c[0].text_input("a marca", proj["posic_marca"] or proj["nome_negocio"], key=wk("ps_marca"))
+    v["posic_categoria"] = c[1].text_input("é (categoria)", proj["posic_categoria"], key=wk("ps_cat"))
+    v["posic_beneficio"] = c[0].text_input("que (benefício principal)", proj["posic_beneficio"], key=wk("ps_ben"))
+    v["posic_concorrente"] = c[1].text_input("Diferentemente de (principal alternativa)", proj["posic_concorrente"], key=wk("ps_conc"))
+    v["posic_diferencial"] = st.text_input("o nosso produto (diferencial que prova o benefício)", proj["posic_diferencial"], key=wk("ps_dif"))
+    auto_unica("projeto", v)
+    frase = frase_posicionamento(proj)
+    if frase:
+        st.success("**Declaração de posicionamento:** " + frase)
+    st.subheader("Mapa perceptual")
+    c = st.columns(2)
+    ex = c[0].text_input("Eixo horizontal", proj["mapa_eixo_x"], key=wk("mp_x"))
+    ey = c[1].text_input("Eixo vertical", proj["mapa_eixo_y"], key=wk("mp_y"))
+    auto_unica("projeto", {"mapa_eixo_x": ex, "mapa_eixo_y": ey})
+    if d["mapa_perceptual"].empty:
+        nomes = [proj["nome_negocio"] or "Nossa Empresa"] + [n for n in d["concorrentes"]["nome"] if str(n).strip()]
+        if st.button("Incluir a empresa e os concorrentes cadastrados"):
+            _semear("mapa_perceptual", [{"marca": n, "eixo_x": 5.0, "eixo_y": 5.0} for n in nomes], "marca")
+    editor("mapa_perceptual", {"marca": T("Marca", required=True), "eixo_x": N("Nota no eixo horizontal (0 a 10)", min_value=0.0,
+                                                                                max_value=10.0, step=0.5),
+                               "eixo_y": N("Nota no eixo vertical (0 a 10)", min_value=0.0, max_value=10.0, step=0.5)}, "marca")
+    mp = d["mapa_perceptual"]
+    if not mp.empty:
+        nossa = proj["nome_negocio"] or "Nossa Empresa"
+        g = mp.assign(Tipo=["Nossa empresa" if m in (nossa, "Nossa Empresa") else "Concorrente" for m in mp["marca"]])
+        base = alt.Chart(g).encode(x=alt.X("eixo_x:Q", scale=alt.Scale(domain=[0, 10]), title=ex),
+                                   y=alt.Y("eixo_y:Q", scale=alt.Scale(domain=[0, 10]), title=ey))
+        pts = base.mark_circle(size=380, opacity=0.85).encode(
+            color=alt.Color("Tipo:N", scale=alt.Scale(domain=["Nossa empresa", "Concorrente"], range=["#e67e22", "#2f6fd0"]),
+                            legend=alt.Legend(orient="bottom", title=None)), tooltip=["marca", "eixo_x", "eixo_y"])
+        txt = base.mark_text(dy=-18, fontSize=11).encode(text="marca:N")
+        meio = alt.Chart(pd.DataFrame({"v": [5]})).mark_rule(color="#999").encode(x="v:Q") + \
+            alt.Chart(pd.DataFrame({"v": [5]})).mark_rule(color="#999").encode(y="v:Q")
+        st.altair_chart((meio + pts + txt).properties(height=420), width="stretch")
+        st.caption("Procure um espaço vazio no mapa que seja valorizado pelo cliente. Se a sua marca está colada em um concorrente, "
+                   "o cliente não tem motivo para trocar.")
+    proxima("posicionamento")
+
+
+# ------------------------------------------------------------------------------
+# ORÇAMENTO DE MARKETING, FUNIL AARRR, CALENDÁRIO E NPS
+# ------------------------------------------------------------------------------
+def pg_orcamento_mkt():
+    cabecalho("orcamento_mkt")
+    res = R()
+    t1, t2, t3, t4 = st.tabs(["💸 Orçamento e CAC por canal", "🪜 Funil AARRR", "🗓️ Calendário de ações", "⭐ Meta de NPS"])
+    with t1:
+        st.caption("Quanto será gasto por mês em cada canal e quantos clientes novos cada um deve trazer. O programa calcula o custo "
+                   "de aquisição (CAC) e o retorno de cada canal.")
+        canais = [c for c in d["canais"]["canal"].astype(str) if c.strip()]
+        editor("orcamento_canais", {"canal": S("Canal", options=canais, required=True) if canais else T("Canal", required=True),
+                                    "gasto_mensal": moeda("Gasto mensal"), "clientes_mes": N("Clientes novos por mês", min_value=0.0, step=1.0),
+                                    "observacao": T("Como será medido", width="large")}, "canal")
+        oc = orcamento_canais(proj, d, res)
+        if not oc.empty:
+            vis = oc.copy()
+            for c_ in ("Gasto mensal", "CAC", "Valor do cliente"):
+                vis[c_] = vis[c_].map(lambda x: brl(x) if x == x else "n.a.")
+            vis["Retorno por R$ 1"] = vis["Retorno por R$ 1"].map(lambda x: f"R$ {num_br(x, 2)}" if x == x else "n.a.")
+            vis = vis.rename(columns={"Valor do cliente": f"Valor do cliente ({oc.attrs.get('rotulo_valor', '')})"})
+            st.dataframe(vis, hide_index=True, width="stretch")
+            tot_g, tot_c = float(oc["Gasto mensal"].sum()), float(oc["Clientes novos/mês"].sum())
+            k = st.columns(3)
+            k[0].metric("Orçamento mensal de aquisição", brl(tot_g))
+            k[1].metric("CAC médio", brl(div(tot_g, tot_c)) if tot_c else "n.a.")
+            verba = float(proj["verba_aquisicao_mensal"] or 0)
+            com = float(res["desp_com_m"] + res["pessoal_com_m"])
+            k[2].metric("Gasto comercial no plano (mês)", brl(verba if verba > 0 else com),
+                        help="Verba de aquisição informada em Assinaturas ou despesas comerciais fixas.")
+            if tot_g > (verba if verba > 0 else com) * 1.05:
+                st.warning("O orçamento por canal é maior que o gasto comercial previsto nos custos: inclua a diferença em Custos e "
+                           "despesas, senão a DRE fica otimista.")
+            pior = oc.sort_values("Retorno por R$ 1").iloc[0]
+            if pior["Retorno por R$ 1"] == pior["Retorno por R$ 1"] and pior["Retorno por R$ 1"] < 1:
+                st.error(f"O canal **{pior['Canal']}** devolve menos do que custa: cada R$ 1 investido traz R$ {num_br(pior['Retorno por R$ 1'], 2)} "
+                         "em valor de cliente.")
+    with t2:
+        st.caption("Funil de crescimento em cinco etapas (Ellis; Brown, 2017): para cada uma, a métrica que mostra se está "
+                   "funcionando, a meta e a ação.")
+        if d["aarrr"].empty:
+            if st.button("Criar as cinco etapas"):
+                _semear("aarrr", [{"etapa": e, "metrica": "", "meta": "", "acao": ""} for e, _ in ETAPAS_AARRR], "etapa")
+            for e, perg in ETAPAS_AARRR:
+                st.markdown(f"- **{e}:** {perg}")
+        editor("aarrr", {"etapa": S("Etapa", options=[e for e, _ in ETAPAS_AARRR], required=True),
+                         "metrica": T("Métrica", width="medium"), "meta": T("Meta"), "acao": T("Ação principal", width="large")}, "etapa")
+    with t3:
+        editor("calendario_mkt", {"mes": N("Mês do plano", min_value=1, max_value=120, step=1), "acao": T("Ação", required=True, width="large"),
+                                  "canal": T("Canal"), "custo": moeda("Custo")}, "acao")
+        cal = d["calendario_mkt"]
+        if not cal.empty:
+            g = cal.groupby("mes", as_index=False)["custo"].sum()
+            st.altair_chart(alt.Chart(g).mark_bar(color="#e67e22").encode(
+                x=alt.X("mes:O", title="Mês"), y=alt.Y("custo:Q", title="Custo (R$)")).properties(height=240), width="stretch")
+            st.caption(f"Total do calendário: {brl(cal['custo'].sum())}")
+    with t4:
+        st.markdown("O **Net Promoter Score** pergunta: *de 0 a 10, quanto você recomendaria a empresa a um amigo?* NPS = % de "
+                    "promotores (9 e 10) menos % de detratores (0 a 6), variando de -100 a +100 (Reichheld, 2003).")
+        nps = st.slider("Meta de NPS para o primeiro ano", -100, 100, int(proj["nps_meta"] or 50), 5, key=wk("nps"))
+        auto_unica("projeto", {"nps_meta": nps})
+        st.caption("Referência comum: acima de 50 é considerado muito bom e acima de 75, excelente. Ligue esta meta a um objetivo da "
+                   "perspectiva de clientes no Balanced Scorecard.")
+    proxima("orcamento_mkt")
+
+
+# ------------------------------------------------------------------------------
+# SIMULAÇÃO DE MONTE CARLO E PERDA ACEITÁVEL
+# ------------------------------------------------------------------------------
+def pg_montecarlo():
+    cabecalho("montecarlo")
+    res = R()
+    if res["anos"][1]["rec_bruta"] <= 0:
+        st.warning("Cadastre produtos ou assinaturas para simular.")
+        return proxima("montecarlo")
+    st.caption("Em vez de um único cenário, o programa sorteia 3.000 combinações de preço, volume, custos e crescimento dentro das "
+               "faixas abaixo (distribuição triangular: mínimo, valor do plano, máximo) e mostra a **chance** de o projeto dar certo.")
+    fx = faixas_mc(d)
+
+    def _salvar(x):
+        salvar(conn, "mc_faixas", x, "variavel")
+        d["mc_faixas"] = limpar(x.reset_index(drop=True), "mc_faixas")
+
+    tabela_editavel(fx, {"variavel": T("Variável", disabled=True, width="large"),
+                         "minimo_pct": N("Pior caso (%)", step=1.0, max_value=0.0),
+                         "maximo_pct": N("Melhor caso (%)", step=1.0, min_value=0.0)},
+                    "mc_faixas", "faixas", normalizar=lambda x: limpar(x, "mc_faixas"), salvar_fn=_salvar, adicionar=False)
+    st.caption("Para custos, o \"melhor caso\" positivo significa custo maior (é o limite de alta). Use pesquisas, orçamentos e o "
+               "histórico do setor para definir as faixas.")
+    mc = MC()
+    k = st.columns(4)
+    k[0].metric("Chance de VPL positivo", pct(mc["p_vpl_pos"], 0))
+    k[1].metric("VPL mediano", brl(mc["p50"]))
+    k[2].metric("VPL nos 5% piores casos", brl(mc["p5"]))
+    k[3].metric("Chance de caixa negativo no Ano 1", pct(mc["p_caixa_neg"], 0))
+    hist = pd.DataFrame({"VPL": mc["vpl"]})
+    st.altair_chart(alt.Chart(hist).mark_bar(opacity=0.85).encode(
+        x=alt.X("VPL:Q", bin=alt.Bin(maxbins=45), title="VPL (R$)"), y=alt.Y("count():Q", title="Cenários"),
+        color=alt.condition(alt.datum.VPL > 0, alt.value("#27ae60"), alt.value("#c0392b"))).properties(height=300) +
+        alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color="black").encode(x="x:Q"), width="stretch")
+    st.info(leitura_mc(mc))
+    st.subheader("Perda aceitável dos sócios")
+    st.caption("Em vez de perguntar só \"quanto posso ganhar?\", o empreendedor experiente pergunta \"quanto aceito perder?\" e "
+               "desenha o negócio para que o pior caso caiba nesse limite (Sarasvathy, 2001). Informe a perda aceitável de cada "
+               "sócio em Informações e sócios.")
+    rv = st.slider("Quanto do investimento fixo seria recuperado vendendo os bens, se o negócio fechar (%)", 0, 100,
+                   int(proj["revenda_ativos_pct"] if proj["revenda_ativos_pct"] is not None else 40), 5, key=wk("revenda"))
+    auto_unica("projeto", {"revenda_ativos_pct": rv})
+    pa = perda_aceitavel(proj, d, res)
+    k = st.columns(3)
+    k[0].metric("Perda potencial se fechar", brl(pa["potencial"]),
+                help="Capital dos sócios + empréstimos (normalmente garantidos pelos sócios) − venda dos bens.")
+    k[1].metric("Perda aceitável somada", brl(pa["aceitavel"]))
+    k[2].metric("Situação", ("cabe no limite" if pa["cabe"] else "acima do limite") if pa["ok"] else "não informada")
+    if pa["ok"] and not pa["cabe"]:
+        st.warning("O pior caso passa do que os sócios aceitam perder. Opções: começar menor (MVP), alugar em vez de comprar "
+                   "equipamentos, buscar parceiros ou pré-vendas antes de investir.")
+    _ir_botao("👥 Informar a perda aceitável dos sócios", "projeto", "mc_socios")
+    proxima("montecarlo")
+
+
+# ------------------------------------------------------------------------------
+# CURVA DE ADOÇÃO (BASS)
+# ------------------------------------------------------------------------------
+def pg_adocao():
+    cabecalho("adocao")
+    res = R()
+    st.caption("O modelo de Bass (1969) descreve como um produto novo se espalha: alguns clientes compram por iniciativa própria "
+               "(**inovação**, p) e a maioria compra porque viu outros usando (**imitação**, q). A curva serve para testar se o "
+               "crescimento previsto no plano é plausível.")
+    c = st.columns(3)
+    m0 = float(proj["bass_mercado"] or 0) or float(proj["sam_clientes"] or 0)
+    m = c[0].number_input("Mercado potencial (clientes)", 0.0, 1e9, m0, 100.0, key=wk("bass_m"),
+                          help="Padrão: SAM (clientes alcançáveis) de Tamanho do mercado.")
+    p = c[1].number_input("Coeficiente de inovação (p)", 0.001, 0.5, float(proj["bass_p"] or 0.03), 0.005, format="%.3f", key=wk("bass_p"))
+    q = c[2].number_input("Coeficiente de imitação (q)", 0.0, 1.5, float(proj["bass_q"] or 0.38), 0.02, format="%.2f", key=wk("bass_q"))
+    auto_unica("projeto", {"bass_mercado": m if m != float(proj["sam_clientes"] or 0) else 0.0, "bass_p": p, "bass_q": q})
+    st.caption("Valores médios de p = 0,03 e q = 0,38 vêm de uma meta-análise de estudos de difusão (Sultan; Farley; Lehmann, 1990). "
+               "Produtos que dependem muito de indicação (aplicativos, serviços locais) costumam ter q maior.")
+    bc = bass_comparacao(proj, res)
+    if not bc["ok"]:
+        st.info("Informe o mercado potencial ou preencha o SAM em Tamanho do mercado.")
+        return proxima("adocao")
+    tb = bc["tabela"]
+    series = ["Adotantes acumulados"] + (["Clientes no plano"] if bc["tem_plano"] else [])
+    g = tb.melt(id_vars="Ano", value_vars=series, var_name="Série", value_name="Clientes")
+    st.altair_chart(alt.Chart(g).mark_line(point=True, strokeWidth=3).encode(
+        x=alt.X("Ano:O"), y=alt.Y("Clientes:Q"), color=alt.Color("Série:N", legend=alt.Legend(orient="bottom", title=None)),
+        tooltip=["Ano", "Série", alt.Tooltip("Clientes:Q", format=",.0f")]).properties(height=320), width="stretch")
+    vis = tb.copy()
+    for c_ in ("Adotantes acumulados", "Novos adotantes no ano", "Clientes no plano"):
+        if c_ in vis:
+            vis[c_] = vis[c_].map(lambda x: num_br(x, 0))
+    vis["% do mercado potencial"] = vis["% do mercado potencial"].map(lambda x: pct(x, 1))
+    if "Plano ÷ Bass" in vis:
+        vis["Plano ÷ Bass"] = vis["Plano ÷ Bass"].map(lambda x: f"{num_br(x, 2)}x")
+    st.dataframe(vis, hide_index=True, width="stretch")
+    if bc["tem_plano"]:
+        acima = tb[tb["Plano ÷ Bass"] > 1.2]
+        if acima.empty:
+            st.success("O número de clientes do plano está dentro do que a difusão do produto permite.")
+        else:
+            st.warning(f"Nos anos {', '.join(str(a) for a in acima['Ano'])} o plano supõe mais clientes do que a curva de adoção "
+                       "sugere. Ou o crescimento está otimista, ou o grupo precisa explicar o que acelera a adoção (parcerias, "
+                       "indicação, mídia).")
+    else:
+        st.caption("Preencha o gasto anual por cliente em Tamanho do mercado para comparar com o plano.")
+    proxima("adocao")
+
+
+# ------------------------------------------------------------------------------
+# RÉGUA DE PRONTIDÃO
+# ------------------------------------------------------------------------------
+def pg_prontidao():
+    cabecalho("prontidao")
+    res = R()
+    pr = avaliar_prontidao(proj, d, res, MC(), preco_referencia(proj, res))
+    st.metric("Nível de prontidão do negócio", f"{pr['nivel']} de 9")
+    st.progress(pr["nivel"] / 9)
+    st.caption("Inspirada nos níveis de prontidão usados por aceleradoras e programas de inovação: cada degrau só conta se os "
+               "anteriores estiverem cumpridos.")
+    for n_, nome, crit in NIVEIS_PRONTIDAO:
+        ok = pr["cond"][n_]
+        atingido = n_ <= pr["nivel"]
+        ic = "✅" if atingido else ("🟡" if ok else "⬜")
+        with st.container(border=True):
+            st.markdown(f"{ic} **{n_}. {nome}**: {crit}")
+            if n_ == pr["nivel"] + 1:
+                st.caption("👉 Próximo degrau: é aqui que o grupo deve concentrar o esforço agora.")
+            elif ok and not atingido:
+                st.caption("Critério cumprido, mas um degrau anterior ainda está pendente.")
+    proxima("prontidao")
+
+
+# ------------------------------------------------------------------------------
+# BANCA SIMULADA
+# ------------------------------------------------------------------------------
+def pg_banca():
+    cabecalho("banca")
+    res = R()
+    perg = perguntas_banca(proj, d, res, MC(), preco_referencia(proj, res))
+    st.caption("Perguntas que uma banca faria, geradas a partir dos pontos fracos do próprio plano. Escreva a resposta do grupo: "
+               "o treino vale mais do que decorar o pitch. As respostas vão para o relatório e para o prompt de IA.")
+    resp = {str(r["pergunta"]): str(r["resposta"]) for _, r in d["banca_respostas"].iterrows()}
+    novas = {}
+    for i, q in enumerate(perg):
+        with st.container(border=True):
+            st.markdown(f"**{i + 1}. [{q['tema']}]** {q['pergunta']}")
+            st.caption(f"Por que a banca perguntaria: {q['motivo']}")
+            novas[q["pergunta"]] = st.text_area("Resposta do grupo", resp.get(q["pergunta"], ""), key=wk(f"banca_{i}_{abs(hash(q['pergunta'])) % 10**6}"),
+                                                label_visibility="collapsed", placeholder="Resposta com dados do plano...")
+    mudou = any(novas[k] != resp.get(k, "") for k in novas)
+    if mudou:
+        todas = {**resp, **novas}
+        df = pd.DataFrame({"pergunta": list(todas), "resposta": list(todas.values())})
+        df = df[df["resposta"].astype(str).str.strip() != ""]
+        salvar(conn, "banca_respostas", df, "pergunta")
+        d["banca_respostas"] = limpar(df.reset_index(drop=True), "banca_respostas")
+        marcar_salvo()
+        invalidar()
+    n_ok = sum(1 for k in novas if len(novas[k].strip()) > 20)
+    st.metric("Perguntas respondidas", f"{n_ok} de {len(perg)}")
+    proxima("banca")
+
+
+# ------------------------------------------------------------------------------
+# FORMALIZAÇÃO
+# ------------------------------------------------------------------------------
+def pg_formalizacao():
+    cabecalho("formalizacao")
+    res = R()
+    ps = porte_sugerido(res, d)
+    k = st.columns(2)
+    k[0].metric("Receita prevista no Ano 1", brl(ps["receita"]))
+    k[1].metric("Enquadramento sugerido", ps["porte"])
+    for o in ps["obs"]:
+        st.warning(o)
+    st.caption(f"Limites usados: MEI até {brl(LIMITE_MEI)} por ano (com um sócio, no máximo um empregado e atividade permitida), "
+               f"ME até {brl(LIMITE_ME)} e EPP até {brl(LIMITE_EPP)}. O teto do MEI está em discussão no Congresso (proposta aprovada "
+               "na Câmara em 2026 prevê R$ 110 mil em 2027 e R$ 140 mil em 2028): confira a regra vigente no Portal do Empreendedor.")
+    itens = itens_formalizacao(proj, d)
+    faltam = [i for i in itens if i not in set(d["formalizacao"]["item"])]
+    if faltam and st.button(f"Incluir {len(faltam)} item(ns) sugerido(s) para este negócio"):
+        _semear("formalizacao", [{"item": i, "status": "Pendente", "observacao": ""} for i in faltam], "item")
+    editor("formalizacao", {"item": T("Item", required=True, width="large"), "status": S("Situação", options=STATUS_FORMAL),
+                            "observacao": T("Observação (custo, prazo, órgão)", width="large")}, "item")
+    fo = d["formalizacao"]
+    if not fo.empty:
+        feito = float(fo["status"].isin(["Concluído", "Em andamento", "Não se aplica"]).mean())
+        st.progress(feito, text=f"{pct(feito, 0)} encaminhado")
+    proxima("formalizacao")
+
+# ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
 # ##############################################################################
 # ==============================================================================
@@ -7712,9 +9464,12 @@ Nenhum dado sai do seu computador sem que você mesmo cole. <b>A IA comenta; que
 Confira os números que ela citar com os do programa.
 </div>""", unsafe_allow_html=True)
     st.write("")
+    so_viab = st.toggle("🎯 Só o teste de viabilidade real (veredito, cenário realista e ajustes para viabilizar)", key=wk("ia_so_viab"),
+                        help="Monta um texto focado: a IA compara as premissas com o mercado, refaz as contas num cenário realista, "
+                             "dá o veredito (viável, viável com ajustes ou inviável) e diz o que mudar.")
     c1, c2 = st.columns([2, 1])
     with c1:
-        escolha = st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
+        escolha = ["viabilidade_real", "validacao"] if so_viab else st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
                                  default=[k for k in TAREFAS_IA if k != "recorrencia" or R()["recorrencia"].get("tem")],
                                  key=wk("ia_tarefas"))
     with c2:
@@ -8130,7 +9885,11 @@ ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,
          "simulador": pg_simulador, "experimentos": pg_experimentos, "riscos": pg_riscos, "cronograma": pg_cronograma,
          "realizado": pg_realizado, "ia": pg_ia, "sumario": pg_sumario, "apresentacao": pg_apresentacao,
-         "relatorio": pg_relatorio, "professor": pg_professor, "config": pg_config}
+         "relatorio": pg_relatorio, "professor": pg_professor, "config": pg_config,
+         "evidencias": pg_evidencias, "entrevistas": pg_entrevistas, "teste_preco": pg_teste_preco, "vpc": pg_vpc,
+         "oceano": pg_oceano, "posicionamento": pg_posicionamento, "orcamento_mkt": pg_orcamento_mkt,
+         "montecarlo": pg_montecarlo, "adocao": pg_adocao, "prontidao": pg_prontidao, "banca": pg_banca,
+         "formalizacao": pg_formalizacao}
 try:
     ROTAS.get(ss.pagina, pg_inicio)()
     copia_automatica()

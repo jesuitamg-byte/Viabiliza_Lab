@@ -78,9 +78,12 @@ Nenhum dado sai do seu computador sem que você mesmo cole. <b>A IA comenta; que
 Confira os números que ela citar com os do programa.
 </div>""", unsafe_allow_html=True)
     st.write("")
+    so_viab = st.toggle("🎯 Só o teste de viabilidade real (veredito, cenário realista e ajustes para viabilizar)", key=wk("ia_so_viab"),
+                        help="Monta um texto focado: a IA compara as premissas com o mercado, refaz as contas num cenário realista, "
+                             "dá o veredito (viável, viável com ajustes ou inviável) e diz o que mudar.")
     c1, c2 = st.columns([2, 1])
     with c1:
-        escolha = st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
+        escolha = ["viabilidade_real", "validacao"] if so_viab else st.multiselect("O que você quer que a IA faça?", list(TAREFAS_IA), format_func=lambda k: TAREFAS_IA[k],
                                  default=[k for k in TAREFAS_IA if k != "recorrencia" or R()["recorrencia"].get("tem")],
                                  key=wk("ia_tarefas"))
     with c2:
@@ -496,7 +499,11 @@ ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,
          "simulador": pg_simulador, "experimentos": pg_experimentos, "riscos": pg_riscos, "cronograma": pg_cronograma,
          "realizado": pg_realizado, "ia": pg_ia, "sumario": pg_sumario, "apresentacao": pg_apresentacao,
-         "relatorio": pg_relatorio, "professor": pg_professor, "config": pg_config}
+         "relatorio": pg_relatorio, "professor": pg_professor, "config": pg_config,
+         "evidencias": pg_evidencias, "entrevistas": pg_entrevistas, "teste_preco": pg_teste_preco, "vpc": pg_vpc,
+         "oceano": pg_oceano, "posicionamento": pg_posicionamento, "orcamento_mkt": pg_orcamento_mkt,
+         "montecarlo": pg_montecarlo, "adocao": pg_adocao, "prontidao": pg_prontidao, "banca": pg_banca,
+         "formalizacao": pg_formalizacao}
 try:
     ROTAS.get(ss.pagina, pg_inicio)()
     copia_automatica()
