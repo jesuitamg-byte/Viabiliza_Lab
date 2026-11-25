@@ -400,6 +400,15 @@ def criar_projeto_cafe(caminho: Path) -> None:
     conn.close()
 
 
+def criar_projeto_servico(caminho: Path) -> None:
+    """Cria o quarto estudo de caso: TecVale Soluções (serviços de TI por hora, por projeto e por contrato)."""
+    conn = conectar(caminho)
+    popular_modelo_servico(conn)
+    popular_estrategia(conn, "servico")
+    conn.commit()
+    conn.close()
+
+
 def criar_projeto_assinatura(caminho: Path) -> None:
     """Cria o terceiro estudo de caso: Conecta Vale (aplicativo com planos de assinatura)."""
     conn = conectar(caminho)

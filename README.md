@@ -4,7 +4,7 @@
 
 Programa gratuito para elaborar **plano de negócio e análise de viabilidade econômico-financeira**, com estrutura inspirada no plano de negócio do Sebrae e voltado ao ensino de Administração.
 
-**Versão 7.1.** São 54 ferramentas em cartões grandes, organizadas na sequência de um plano de negócio, para negócios de **produtos, serviços e assinaturas**:
+**Versão 7.2.** São 54 ferramentas em cartões grandes, organizadas na sequência de um plano de negócio, para negócios de **produtos, serviços e assinaturas**:
 
 - **Cliente e mercado:** segmentos, personas, jornada do cliente, tamanho do mercado (TAM/SAM/SOM).
 - **Identidade:** missão, visão e valores; objetivos estratégicos com checagem automática dos critérios SMART.
@@ -21,7 +21,7 @@ Programa gratuito para elaborar **plano de negócio e análise de viabilidade ec
 - **Complementares:** quadro de experimentação, riscos, cronograma de implantação, orçado x realizado.
 - **Entrega:** texto pronto para análise com IA gratuita (cobre todas as ferramentas e tem o **teste de viabilidade real**: a IA compara as premissas com o mercado, refaz as contas num cenário realista, dá o veredito e propõe ajustes), sumário executivo automático, modo apresentação, relatório PDF, *pitch deck*, Word, Excel e modo professor.
 
-Também tem: salvamento automático a cada alteração, ponto de restauração automático a cada 10 minutos, tema claro/escuro, listas personalizáveis (categorias, unidades, áreas) três casos de exemplo (FitBox, Café Mucuri e Conecta Vale, um aplicativo por assinatura) e layout adaptado para celular.
+Também tem: salvamento automático a cada alteração, ponto de restauração automático a cada 10 minutos, tema claro/escuro, listas personalizáveis (categorias, unidades, áreas) quatro casos de exemplo (FitBox, Café Mucuri, TecVale Soluções, uma empresa de serviços de TI, e Conecta Vale, um aplicativo por assinatura) e layout adaptado para celular.
 
 ---
 
@@ -34,6 +34,7 @@ Também tem: salvamento automático a cada alteração, ponto de restauração a
 | Com o exemplo FitBox preenchido | **https://jesuitamg-byte.github.io/gabriel_jesuita/** |
 | Em branco, para começar do zero | **https://jesuitamg-byte.github.io/gabriel_jesuita/?versao=branco** |
 | Com o exemplo de assinatura (Conecta Vale) | **https://jesuitamg-byte.github.io/gabriel_jesuita/?versao=assinatura** |
+| Com o exemplo de serviços (TecVale Soluções) | **https://jesuitamg-byte.github.io/gabriel_jesuita/?versao=servico** |
 
 - O programa roda **dentro do navegador** (Chrome, Edge ou Firefox). Nada é instalado e **os dados não saem do seu computador**.
 - A primeira abertura leva de 30 segundos a 1 minuto.

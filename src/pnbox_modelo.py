@@ -666,6 +666,133 @@ def popular_modelo_assinatura(conn) -> None:
 
 
 # ==============================================================================
+# QUARTO EXEMPLO: TECVALE SOLUÇÕES (SERVIÇOS DE TI POR HORA E POR PROJETO) - fictício
+# ==============================================================================
+def popular_modelo_servico(conn) -> None:
+    ins = conn.executemany
+    conn.execute("""
+        UPDATE projeto SET nome_negocio='TecVale Soluções', objetivo='Criar um novo negócio',
+            enquadramento='Simples Nacional', periodo_anos=3, porte='Microempresa (ME)',
+            setor_atuacao='Tecnologia e aplicativos; Serviço', cidade_uf='Teófilo Otoni - MG',
+            contatos='@tecvalesolucoes', tipo_negocio='Serviços (hora ou projeto)',
+            horas_mes_pessoa=168, utilizacao_pct=70, anexo_simples='Anexo III - Serviços',
+            aliquota_imposto_pct=6.0, crescimento_mensal_ano1_pct=2.0, crescimento_anual_pct=10.0,
+            inflacao_custos_anual_pct=4.5, tma_anual_pct=14.0, pme_dias=0, reserva_caixa_extra=25000,
+            recuperar_giro=1, cen_otim_receita_pct=15, cen_otim_custo_pct=5, cen_pess_receita_pct=20,
+            cen_pess_custo_pct=10, autores='Integrante 1; Integrante 2', turma='Exemplo didático - empresa de serviços',
+            tam_desc='Micro e pequenas empresas do Vale do Mucuri (estimativa ilustrativa)',
+            tam_clientes=9000, sam_desc='Micro e pequenas empresas de Teófilo Otoni com computador e presença digital',
+            sam_clientes=3500, som_pct=5, gasto_anual_cliente=2400,
+            mercado_fontes='Estimativas ilustrativas; substitua por dados do Sebrae (Data MPE), da Junta Comercial e de pesquisa com empresas.',
+            mkt_produto='Suporte de informática, manutenção de computadores, criação de sites e lojas virtuais e treinamento para pequenas empresas. O carro-chefe é o contrato mensal de manutenção, que gera receita previsível.',
+            mkt_preco='Hora técnica avulsa, pacotes fechados por projeto (sites e lojas virtuais) e contrato mensal com horas incluídas, mais barato que a hora avulsa.',
+            mkt_praca='Atendimento no cliente, na bancada da empresa e remoto. Venda direta pelo WhatsApp, indicação e parcerias com contadores.',
+            mkt_promocao='Diagnóstico gratuito de segurança e backup, conteúdo educativo no Instagram e programa de indicação.',
+            loc_endereco='Sala comercial no centro de Teófilo Otoni - MG', loc_area_m2=45,
+            loc_justificativa='Perto dos clientes do comércio e com espaço para a bancada de manutenção.',
+            op_processos='Chamado pelo WhatsApp -> triagem e orçamento -> atendimento remoto ou no local -> registro das horas -> faturamento mensal.',
+            op_horario='Segunda a sexta, 8h às 18h; plantão para clientes com contrato.',
+            rateio_criterio='Horas', margem_desejada_pct=15
+        WHERE id=1""")
+    ins("INSERT INTO socios (nome, funcao, contato, perfil, capital_integralizado) VALUES (?,?,?,?,?)", [
+        ("Sócio(a) 1", "Técnico(a) responsável", "", "Técnico em informática, 6 anos de experiência em suporte.", 30000.0),
+        ("Sócio(a) 2", "Comercial e projetos web", "", "Desenvolvimento de sites e atendimento a clientes.", 30000.0),
+    ])
+    ins("INSERT INTO emprestimos (descricao, valor, taxa_anual_pct, prazo_meses) VALUES (?,?,?,?)", [
+        ("Pronampe", 25000, 14.0, 36)])
+    ins("""INSERT INTO segmentos (nome, descricao, nota_tamanho, nota_lucro, nota_longevidade,
+           nota_concorrencia, nota_aderencia) VALUES (?,?,?,?,?,?,?)""", [
+        ("Comércio varejista", "Lojas com sistema de vendas, impressoras e redes que não podem parar.", 9, 6, 8, 5, 9),
+        ("Escritórios e clínicas", "Contabilidade, advocacia e saúde: dados sensíveis e muitos computadores.", 7, 8, 9, 6, 8),
+        ("Novos negócios sem site", "Precisam de presença digital rápida e barata.", 8, 5, 6, 4, 7),
+    ])
+    ins("""INSERT INTO personas (nome, idade, profissao, estado_civil, renda_mensal, escolaridade, cidade,
+           descricao, citacao, habitos, ganhos, desafios, duvidas_objecoes, experiencia_ideal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [
+        ("Cláudia", 47, "Dona de loja de roupas", "Casada", 8000.0, "Ensino Superior", "Teófilo Otoni - MG",
+         "Tem uma loja com duas filiais e depende do sistema de vendas e da maquininha.",
+         "Quando o computador para, eu paro de vender.", "Resolve tudo pelo WhatsApp; chama o sobrinho para consertar o PC.",
+         "Sistema funcionando e site que traga clientes.", "Atendimento demorado e sem garantia; medo de perder dados.",
+         "Contrato mensal compensa?", "Um técnico que atende no mesmo dia e avisa antes de o problema acontecer."),
+    ])
+    concs = ["Técnicos autônomos", "Loja de informática do centro", "Agência digital da capital"]
+    ins("INSERT INTO concorrentes (nome) VALUES (?)", [(c,) for c in concs])
+    notas = {"Rapidez no atendimento": (9, 6, 5, 4), "Preço": (7, 9, 6, 3), "Garantia do serviço": (8, 3, 6, 7),
+             "Conhecimento técnico": (8, 5, 6, 9), "Atendimento presencial": (9, 8, 8, 2), "Sites e lojas virtuais": (7, 3, 2, 9)}
+    ins("INSERT INTO concorrencia_notas (atributo, empresa, nota) VALUES (?,?,?)",
+        [(a, e, v) for a, vals in notas.items() for e, v in zip(["Nossa Empresa"] + concs, vals)])
+    ins("""INSERT INTO swot (ambiente, dimensao, fator, natureza, impacto, diagnostico, plano_acao, priorizado)
+           VALUES (?,?,?,?,?,?,?,?)""", [
+        ("Interno", "Pessoas", "Sócios com experiência técnica e em sites", "Força", "Alto", "Atende do computador ao site.", "Pacotes que combinam os dois serviços.", 1),
+        ("Interno", "Operação", "Receita depende das horas da equipe", "Fraqueza", "Alto", "Faturamento limitado pela capacidade.", "Contratos mensais e serviços remotos.", 1),
+        ("Externo", "Tecnológico", "Digitalização das pequenas empresas", "Oportunidade", "Alto", "Pix, nota fiscal eletrônica e vendas on-line exigem estrutura.", "Pacote \"empresa digital\".", 1),
+        ("Externo", "Legal", "LGPD exige cuidado com dados de clientes", "Oportunidade", "Médio", "Clínicas e escritórios precisam se adequar.", "Diagnóstico de segurança e backup.", 1),
+        ("Externo", "Mercado", "Técnicos informais cobram muito pouco", "Ameaça", "Médio", "Concorrência por preço.", "Vender garantia, prazo e contrato.", 1),
+    ])
+    ins("""INSERT INTO inv_fixos (descricao, quantidade, valor_unitario, vida_util_anos, valor_residual_pct)
+           VALUES (?,?,?,?,?)""", [
+        ("Notebooks para a equipe", 3, 4500, 5, 10), ("Bancada, ferramentas e estação de solda", 1, 4500, 5, 10),
+        ("Mobiliário da sala", 1, 4000, 10, 10), ("Moto para atendimento externo", 1, 14000, 5, 40),
+    ])
+    ins("INSERT INTO inv_pre (descricao, valor) VALUES (?,?)", [
+        ("Legalização e contrato social", 2500), ("Licenças de software (primeiro ano)", 2500),
+        ("Reforma e adequação da sala", 3000), ("Marketing de lançamento", 3000),
+    ])
+    ins("INSERT INTO capital_giro_prazos (tipo, prazo_dias, percentual) VALUES (?,?,?)", [
+        ("Recebimento", 0, 50.0), ("Recebimento", 30, 50.0), ("Pagamento", 0, 100.0)])
+    ins("""INSERT INTO catalogo (categoria, descricao, preco_venda, custo_aquisicao, qtd_mensal, qtd_estoque_inicial, horas_unit)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Serviço", "Contrato mensal de manutenção (6 h incluídas)", 690, 20, 14, 0, 6),
+        ("Serviço", "Hora técnica avulsa", 130, 0, 40, 0, 1),
+        ("Serviço", "Formatação e configuração de computador", 190, 15, 16, 0, 2.5),
+        ("Serviço", "Site institucional", 2900, 250, 2, 0, 40),
+        ("Serviço", "Loja virtual", 5800, 400, 0.5, 0, 80),
+        ("Serviço", "Treinamento em ferramentas digitais (turma)", 1300, 80, 1, 0, 12),
+    ])
+    ins("INSERT INTO custos_variaveis (descricao, percentual) VALUES (?,?)", [("Taxas de cartão e Pix", 2.0)])
+    P = "Produção / operação"
+    ins("""INSERT INTO pessoal (cargo, area, num_empregados, salario_mensal, encargos_pct, beneficios_unit, atribuicoes, mes_inicio)
+           VALUES (?,?,?,?,?,?,?,?)""", [
+        ("Técnico(a) de suporte", P, 2, 2400, 32, 350, "Atendimento remoto e presencial, manutenção de computadores e redes.", 1),
+        ("Desenvolvedor(a) web", P, 1, 3500, 32, 350, "Criação de sites e lojas virtuais.", 1),
+        ("Técnico(a) de suporte júnior", P, 1, 2000, 32, 350, "Contratação prevista para quando a ocupação passar de 90%.", 25),
+    ])
+    TEC, DA, DC, DF = "Custo de tecnologia / infraestrutura", "Despesa administrativa", "Despesa comercial", "Despesa financeira"
+    ins("INSERT INTO custos_fixos (descricao, classificacao, valor_mensal) VALUES (?,?,?)", [
+        ("Softwares de acesso remoto e gestão de chamados", TEC, 350), ("Hospedagem e domínios dos clientes (base)", TEC, 150),
+        ("Combustível e manutenção da moto", TEC, 450), ("Aluguel da sala", DA, 1500), ("Pró-labore", DA, 5000),
+        ("Contador", DA, 500), ("Internet e telefone", DA, 300), ("Energia elétrica", DA, 300),
+        ("Anúncios e conteúdo", DC, 700), ("Tarifas bancárias", DF, 80),
+    ])
+    ins("""INSERT INTO fornecedores (nome, itens, prazo_pagamento_dias, prazo_entrega_dias, condicoes, critico)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Distribuidora de peças de informática", "Memórias, SSDs, fontes, cabos", 28, 5, "Boleto 28 dias", 1),
+        ("Provedor de hospedagem", "Hospedagem e domínios", 0, 0, "Cartão, mensal", 1),
+        ("Software de acesso remoto", "Licenças por técnico", 0, 0, "Anual", 0),
+    ])
+    ins("""INSERT INTO propostas (persona_nome, valores, que_desejam, por_meio, diferentemente, oferecem)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Cláudia", "Rapidez; Garantia; Prevenção", "manter o sistema de vendas funcionando sem sustos",
+         "contrato mensal com atendimento no mesmo dia, backup e manutenção preventiva",
+         "técnicos avulsos que só aparecem quando o problema já aconteceu", "tranquilidade para vender todos os dias"),
+    ])
+    ins("INSERT INTO riscos (risco, probabilidade, impacto, mitigacao, responsavel) VALUES (?,?,?,?,?)", [
+        ("Equipe sem horas livres para novos clientes", 3, 4, "Acompanhar a ocupação mensal e contratar no mês 25", "Sócio(a) 1"),
+        ("Inadimplência dos contratos mensais", 3, 3, "Cobrança por boleto recorrente e suspensão após 30 dias", "Sócio(a) 2"),
+        ("Perda de dados de um cliente durante o serviço", 2, 5, "Backup antes de cada intervenção e termo de responsabilidade", "Sócio(a) 1"),
+    ])
+    ins("""INSERT INTO experimentos (hipotese, experimento, metrica, criterio_sucesso, resultado, status)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Lojas fecham contrato mensal após um diagnóstico gratuito", "Oferecer diagnóstico a 25 lojas do centro",
+         "Contratos fechados", "Pelo menos 5 contratos", "", "Planejado")])
+    ins("INSERT INTO cronograma (atividade, mes_inicio, duracao_meses, responsavel, custo) VALUES (?,?,?,?,?)", [
+        ("Formalização e sala", 1, 1, "Sócio(a) 2", 5500), ("Diagnósticos gratuitos", 1, 2, "Sócio(a) 1", 0),
+        ("Lançamento do site e das redes", 1, 1, "Sócio(a) 2", 3000), ("Contratação do técnico júnior", 25, 1, "Sócio(a) 1", 0),
+    ])
+
+
+
+# ==============================================================================
 # IDENTIDADE, OBJETIVOS SMART E MATRIZES ESTRATÉGICAS DOS TRÊS EXEMPLOS
 # ==============================================================================
 _ESTRATEGIA = {
@@ -751,6 +878,35 @@ _ESTRATEGIA = {
                    (4, "Redes sociais gratuitas cumprem parte da função.", "Mostrar resultado medido (cupons usados, visitas)."),
                    (3, "Empresas pequenas cancelam com facilidade.", "Plano anual com desconto e acompanhamento mensal."),
                    (3, "Dependência de lojas de aplicativos e provedor de nuvem.", "Cobrar empresas fora da loja e evitar dependência de um só provedor.")],
+    },
+    "servico": {
+        "missao": "Manter a tecnologia das pequenas empresas do Vale do Mucuri funcionando, com atendimento rápido, garantia e prevenção.",
+        "visao": "Ser a empresa de suporte de TI mais lembrada pelo comércio de Teófilo Otoni até 2030.",
+        "valores": "Agilidade; Honestidade no diagnóstico; Segurança dos dados; Aprendizado contínuo",
+        "rel": "Atendimento pelo WhatsApp com prazo de resposta\nVisita preventiva mensal aos clientes com contrato\nRelatório de chamados",
+        "par": "Escritórios de contabilidade\nDistribuidora de peças\nProvedor de hospedagem\nSebrae (capacitação de clientes)",
+        "obj": [
+            ("Chegar a 25 contratos mensais de manutenção", "Financeira", "Contratos ativos", 25, "contratos", 12, "Sócio(a) 2",
+             "Começa com 14 e o diagnóstico gratuito gera novos contratos.", "Contrato dá receita previsível e reduz ociosidade.",
+             "Diagnóstico gratuito e indicação de contadores", ""),
+            ("Atender os chamados no mesmo dia", "Clientes", "Chamados resolvidos em até 8 horas", 90, "%", 6, "Sócio(a) 1",
+             "Equipe de dois técnicos e acesso remoto.", "Rapidez é o principal motivo de escolha.", "Fila de chamados com prazo",
+             "Chegar a 25 contratos mensais de manutenção"),
+            ("Manter a ocupação da equipe entre 70% e 90%", "Processos internos", "Horas vendidas ÷ horas cobráveis", 85, "%", 12,
+             "Sócio(a) 1", "Ocupação calculada na ferramenta de serviços.", "Ocupação baixa é custo; alta demais derruba a qualidade.",
+             "Registro de horas por chamado", "Atender os chamados no mesmo dia"),
+            ("Certificar os técnicos em redes e segurança", "Aprendizado e crescimento", "Técnicos certificados", 2, "técnicos", 9,
+             "Sócio(a) 1", "Cursos gratuitos e de baixo custo disponíveis.", "Abre o serviço de adequação à LGPD.",
+             "Plano de cursos", "Manter a ocupação da equipe entre 70% e 90%"),
+        ],
+        "canais": ["Indicação (boca a boca)", "WhatsApp Business", "Instagram", "Acordos e Parcerias"],
+        "bcg": [("Contrato mensal de manutenção (6 h incluídas)", 12, 1.5), ("Hora técnica avulsa", 3, 0.8),
+                ("Site institucional", 9, 0.4), ("Loja virtual", 16, 0.2), ("Formatação e configuração de computador", 1, 1.1)],
+        "porter": [(4, "Muitos técnicos autônomos e lojas de informática.", "Vender contrato, garantia e prazo, não só a hora."),
+                   (4, "Basta conhecimento e um notebook para abrir.", "Construir carteira de contratos e reputação."),
+                   (3, "Suporte do próprio fabricante e sobrinho que entende de computador.", "Mostrar o custo de uma parada do sistema."),
+                   (3, "Pequenas empresas comparam preço e negociam.", "Planos com horas incluídas e preço fechado."),
+                   (2, "Peças e softwares têm vários fornecedores.", "Dois fornecedores para peças críticas.")],
     },
 }
 
@@ -887,6 +1043,40 @@ _VALIDACAO = {
                  [("Conecta Vale", 4, 8), ("Plataforma nacional de eventos", 7, 4), ("Perfis locais no Instagram", 3, 6)]),
         "orc": [("Venda consultiva às empresas", 1200, 8, "Contratos fechados"), ("Instagram", 500, 4, "Cadastros pelo link")],
         "aarrr": [], "cal": [], "perda": [30000, 30000], "formal": {}, "banca": [],
+    },
+    "servico": {
+        "vw_produto": "Contrato mensal de manutenção (6 h incluídas)", "vw_preco": 690, "vw_n": 24, "intencao": (10.0, 22.0),
+        "entrevistas": [
+            ("10/03", "S01", "Loja de roupas", "computador para de funcionar; técnico demora", "sobrinho", "Sim", 600, "Perde vendas quando o sistema para"),
+            ("10/03", "S02", "Escritório de contabilidade", "medo de perder dados; técnico demora", "técnico autônomo", "Sim", 900, "Quer backup diário"),
+            ("11/03", "S03", "Clínica odontológica", "medo de perder dados; LGPD", "empresa da capital", "Talvez", 800, "Pede contrato com garantia"),
+            ("11/03", "S04", "Mercearia", "computador para de funcionar", "loja de informática", "Não", 250, "Prefere pagar só quando quebra"),
+            ("12/03", "S05", "Loja de calçados", "técnico demora; computador para de funcionar", "técnico autônomo", "Sim", 650, "Indica outros lojistas"),
+            ("12/03", "S06", "Imobiliária", "não tem site; medo de perder dados", "nenhuma", "Talvez", 500, "Interesse maior no site"),
+        ],
+        "encaixe": [],
+        "evidencias": {"Salários e encargos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Piso da categoria e tabela do contador"),
+                       "Preço de venda": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Preços de 4 concorrentes locais")},
+        "vpc": ("Quando o computador ou o sistema da loja para, quero que alguém resolva no mesmo dia, para não perder vendas.",
+                "Manter o sistema de vendas funcionando\nGuardar os dados com segurança\nTer presença na internet",
+                "Técnico demora\nComputador para de funcionar\nMedo de perder dados\nNão tem site",
+                "Previsibilidade de gastos\nSaber que os dados estão seguros",
+                "Contrato mensal de manutenção\nHora técnica\nSites e lojas virtuais",
+                "Atendimento no mesmo dia\nManutenção preventiva\nBackup automático\nSite em pacote fechado",
+                "Preço fixo mensal\nRelatório de backup"),
+        "errc": [("Preço", "Reduzir", 6, "Não competir com o técnico informal pelo menor preço"),
+                 ("Garantia do serviço", "Elevar", 10, "Garantia por escrito de 90 dias"),
+                 ("Rapidez no atendimento", "Elevar", 10, "Atendimento no mesmo dia para contratos"),
+                 ("Manutenção preventiva", "Criar", 8, "Visita mensal antes de o problema acontecer")],
+        "posic": ("pequenas empresas do comércio e de serviços de Teófilo Otoni", "não podem parar quando o computador falha",
+                  "TecVale Soluções", "um serviço de suporte de TI por contrato", "resolve no mesmo dia e evita que o problema aconteça",
+                  "técnicos avulsos e lojas de informática", "o contrato inclui visita preventiva mensal, backup e garantia por escrito"),
+        "mapa": ("Preço (baixo → alto)", "Rapidez e garantia (baixa → alta)",
+                 [("TecVale Soluções", 6, 9), ("Técnicos autônomos", 3, 4), ("Loja de informática do centro", 5, 5),
+                  ("Agência digital da capital", 9, 5)]),
+        "orc": [("Indicação (boca a boca)", 200, 3, "Desconto de um mês por indicação"), ("Instagram", 500, 2, "Mensagens pelo link"),
+                ("Acordos e Parcerias", 300, 2, "Contadores parceiros")],
+        "aarrr": [], "cal": [], "perda": [20000, 20000], "formal": {}, "banca": [],
     },
 }
 

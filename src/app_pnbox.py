@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v7.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v7.2 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -81,6 +81,7 @@ from fpdf.fonts import FontFace
 from pathlib import Path
 import altair as alt
 import hashlib
+import html as _html
 import io
 import json
 import math
@@ -483,6 +484,15 @@ def criar_projeto_cafe(caminho: Path) -> None:
     conn = conectar(caminho)
     popular_modelo_cafe(conn)
     popular_estrategia(conn, "cafe")
+    conn.commit()
+    conn.close()
+
+
+def criar_projeto_servico(caminho: Path) -> None:
+    """Cria o quarto estudo de caso: TecVale Soluções (serviços de TI por hora, por projeto e por contrato)."""
+    conn = conectar(caminho)
+    popular_modelo_servico(conn)
+    popular_estrategia(conn, "servico")
     conn.commit()
     conn.close()
 
@@ -1158,6 +1168,133 @@ def popular_modelo_assinatura(conn) -> None:
 
 
 # ==============================================================================
+# QUARTO EXEMPLO: TECVALE SOLUÇÕES (SERVIÇOS DE TI POR HORA E POR PROJETO) - fictício
+# ==============================================================================
+def popular_modelo_servico(conn) -> None:
+    ins = conn.executemany
+    conn.execute("""
+        UPDATE projeto SET nome_negocio='TecVale Soluções', objetivo='Criar um novo negócio',
+            enquadramento='Simples Nacional', periodo_anos=3, porte='Microempresa (ME)',
+            setor_atuacao='Tecnologia e aplicativos; Serviço', cidade_uf='Teófilo Otoni - MG',
+            contatos='@tecvalesolucoes', tipo_negocio='Serviços (hora ou projeto)',
+            horas_mes_pessoa=168, utilizacao_pct=70, anexo_simples='Anexo III - Serviços',
+            aliquota_imposto_pct=6.0, crescimento_mensal_ano1_pct=2.0, crescimento_anual_pct=10.0,
+            inflacao_custos_anual_pct=4.5, tma_anual_pct=14.0, pme_dias=0, reserva_caixa_extra=25000,
+            recuperar_giro=1, cen_otim_receita_pct=15, cen_otim_custo_pct=5, cen_pess_receita_pct=20,
+            cen_pess_custo_pct=10, autores='Integrante 1; Integrante 2', turma='Exemplo didático - empresa de serviços',
+            tam_desc='Micro e pequenas empresas do Vale do Mucuri (estimativa ilustrativa)',
+            tam_clientes=9000, sam_desc='Micro e pequenas empresas de Teófilo Otoni com computador e presença digital',
+            sam_clientes=3500, som_pct=5, gasto_anual_cliente=2400,
+            mercado_fontes='Estimativas ilustrativas; substitua por dados do Sebrae (Data MPE), da Junta Comercial e de pesquisa com empresas.',
+            mkt_produto='Suporte de informática, manutenção de computadores, criação de sites e lojas virtuais e treinamento para pequenas empresas. O carro-chefe é o contrato mensal de manutenção, que gera receita previsível.',
+            mkt_preco='Hora técnica avulsa, pacotes fechados por projeto (sites e lojas virtuais) e contrato mensal com horas incluídas, mais barato que a hora avulsa.',
+            mkt_praca='Atendimento no cliente, na bancada da empresa e remoto. Venda direta pelo WhatsApp, indicação e parcerias com contadores.',
+            mkt_promocao='Diagnóstico gratuito de segurança e backup, conteúdo educativo no Instagram e programa de indicação.',
+            loc_endereco='Sala comercial no centro de Teófilo Otoni - MG', loc_area_m2=45,
+            loc_justificativa='Perto dos clientes do comércio e com espaço para a bancada de manutenção.',
+            op_processos='Chamado pelo WhatsApp -> triagem e orçamento -> atendimento remoto ou no local -> registro das horas -> faturamento mensal.',
+            op_horario='Segunda a sexta, 8h às 18h; plantão para clientes com contrato.',
+            rateio_criterio='Horas', margem_desejada_pct=15
+        WHERE id=1""")
+    ins("INSERT INTO socios (nome, funcao, contato, perfil, capital_integralizado) VALUES (?,?,?,?,?)", [
+        ("Sócio(a) 1", "Técnico(a) responsável", "", "Técnico em informática, 6 anos de experiência em suporte.", 30000.0),
+        ("Sócio(a) 2", "Comercial e projetos web", "", "Desenvolvimento de sites e atendimento a clientes.", 30000.0),
+    ])
+    ins("INSERT INTO emprestimos (descricao, valor, taxa_anual_pct, prazo_meses) VALUES (?,?,?,?)", [
+        ("Pronampe", 25000, 14.0, 36)])
+    ins("""INSERT INTO segmentos (nome, descricao, nota_tamanho, nota_lucro, nota_longevidade,
+           nota_concorrencia, nota_aderencia) VALUES (?,?,?,?,?,?,?)""", [
+        ("Comércio varejista", "Lojas com sistema de vendas, impressoras e redes que não podem parar.", 9, 6, 8, 5, 9),
+        ("Escritórios e clínicas", "Contabilidade, advocacia e saúde: dados sensíveis e muitos computadores.", 7, 8, 9, 6, 8),
+        ("Novos negócios sem site", "Precisam de presença digital rápida e barata.", 8, 5, 6, 4, 7),
+    ])
+    ins("""INSERT INTO personas (nome, idade, profissao, estado_civil, renda_mensal, escolaridade, cidade,
+           descricao, citacao, habitos, ganhos, desafios, duvidas_objecoes, experiencia_ideal)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [
+        ("Cláudia", 47, "Dona de loja de roupas", "Casada", 8000.0, "Ensino Superior", "Teófilo Otoni - MG",
+         "Tem uma loja com duas filiais e depende do sistema de vendas e da maquininha.",
+         "Quando o computador para, eu paro de vender.", "Resolve tudo pelo WhatsApp; chama o sobrinho para consertar o PC.",
+         "Sistema funcionando e site que traga clientes.", "Atendimento demorado e sem garantia; medo de perder dados.",
+         "Contrato mensal compensa?", "Um técnico que atende no mesmo dia e avisa antes de o problema acontecer."),
+    ])
+    concs = ["Técnicos autônomos", "Loja de informática do centro", "Agência digital da capital"]
+    ins("INSERT INTO concorrentes (nome) VALUES (?)", [(c,) for c in concs])
+    notas = {"Rapidez no atendimento": (9, 6, 5, 4), "Preço": (7, 9, 6, 3), "Garantia do serviço": (8, 3, 6, 7),
+             "Conhecimento técnico": (8, 5, 6, 9), "Atendimento presencial": (9, 8, 8, 2), "Sites e lojas virtuais": (7, 3, 2, 9)}
+    ins("INSERT INTO concorrencia_notas (atributo, empresa, nota) VALUES (?,?,?)",
+        [(a, e, v) for a, vals in notas.items() for e, v in zip(["Nossa Empresa"] + concs, vals)])
+    ins("""INSERT INTO swot (ambiente, dimensao, fator, natureza, impacto, diagnostico, plano_acao, priorizado)
+           VALUES (?,?,?,?,?,?,?,?)""", [
+        ("Interno", "Pessoas", "Sócios com experiência técnica e em sites", "Força", "Alto", "Atende do computador ao site.", "Pacotes que combinam os dois serviços.", 1),
+        ("Interno", "Operação", "Receita depende das horas da equipe", "Fraqueza", "Alto", "Faturamento limitado pela capacidade.", "Contratos mensais e serviços remotos.", 1),
+        ("Externo", "Tecnológico", "Digitalização das pequenas empresas", "Oportunidade", "Alto", "Pix, nota fiscal eletrônica e vendas on-line exigem estrutura.", "Pacote \"empresa digital\".", 1),
+        ("Externo", "Legal", "LGPD exige cuidado com dados de clientes", "Oportunidade", "Médio", "Clínicas e escritórios precisam se adequar.", "Diagnóstico de segurança e backup.", 1),
+        ("Externo", "Mercado", "Técnicos informais cobram muito pouco", "Ameaça", "Médio", "Concorrência por preço.", "Vender garantia, prazo e contrato.", 1),
+    ])
+    ins("""INSERT INTO inv_fixos (descricao, quantidade, valor_unitario, vida_util_anos, valor_residual_pct)
+           VALUES (?,?,?,?,?)""", [
+        ("Notebooks para a equipe", 3, 4500, 5, 10), ("Bancada, ferramentas e estação de solda", 1, 4500, 5, 10),
+        ("Mobiliário da sala", 1, 4000, 10, 10), ("Moto para atendimento externo", 1, 14000, 5, 40),
+    ])
+    ins("INSERT INTO inv_pre (descricao, valor) VALUES (?,?)", [
+        ("Legalização e contrato social", 2500), ("Licenças de software (primeiro ano)", 2500),
+        ("Reforma e adequação da sala", 3000), ("Marketing de lançamento", 3000),
+    ])
+    ins("INSERT INTO capital_giro_prazos (tipo, prazo_dias, percentual) VALUES (?,?,?)", [
+        ("Recebimento", 0, 50.0), ("Recebimento", 30, 50.0), ("Pagamento", 0, 100.0)])
+    ins("""INSERT INTO catalogo (categoria, descricao, preco_venda, custo_aquisicao, qtd_mensal, qtd_estoque_inicial, horas_unit)
+           VALUES (?,?,?,?,?,?,?)""", [
+        ("Serviço", "Contrato mensal de manutenção (6 h incluídas)", 690, 20, 14, 0, 6),
+        ("Serviço", "Hora técnica avulsa", 130, 0, 40, 0, 1),
+        ("Serviço", "Formatação e configuração de computador", 190, 15, 16, 0, 2.5),
+        ("Serviço", "Site institucional", 2900, 250, 2, 0, 40),
+        ("Serviço", "Loja virtual", 5800, 400, 0.5, 0, 80),
+        ("Serviço", "Treinamento em ferramentas digitais (turma)", 1300, 80, 1, 0, 12),
+    ])
+    ins("INSERT INTO custos_variaveis (descricao, percentual) VALUES (?,?)", [("Taxas de cartão e Pix", 2.0)])
+    P = "Produção / operação"
+    ins("""INSERT INTO pessoal (cargo, area, num_empregados, salario_mensal, encargos_pct, beneficios_unit, atribuicoes, mes_inicio)
+           VALUES (?,?,?,?,?,?,?,?)""", [
+        ("Técnico(a) de suporte", P, 2, 2400, 32, 350, "Atendimento remoto e presencial, manutenção de computadores e redes.", 1),
+        ("Desenvolvedor(a) web", P, 1, 3500, 32, 350, "Criação de sites e lojas virtuais.", 1),
+        ("Técnico(a) de suporte júnior", P, 1, 2000, 32, 350, "Contratação prevista para quando a ocupação passar de 90%.", 25),
+    ])
+    TEC, DA, DC, DF = "Custo de tecnologia / infraestrutura", "Despesa administrativa", "Despesa comercial", "Despesa financeira"
+    ins("INSERT INTO custos_fixos (descricao, classificacao, valor_mensal) VALUES (?,?,?)", [
+        ("Softwares de acesso remoto e gestão de chamados", TEC, 350), ("Hospedagem e domínios dos clientes (base)", TEC, 150),
+        ("Combustível e manutenção da moto", TEC, 450), ("Aluguel da sala", DA, 1500), ("Pró-labore", DA, 5000),
+        ("Contador", DA, 500), ("Internet e telefone", DA, 300), ("Energia elétrica", DA, 300),
+        ("Anúncios e conteúdo", DC, 700), ("Tarifas bancárias", DF, 80),
+    ])
+    ins("""INSERT INTO fornecedores (nome, itens, prazo_pagamento_dias, prazo_entrega_dias, condicoes, critico)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Distribuidora de peças de informática", "Memórias, SSDs, fontes, cabos", 28, 5, "Boleto 28 dias", 1),
+        ("Provedor de hospedagem", "Hospedagem e domínios", 0, 0, "Cartão, mensal", 1),
+        ("Software de acesso remoto", "Licenças por técnico", 0, 0, "Anual", 0),
+    ])
+    ins("""INSERT INTO propostas (persona_nome, valores, que_desejam, por_meio, diferentemente, oferecem)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Cláudia", "Rapidez; Garantia; Prevenção", "manter o sistema de vendas funcionando sem sustos",
+         "contrato mensal com atendimento no mesmo dia, backup e manutenção preventiva",
+         "técnicos avulsos que só aparecem quando o problema já aconteceu", "tranquilidade para vender todos os dias"),
+    ])
+    ins("INSERT INTO riscos (risco, probabilidade, impacto, mitigacao, responsavel) VALUES (?,?,?,?,?)", [
+        ("Equipe sem horas livres para novos clientes", 3, 4, "Acompanhar a ocupação mensal e contratar no mês 25", "Sócio(a) 1"),
+        ("Inadimplência dos contratos mensais", 3, 3, "Cobrança por boleto recorrente e suspensão após 30 dias", "Sócio(a) 2"),
+        ("Perda de dados de um cliente durante o serviço", 2, 5, "Backup antes de cada intervenção e termo de responsabilidade", "Sócio(a) 1"),
+    ])
+    ins("""INSERT INTO experimentos (hipotese, experimento, metrica, criterio_sucesso, resultado, status)
+           VALUES (?,?,?,?,?,?)""", [
+        ("Lojas fecham contrato mensal após um diagnóstico gratuito", "Oferecer diagnóstico a 25 lojas do centro",
+         "Contratos fechados", "Pelo menos 5 contratos", "", "Planejado")])
+    ins("INSERT INTO cronograma (atividade, mes_inicio, duracao_meses, responsavel, custo) VALUES (?,?,?,?,?)", [
+        ("Formalização e sala", 1, 1, "Sócio(a) 2", 5500), ("Diagnósticos gratuitos", 1, 2, "Sócio(a) 1", 0),
+        ("Lançamento do site e das redes", 1, 1, "Sócio(a) 2", 3000), ("Contratação do técnico júnior", 25, 1, "Sócio(a) 1", 0),
+    ])
+
+
+
+# ==============================================================================
 # IDENTIDADE, OBJETIVOS SMART E MATRIZES ESTRATÉGICAS DOS TRÊS EXEMPLOS
 # ==============================================================================
 _ESTRATEGIA = {
@@ -1243,6 +1380,35 @@ _ESTRATEGIA = {
                    (4, "Redes sociais gratuitas cumprem parte da função.", "Mostrar resultado medido (cupons usados, visitas)."),
                    (3, "Empresas pequenas cancelam com facilidade.", "Plano anual com desconto e acompanhamento mensal."),
                    (3, "Dependência de lojas de aplicativos e provedor de nuvem.", "Cobrar empresas fora da loja e evitar dependência de um só provedor.")],
+    },
+    "servico": {
+        "missao": "Manter a tecnologia das pequenas empresas do Vale do Mucuri funcionando, com atendimento rápido, garantia e prevenção.",
+        "visao": "Ser a empresa de suporte de TI mais lembrada pelo comércio de Teófilo Otoni até 2030.",
+        "valores": "Agilidade; Honestidade no diagnóstico; Segurança dos dados; Aprendizado contínuo",
+        "rel": "Atendimento pelo WhatsApp com prazo de resposta\nVisita preventiva mensal aos clientes com contrato\nRelatório de chamados",
+        "par": "Escritórios de contabilidade\nDistribuidora de peças\nProvedor de hospedagem\nSebrae (capacitação de clientes)",
+        "obj": [
+            ("Chegar a 25 contratos mensais de manutenção", "Financeira", "Contratos ativos", 25, "contratos", 12, "Sócio(a) 2",
+             "Começa com 14 e o diagnóstico gratuito gera novos contratos.", "Contrato dá receita previsível e reduz ociosidade.",
+             "Diagnóstico gratuito e indicação de contadores", ""),
+            ("Atender os chamados no mesmo dia", "Clientes", "Chamados resolvidos em até 8 horas", 90, "%", 6, "Sócio(a) 1",
+             "Equipe de dois técnicos e acesso remoto.", "Rapidez é o principal motivo de escolha.", "Fila de chamados com prazo",
+             "Chegar a 25 contratos mensais de manutenção"),
+            ("Manter a ocupação da equipe entre 70% e 90%", "Processos internos", "Horas vendidas ÷ horas cobráveis", 85, "%", 12,
+             "Sócio(a) 1", "Ocupação calculada na ferramenta de serviços.", "Ocupação baixa é custo; alta demais derruba a qualidade.",
+             "Registro de horas por chamado", "Atender os chamados no mesmo dia"),
+            ("Certificar os técnicos em redes e segurança", "Aprendizado e crescimento", "Técnicos certificados", 2, "técnicos", 9,
+             "Sócio(a) 1", "Cursos gratuitos e de baixo custo disponíveis.", "Abre o serviço de adequação à LGPD.",
+             "Plano de cursos", "Manter a ocupação da equipe entre 70% e 90%"),
+        ],
+        "canais": ["Indicação (boca a boca)", "WhatsApp Business", "Instagram", "Acordos e Parcerias"],
+        "bcg": [("Contrato mensal de manutenção (6 h incluídas)", 12, 1.5), ("Hora técnica avulsa", 3, 0.8),
+                ("Site institucional", 9, 0.4), ("Loja virtual", 16, 0.2), ("Formatação e configuração de computador", 1, 1.1)],
+        "porter": [(4, "Muitos técnicos autônomos e lojas de informática.", "Vender contrato, garantia e prazo, não só a hora."),
+                   (4, "Basta conhecimento e um notebook para abrir.", "Construir carteira de contratos e reputação."),
+                   (3, "Suporte do próprio fabricante e sobrinho que entende de computador.", "Mostrar o custo de uma parada do sistema."),
+                   (3, "Pequenas empresas comparam preço e negociam.", "Planos com horas incluídas e preço fechado."),
+                   (2, "Peças e softwares têm vários fornecedores.", "Dois fornecedores para peças críticas.")],
     },
 }
 
@@ -1379,6 +1545,40 @@ _VALIDACAO = {
                  [("Conecta Vale", 4, 8), ("Plataforma nacional de eventos", 7, 4), ("Perfis locais no Instagram", 3, 6)]),
         "orc": [("Venda consultiva às empresas", 1200, 8, "Contratos fechados"), ("Instagram", 500, 4, "Cadastros pelo link")],
         "aarrr": [], "cal": [], "perda": [30000, 30000], "formal": {}, "banca": [],
+    },
+    "servico": {
+        "vw_produto": "Contrato mensal de manutenção (6 h incluídas)", "vw_preco": 690, "vw_n": 24, "intencao": (10.0, 22.0),
+        "entrevistas": [
+            ("10/03", "S01", "Loja de roupas", "computador para de funcionar; técnico demora", "sobrinho", "Sim", 600, "Perde vendas quando o sistema para"),
+            ("10/03", "S02", "Escritório de contabilidade", "medo de perder dados; técnico demora", "técnico autônomo", "Sim", 900, "Quer backup diário"),
+            ("11/03", "S03", "Clínica odontológica", "medo de perder dados; LGPD", "empresa da capital", "Talvez", 800, "Pede contrato com garantia"),
+            ("11/03", "S04", "Mercearia", "computador para de funcionar", "loja de informática", "Não", 250, "Prefere pagar só quando quebra"),
+            ("12/03", "S05", "Loja de calçados", "técnico demora; computador para de funcionar", "técnico autônomo", "Sim", 650, "Indica outros lojistas"),
+            ("12/03", "S06", "Imobiliária", "não tem site; medo de perder dados", "nenhuma", "Talvez", 500, "Interesse maior no site"),
+        ],
+        "encaixe": [],
+        "evidencias": {"Salários e encargos": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Piso da categoria e tabela do contador"),
+                       "Preço de venda": ("Pesquisa secundária (IBGE, Sebrae, artigos, concorrentes)", "Preços de 4 concorrentes locais")},
+        "vpc": ("Quando o computador ou o sistema da loja para, quero que alguém resolva no mesmo dia, para não perder vendas.",
+                "Manter o sistema de vendas funcionando\nGuardar os dados com segurança\nTer presença na internet",
+                "Técnico demora\nComputador para de funcionar\nMedo de perder dados\nNão tem site",
+                "Previsibilidade de gastos\nSaber que os dados estão seguros",
+                "Contrato mensal de manutenção\nHora técnica\nSites e lojas virtuais",
+                "Atendimento no mesmo dia\nManutenção preventiva\nBackup automático\nSite em pacote fechado",
+                "Preço fixo mensal\nRelatório de backup"),
+        "errc": [("Preço", "Reduzir", 6, "Não competir com o técnico informal pelo menor preço"),
+                 ("Garantia do serviço", "Elevar", 10, "Garantia por escrito de 90 dias"),
+                 ("Rapidez no atendimento", "Elevar", 10, "Atendimento no mesmo dia para contratos"),
+                 ("Manutenção preventiva", "Criar", 8, "Visita mensal antes de o problema acontecer")],
+        "posic": ("pequenas empresas do comércio e de serviços de Teófilo Otoni", "não podem parar quando o computador falha",
+                  "TecVale Soluções", "um serviço de suporte de TI por contrato", "resolve no mesmo dia e evita que o problema aconteça",
+                  "técnicos avulsos e lojas de informática", "o contrato inclui visita preventiva mensal, backup e garantia por escrito"),
+        "mapa": ("Preço (baixo → alto)", "Rapidez e garantia (baixa → alta)",
+                 [("TecVale Soluções", 6, 9), ("Técnicos autônomos", 3, 4), ("Loja de informática do centro", 5, 5),
+                  ("Agência digital da capital", 9, 5)]),
+        "orc": [("Indicação (boca a boca)", 200, 3, "Desconto de um mês por indicação"), ("Instagram", 500, 2, "Mensagens pelo link"),
+                ("Acordos e Parcerias", 300, 2, "Contadores parceiros")],
+        "aarrr": [], "cal": [], "perda": [20000, 20000], "formal": {}, "banca": [],
     },
 }
 
@@ -2739,6 +2939,13 @@ def forca_competitiva_padrao(d: dict) -> float:
     return float(min(10, max(0, 5 * nossa / outras)))
 
 
+CELULAS_GE = {3: "Seguro e crescimento", 2: "Seletivo ou cauteloso", 1: "Expansão limitada ou colheita", 0: "Perigo ou colheita"}
+ACOES_GE = {"Seguro e crescimento": "Investir para crescer e defender a posição.",
+            "Seletivo ou cauteloso": "Investir com cautela, só onde houver vantagem clara.",
+            "Expansão limitada ou colheita": "Manter com pouco investimento e aproveitar o caixa.",
+            "Perigo ou colheita": "Colher o que for possível ou sair do segmento."}
+
+
 def ge_tabela(d: dict) -> pd.DataFrame:
     seg = d["segmentos"]
     ge = d["ge"]
@@ -2754,7 +2961,7 @@ def ge_tabela(d: dict) -> pd.DataFrame:
         na, nf = nivel(atr), nivel(forca)
         pontos = {"Alta": 2, "Média": 1, "Baixa": 0}
         soma = pontos[na] + pontos[nf]
-        rec = "Investir e crescer" if soma >= 3 else ("Seletividade / manter" if soma == 2 else "Colher ou desinvestir")
+        rec = CELULAS_GE[min(soma, 3) if soma < 3 else 3]
         linhas.append({"Segmento": s_["nome"], "Atratividade": round(atr, 1), "Força competitiva": round(forca, 1),
                        "Nível atratividade": na, "Nível força": nf, "Recomendação": rec,
                        "Origem da força": "informada" if f_inf > 0 else "automática (aderência + concorrência)"})
@@ -3644,7 +3851,7 @@ class Relatorio(FPDF):
             yy = y0 + cab + gap + j * (h + gap)
             self.set_fill_color(*cor)
             self.rect(x0, yy, lat, h, style="F")
-            self.set_text_color(255, 255, 255) if j == 0 else self.set_text_color(40, 50, 60)
+            self.set_text_color(*((255, 255, 255) if j == 0 else (40, 50, 60)))
             self.fonte("B", 9)
             y_txt = yy + (h - len(rot) * 5) / 2
             for i, letra in enumerate(self.t(rot)):
@@ -3732,97 +3939,167 @@ def png_porter(tab: pd.DataFrame) -> bytes | None:
 
 
 def png_ge(tab: pd.DataFrame) -> bytes | None:
+    """Matriz GE/McKinsey 3x3 com células coloridas (força alta à esquerda) e segmentos numerados."""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = _plt()
+        from matplotlib.patches import FancyBboxPatch
     except ImportError:
         return None
-    cores = {(2, 2): "#27ae60", (2, 1): "#27ae60", (1, 2): "#27ae60", (2, 0): "#f1c40f", (1, 1): "#f1c40f",
-             (0, 2): "#f1c40f", (1, 0): "#e74c3c", (0, 1): "#e74c3c", (0, 0): "#e74c3c"}
-    fig, ax = plt.subplots(figsize=(6.2, 4.6))
+    cores = {"Seguro e crescimento": "#3fd0c0", "Seletivo ou cauteloso": "#ffd23f",
+             "Expansão limitada ou colheita": "#ffa630", "Perigo ou colheita": "#ec4561"}
+    grade = [["Seletivo ou cauteloso", "Expansão limitada ou colheita", "Perigo ou colheita"],
+             ["Seguro e crescimento", "Seletivo ou cauteloso", "Expansão limitada ou colheita"],
+             ["Seguro e crescimento", "Seguro e crescimento", "Seletivo ou cauteloso"]]  # linha 0 = atratividade baixa
+    fig, ax = plt.subplots(figsize=(6.2, 5.4))
+    s = 10 / 3
     for i in range(3):
         for j in range(3):
-            ax.add_patch(plt.Rectangle((j * 10 / 3, i * 10 / 3), 10 / 3, 10 / 3, color=cores[(i, j)], alpha=0.18, lw=0))
-    ax.scatter(tab["Força competitiva"], tab["Atratividade"], s=260, color="#1f4f8f", alpha=0.85, zorder=3)
+            n = grade[i][j]
+            ax.add_patch(FancyBboxPatch((j * s + 0.12, i * s + 0.12), s - 0.24, s - 0.24, boxstyle="round,pad=0,rounding_size=0.35",
+                                        color=cores[n], lw=0, zorder=1))
+            ax.text(j * s + s / 2, i * s + s - 0.4, n.replace(" ou ", " ou\n"), ha="center", va="top", fontsize=8.5,
+                    fontweight="bold", color="#253041", alpha=0.55, zorder=2)
     for k, (_, r) in enumerate(tab.iterrows(), start=1):
-        ax.annotate(str(k), (r["Força competitiva"], r["Atratividade"]), ha="center", va="center", fontsize=8,
-                    color="white", fontweight="bold", zorder=4)
+        x, y = 10 - float(r["Força competitiva"]), float(r["Atratividade"])
+        ax.scatter([x], [y], s=380, color="#1f3f75", edgecolors="white", linewidths=2, zorder=3)
+        ax.text(x, y, str(k), ha="center", va="center", color="white", fontsize=9, fontweight="bold", zorder=4)
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
-    ax.set_xlabel("Força competitiva")
+    ax.set_xticks([s / 2, 1.5 * s, 2.5 * s])
+    ax.set_xticklabels(["Alta", "Média", "Baixa"])
+    ax.set_yticks([s / 2, 1.5 * s, 2.5 * s])
+    ax.set_yticklabels(["Baixa", "Média", "Alta"])
+    ax.set_xlabel("Força competitiva da empresa no segmento")
     ax.set_ylabel("Atratividade do mercado")
-    for v in (10 / 3, 20 / 3):
-        ax.axvline(v, color="#999", lw=0.6)
-        ax.axhline(v, color="#999", lw=0.6)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    ax.tick_params(length=0)
     return _fig_png(fig)
 
 
 def png_bcg(tab: pd.DataFrame, lim: float) -> bytes | None:
+    """Matriz BCG com quadrantes coloridos, descrições e bolhas pela receita (participação em log, líder à esquerda)."""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = _plt()
+        import numpy as np
     except ImportError:
         return None
-    cor = {"Estrela": "#f1c40f", "Vaca leiteira": "#27ae60", "Interrogação": "#2980b9", "Abacaxi": "#c0392b"}
-    fig, ax = plt.subplots(figsize=(6.2, 4.6))
+    ymax = max(2 * lim, 1.0)
+    quad = {"Estrela": ((0.1, lim), "#ede3fb", "#7b3fe4", ["Mercado atrativo", "Gera bom faturamento", "Exige investimento"]),
+            "Interrogação": ((-1, lim), "#fff4c7", "#b38600", ["Ainda gera pouco retorno", "Expectativa de crescimento", "Decisão de risco"]),
+            "Vaca leiteira": ((0.1, 0), "#eefbd0", "#4f7a00", ["Gera muito caixa", "Exige pouco investimento", "Recursos realocáveis"]),
+            "Abacaxi": ((-1, 0), "#fde2e5", "#c8102e", ["Gera pouco caixa", "Mercado sem crescimento", "Provável saída"])}
+    fig, ax = plt.subplots(figsize=(6.6, 5.4))
+    # eixo x em log10 invertido: posição = 1 - log10(p)  (10x -> 0; 1x -> 1; 0,1x -> 2)
+    for q, ((_, y0), bg, cor, itens) in quad.items():
+        x0 = 0 if q in ("Estrela", "Vaca leiteira") else 1
+        ax.add_patch(plt.Rectangle((x0, y0), 1, lim if y0 == 0 else ymax - lim, color=bg, zorder=0))
+        topo = y0 + (lim if y0 == 0 else ymax - lim)
+        # títulos: no alto dos quadrantes de cima e no rodapé dos de baixo (como na matriz clássica)
+        ax.text(x0 + 0.5, topo - 0.06 * ymax if y0 > 0 else y0 + 0.03 * ymax, q, ha="center", fontsize=12, fontweight="bold",
+                color=cor, zorder=1)
+        for n, it in enumerate(itens):
+            yy = topo - (0.13 if y0 > 0 else 0.06) * ymax - n * 0.06 * ymax
+            ax.text(x0 + 0.06, yy, "✓ " + it, fontsize=7.3, color="#334", alpha=0.75, zorder=1)
     mx = max(float(tab["Receita anual"].max()), 1.0)
-    ax.scatter(tab["Participação relativa"].clip(0.1, 10), tab["Crescimento do mercado (%)"],
-               s=[120 + 1800 * v / mx for v in tab["Receita anual"]], c=[cor[q] for q in tab["Quadrante"]],
-               alpha=0.75, edgecolors="white", zorder=3)
+    cores = {q: v[2] for q, v in quad.items()}
     for _, r in tab.iterrows():
-        ax.annotate(str(r["Produto"])[:24], (min(max(r["Participação relativa"], 0.1), 10), r["Crescimento do mercado (%)"]),
-                    textcoords="offset points", xytext=(0, 10), ha="center", fontsize=7.5)
-    ax.set_xscale("log")
-    ax.set_xlim(10, 0.1)
-    ax.axvline(1, color="#888", ls="--", lw=0.8)
-    ax.axhline(lim, color="#888", ls="--", lw=0.8)
-    ax.set_xlabel("Participação relativa de mercado (log; líder à esquerda)")
-    ax.set_ylabel("Crescimento do mercado (% a.a.)")
-    y0, y1 = ax.get_ylim()
-    ax.text(9, y1 * 0.97, "Estrela", fontsize=8, va="top", color="#7d6608")
-    ax.text(0.11, y1 * 0.97, "Interrogação", fontsize=8, va="top", ha="right", color="#1b4f72")
-    ax.text(9, y0 + (y1 - y0) * 0.03, "Vaca leiteira", fontsize=8, color="#196f3d")
-    ax.text(0.11, y0 + (y1 - y0) * 0.03, "Abacaxi", fontsize=8, ha="right", color="#7b241c")
+        x = 1 - np.log10(min(max(float(r["Participação relativa"]), 0.1), 10))
+        y = min(max(float(r["Crescimento do mercado (%)"]), 0), ymax * 0.97)
+        ax.scatter([x], [y], s=150 + 1700 * float(r["Receita anual"]) / mx, color=cores[r["Quadrante"]], alpha=0.8,
+                   edgecolors="white", linewidths=2, zorder=3)
+        ax.annotate(str(r["Produto"])[:26], (x, y), textcoords="offset points", xytext=(0, -16), ha="center", fontsize=7,
+                    fontweight="bold", zorder=4, bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.8))
+    ax.axvline(1, color="#2d4f8a", lw=1)
+    ax.axhline(lim, color="#2d4f8a", lw=1)
+    ax.set_xlim(0, 2)
+    ax.set_ylim(0, ymax)
+    ax.set_xticks([0, 1 - np.log10(5), 1, 1 - np.log10(0.5), 2])
+    ax.set_xticklabels(["10x", "5x", "1x", "0,5x", "0,1x"])
+    ax.set_yticks([0, lim / 2, lim, 1.5 * lim, ymax])
+    ax.set_yticklabels([f"{num_br(v, 0)}%" for v in (0, lim / 2, lim, 1.5 * lim, ymax)])
+    ax.set_xlabel("Participação relativa de mercado (alta à esquerda)")
+    ax.set_ylabel("Taxa de crescimento do mercado")
+    for sp in ax.spines.values():
+        sp.set_color("#2d4f8a")
     return _fig_png(fig)
 
 
+def png_bsc(ob: pd.DataFrame) -> bytes | None:
+    """Ciclo do Balanced Scorecard (aprendizado -> processos -> clientes -> financeira), com o número de objetivos."""
+    try:
+        plt = _plt()
+        import numpy as np
+        from matplotlib.patches import Wedge, Polygon
+    except ImportError:
+        return None
+    seg = [("APRENDIZADO E\nCRESCIMENTO", "Aprendizado e crescimento", "#0d6fb8", 90, "Conhecimento e habilidades\nda equipe sustentam\nas melhorias."),
+           ("PROCESSOS\nINTERNOS", "Processos internos", "#123a5e", 0, "Equipe capacitada\nmelhora os processos."),
+           ("CLIENTES", "Clientes", "#d7262e", -90, "Processos melhores\nconduzem a clientes\nmais satisfeitos."),
+           ("FINANCEIRA", "Financeira", "#b5191f", 180, "Clientes satisfeitos\nlevam a melhores\nresultados.")]
+    R1, R0 = 1.0, 0.48
+    Rm = (R1 + R0) / 2
+    fig, ax = plt.subplots(figsize=(5.6, 5.6))
+    for tit, nome, cor, a_ini, desc in seg:
+        a_fim = a_ini - 86  # sentido horário
+        ax.add_patch(Wedge((0, 0), R1, a_fim, a_ini, width=R1 - R0, color=cor))
+        ang = np.radians(a_fim)
+        ponta = np.radians(a_fim - 7)
+        ax.add_patch(Polygon([(R1 * np.cos(ang), R1 * np.sin(ang)), (Rm * np.cos(ponta), Rm * np.sin(ponta)),
+                              (R0 * np.cos(ang), R0 * np.sin(ang))], color=cor))
+        am = np.radians(a_ini - 43)
+        n = int((ob["perspectiva"] == nome).sum()) if ob is not None and not ob.empty else 0
+        ax.text(Rm * np.cos(am), Rm * np.sin(am), f"{tit}\n\n{desc}\n{n} objetivo{'s' if n != 1 else ''}", ha="center",
+                va="center", color="white", fontsize=6.8, fontweight="bold", linespacing=1.15)
+    ax.add_patch(plt.Circle((0, 0), R0 - 0.03, color="white"))
+    ax.text(0, 0, "BSC", ha="center", va="center", fontsize=34, fontweight="black", color="#333")
+    ax.set_xlim(-1.08, 1.08)
+    ax.set_ylim(-1.08, 1.08)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    return _fig_png(fig)
+
+
+CORES_CANVAS = {"Parcerias-chave": (106, 49, 132), "Atividades-chave": (240, 144, 31), "Recursos-chave": (229, 101, 62),
+                "Proposta de valor": (68, 146, 58), "Relacionamento com clientes": (141, 184, 51), "Canais": (20, 164, 154),
+                "Segmentos de clientes": (21, 146, 196), "Estrutura de custos": (68, 86, 160), "Fontes de receita": (34, 97, 122)}
+
+
 def canvas_pdf(pdf, bl: dict):
-    """Desenha o Business Model Canvas em uma página (retrato, 180 mm de largura)."""
-    x0, y0, w, h1, h2 = pdf.l_margin, pdf.get_y() + 2, 36, 62, 45
+    """Desenha o Business Model Canvas em uma página (retrato, 180 mm de largura), com um bloco colorido por campo."""
+    x0, y0, w, h1, h2, g = pdf.l_margin, pdf.get_y() + 2, 36, 62, 45, 1.2
     caixas = [("Parcerias-chave", 0, 0, 1, 2), ("Atividades-chave", 1, 0, 1, 1), ("Recursos-chave", 1, 1, 1, 1),
               ("Proposta de valor", 2, 0, 1, 2), ("Relacionamento com clientes", 3, 0, 1, 1), ("Canais", 3, 1, 1, 1),
               ("Segmentos de clientes", 4, 0, 1, 2)]
     for nome, c, r, cw, rh in caixas:
         x, y = x0 + c * w, y0 + r * h1
-        pdf.rect(x, y, w * cw, h1 * rh)
-        _texto_caixa(pdf, nome, bl.get(nome, []), x, y, w * cw, h1 * rh)
+        _texto_caixa(pdf, nome, bl.get(nome, []), x + g / 2, y + g / 2, w * cw - g, h1 * rh - g)
     yb = y0 + 2 * h1
     for i, nome in enumerate(["Estrutura de custos", "Fontes de receita"]):
-        x = x0 + i * 90
-        pdf.rect(x, yb, 90, h2)
-        _texto_caixa(pdf, nome, bl.get(nome, []), x, yb, 90, h2)
+        _texto_caixa(pdf, nome, bl.get(nome, []), x0 + i * 90 + g / 2, yb + g / 2, 90 - g, h2 - g)
     pdf.set_y(yb + h2 + 3)
 
 
 def _texto_caixa(pdf, nome, itens, x, y, w, h):
-    pdf.set_fill_color(*AZUL)
-    pdf.rect(x, y, w, 6, style="F")
-    pdf.set_xy(x + 1, y + 0.8)
-    pdf.fonte("B", 6.6 if len(nome) > 22 else 7)
+    cor = CORES_CANVAS.get(nome, AZUL)
+    pdf.set_fill_color(*cor)
+    try:
+        pdf.rect(x, y, w, h, style="F", round_corners=True, corner_radius=2.5)
+    except TypeError:  # fpdf2 antigo, sem cantos arredondados
+        pdf.rect(x, y, w, h, style="F")
+    pdf.set_xy(x + 2, y + 2)
+    pdf.fonte("B", 7.2)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(w - 2, 4.4, pdf.t(nome.replace("Relacionamento com clientes", "Relacionamento")))
-    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell(w - 4, 3.4, pdf.t(nome.upper()), align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.fonte("", 6.6)
-    yy = y + 7.5
+    yy = pdf.get_y() + 1.5
     for it in itens:
         if yy > y + h - 4:
             break
-        pdf.set_xy(x + 1.2, yy)
-        txt = pdf.t("• " + str(it))
-        pdf.multi_cell(w - 2.4, 3.1, txt[:160], align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_xy(x + 2, yy)
+        pdf.multi_cell(w - 4, 3.1, pdf.t("• " + str(it))[:160], align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         yy = pdf.get_y() + 0.6
+    pdf.set_text_color(0, 0, 0)
 
 
 # ------------------------------------------------------------------------------
@@ -4324,6 +4601,9 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                 pdf.paragrafo(f"{q} ({', '.join(itens)}): {txt}", "", 8)
     if ob is not None and not ob.empty:
         pdf.secao("BALANCED SCORECARD", nova_pagina=True)
+        img = png_bsc(ob)
+        if img:
+            pdf.image(io.BytesIO(img), x=55, w=100)
         ind = bsc_indicadores_plano(proj, d, res)
         for per in PERSPECTIVAS:
             sub = ob[ob["perspectiva"] == per]
@@ -4865,7 +5145,10 @@ def gerar_sumario(proj: dict, d: dict, res: dict) -> str:
     pb = res["payback_desc"]
     viavel = res["vpl"] > 0 and a1["resultado"] > 0
     p = []
-    p.append(f"{nome} é um empreendimento do setor de {proj['setor_atuacao'] or 'atuação a definir'}, localizado em "
+    setores = [s.strip().lower() for s in str(proj["setor_atuacao"] or "").split(";") if s.strip()]
+    setores = [s for s in setores if s not in ("comércio", "serviço", "indústria")] or setores
+    setor_txt = (", ".join(setores[:2]) if len(setores) <= 2 else f"{setores[0]} e {setores[1]}") or "atuação a definir"
+    p.append(f"{nome} é um empreendimento do setor de {setor_txt}, localizado em "
              f"{proj['cidade_uf'] or 'cidade a definir'}, com o objetivo de {str(proj['objetivo']).lower()}. "
              f"O enquadramento tributário previsto é o {proj['enquadramento']} e o porte, {proj['porte']}.")
     if seg_top or valores:
@@ -5797,7 +6080,7 @@ def ficha_avaliacao_pdf(avaliacoes: list, rubrica=RUBRICA_PADRAO, professor="", 
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "7.1"
+VERSAO_PROGRAMA = "7.2"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -5848,14 +6131,14 @@ def _versao_inicial() -> str:
         q = st.query_params.get("versao", "")
     except Exception:
         q = ""
-    if q in ("modelo", "branco", "assinatura"):
+    if q in ("modelo", "branco", "assinatura", "servico"):
         return q
-    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco", "assinatura"):
+    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco", "assinatura", "servico"):
         return os.environ["PNBOX_VERSAO"]
     arq = APP_DIR / "versao.txt"
     if arq.exists():
         v = arq.read_text(encoding="utf-8").strip().lower()
-        if v in ("modelo", "branco", "assinatura"):
+        if v in ("modelo", "branco", "assinatura", "servico"):
             return v
     return "modelo"
 
@@ -6165,6 +6448,8 @@ if not listar_projetos():
         criar_projeto_em_branco(PASTA / "Meu Projeto.pnbox", "Meu Projeto")
     elif VERSAO == "assinatura":
         criar_projeto_assinatura(PASTA / "Conecta Vale (modelo assinatura).pnbox")
+    elif VERSAO == "servico":
+        criar_projeto_servico(PASTA / "TecVale Soluções (modelo serviços).pnbox")
     else:
         criar_projeto_modelo(PASTA / "FitBox (modelo).pnbox")
 
@@ -6457,6 +6742,7 @@ with st.sidebar:
         novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")
         tipo = st.radio("Começar a partir de", ["Em branco (do zero)", "Modelo FitBox (alimentação saudável)",
                                                 "Modelo Café Mucuri (cafeteria e padaria)",
+                                                "Modelo TecVale Soluções (serviços de TI)",
                                                 "Modelo Conecta Vale (aplicativo por assinatura)", "Cópia do projeto atual"])
         if st.button("Criar projeto", type="primary", width="stretch"):
             if not novo_nome.strip():
@@ -6471,6 +6757,8 @@ with st.sidebar:
                     criar_projeto_cafe(destino)
                 elif tipo.startswith("Modelo Conecta"):
                     criar_projeto_assinatura(destino)
+                elif tipo.startswith("Modelo TecVale"):
+                    criar_projeto_servico(destino)
                 else:
                     conn.commit()
                     shutil.copy(ss.db, destino)
@@ -8461,24 +8749,174 @@ ORIGEM_CANVAS = {
 }
 
 
+# ------------------------------------------------------------------------------
+# DESENHOS DAS MATRIZES (HTML/SVG responsivos)
+# ------------------------------------------------------------------------------
+
+CORES_GE = {"Seguro e crescimento": ("#3fd0c0", "🛡️"), "Seletivo ou cauteloso": ("#ffd23f", "➤"),
+            "Expansão limitada ou colheita": ("#ffa630", "↗"), "Perigo ou colheita": ("#ec4561", "⚠️")}
+# linhas de cima para baixo (atratividade alta -> baixa); colunas da esquerda para a direita (força alta -> baixa)
+GRADE_GE = [["Seguro e crescimento", "Seguro e crescimento", "Seletivo ou cauteloso"],
+            ["Seguro e crescimento", "Seletivo ou cauteloso", "Expansão limitada ou colheita"],
+            ["Seletivo ou cauteloso", "Expansão limitada ou colheita", "Perigo ou colheita"]]
+
+
+def _esc(s) -> str:
+    return _html.escape(str(s))
+
+
+def html_ge(tab: pd.DataFrame) -> str:
+    celulas = "".join(
+        f"<div class='ge-c' style='background:{CORES_GE[n][0]}'><div class='ge-i'>{CORES_GE[n][1]}</div><div>{n.replace(' ou ', ' ou<br>')}</div></div>"
+        for linha in GRADE_GE for n in linha)
+    pts = ""
+    for k, (_, r) in enumerate(tab.iterrows(), start=1):
+        left = min(max((10 - float(r["Força competitiva"])) / 10 * 100, 3), 97)
+        top = min(max((10 - float(r["Atratividade"])) / 10 * 100, 3), 97)
+        pts += (f"<div class='ge-p' style='left:{left:.1f}%;top:{top:.1f}%' title='{_esc(r['Segmento'])}: atratividade "
+                f"{num_br(r['Atratividade'], 1)}, força {num_br(r['Força competitiva'], 1)}'>{k}</div>")
+    leg = "".join(f"<li><b>{k}.</b> {_esc(r['Segmento'])} <span>→ {_esc(r['Recomendação'])}</span></li>"
+                  for k, (_, r) in enumerate(tab.iterrows(), start=1))
+    css = """<style>
+    .ge-w{display:flex;gap:10px;align-items:stretch;max-width:760px;margin:auto}
+    .ge-y{writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;color:#7a8595;font-size:.85rem;border-left:2px solid #7a8595;padding-left:6px}
+    .ge-m{flex:1;position:relative}
+    .ge-g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;aspect-ratio:1.15/1}
+    .ge-c{border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+          font-weight:600;font-size:clamp(.62rem,1.6vw,.98rem);color:#253041;padding:4px;line-height:1.2}
+    .ge-i{font-size:1.5em;margin-bottom:4px;opacity:.75}
+    .ge-p{position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:#1f3f75;color:#fff;
+          border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-weight:700}
+    .ge-x{text-align:center;color:#7a8595;font-size:.85rem;border-top:2px solid #7a8595;margin-top:8px;padding-top:4px}
+    .ge-l{max-width:760px;margin:10px auto 0;padding-left:20px} .ge-l li{margin:2px 0} .ge-l span{opacity:.7}
+    </style>"""
+    return (css + "<div class='ge-w'><div class='ge-y'>Baixa ← Atratividade do mercado → Alta</div><div class='ge-m'>"
+            f"<div class='ge-g'>{celulas}</div>{pts}<div class='ge-x'>Alta ← Força competitiva da empresa no segmento → Baixa</div>"
+            f"</div></div><ol class='ge-l' style='list-style:none'>{leg}</ol>")
+
+
+QUAD_BCG_VIS = {"Estrela": ("#ede3fb", "#7b3fe4", "⭐", ["Mercado atrativo", "Gera bom faturamento", "Exige investimento"]),
+                "Interrogação": ("#fff4c7", "#c99700", "❓", ["Ainda gera pouco retorno", "Expectativa de crescimento", "Decisão de risco"]),
+                "Vaca leiteira": ("#eefbd0", "#5e8f00", "🐄", ["Gera muito caixa", "Exige pouco investimento", "Recursos realocáveis"]),
+                "Abacaxi": ("#fde2e5", "#c8102e", "🍍", ["Gera pouco caixa", "Mercado sem crescimento", "Provável saída"])}
+
+
+def html_bcg(tab: pd.DataFrame, lim: float) -> str:
+    import math
+    ymax = max(2 * lim, 1.0)
+    quad = ""
+    for q in ("Estrela", "Interrogação", "Vaca leiteira", "Abacaxi"):
+        bg, cor, ic, itens = QUAD_BCG_VIS[q]
+        al = "flex-end" if q in ("Vaca leiteira", "Abacaxi") else "flex-start"
+        quad += (f"<div class='bc-q' style='background:{bg};justify-content:{al}'><div class='bc-t' style='color:{cor}'>{ic} {q}</div>"
+                 + "".join(f"<div class='bc-i'>✓ {i}</div>" for i in itens) + "</div>")
+    mx = max(float(tab["Receita anual"].max()), 1.0)
+    pts = ""
+    for _, r in tab.iterrows():
+        p = min(max(float(r["Participação relativa"]), 0.1), 10)
+        left = (1 - math.log10(p)) / 2 * 100
+        top = (1 - min(max(float(r["Crescimento do mercado (%)"]), 0), ymax) / ymax) * 100
+        tam = 26 + 50 * math.sqrt(max(float(r["Receita anual"]), 0) / mx)
+        cor = QUAD_BCG_VIS[r["Quadrante"]][1]
+        pts += (f"<div class='bc-p' style='left:{min(max(left, 4), 96):.1f}%;top:{min(max(top, 5), 95):.1f}%;width:{tam:.0f}px;"
+                f"height:{tam:.0f}px;background:{cor}' title='{_esc(r['Produto'])}: crescimento {num_br(r['Crescimento do mercado (%)'], 1)}%, "
+                f"participação {num_br(r['Participação relativa'], 2)}x, receita {brl(r['Receita anual'])}'></div>"
+                f"<div class='bc-r' style='left:{min(max(left, 8), 92):.1f}%;top:calc({min(max(top, 5), 95):.1f}% + {tam / 2 + 2:.0f}px)'>"
+                f"{_esc(str(r['Produto'])[:26])}</div>")
+    yt = "".join(f"<span style='top:{(1 - v / ymax) * 100:.0f}%'>{num_br(v, 0)}%</span>" for v in (0, lim / 2, lim, 1.5 * lim, ymax))
+    xt = "".join(f"<span style='left:{(1 - math.log10(v)) / 2 * 100:.0f}%'>{num_br(v, 1 if v < 1 else 0)}x</span>" for v in (10, 5, 1, 0.5, 0.1))
+    css = """<style>
+    .bc-w{display:flex;gap:6px;max-width:780px;margin:auto}
+    .bc-ya{writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;font-weight:700;color:#334;font-size:.85rem}
+    .bc-yt{position:relative;width:34px;font-size:.72rem;color:#556} .bc-yt span{position:absolute;right:2px;transform:translateY(-50%)}
+    .bc-m{flex:1;position:relative}
+    .bc-g{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;aspect-ratio:1.2/1;border:2px solid #2d4f8a;border-radius:6px;overflow:hidden}
+    .bc-q{display:flex;flex-direction:column;padding:10px 14px;border:1px solid rgba(45,79,138,.35);font-size:clamp(.62rem,1.4vw,.85rem);color:#253041}
+    .bc-t{font-weight:800;font-size:1.25em;margin-bottom:4px} .bc-i{opacity:.8;line-height:1.35}
+    .bc-p{position:absolute;transform:translate(-50%,-50%);border-radius:50%;opacity:.82;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+    .bc-r{position:absolute;transform:translateX(-50%);font-size:.72rem;font-weight:600;background:rgba(255,255,255,.85);
+          padding:0 4px;border-radius:4px;white-space:nowrap;color:#223}
+    .bc-xt{position:relative;height:18px;font-size:.72rem;color:#556} .bc-xt span{position:absolute;transform:translateX(-50%)}
+    .bc-xa{text-align:center;font-weight:700;color:#334;font-size:.85rem}
+    @media (max-width:640px){.bc-i{display:none}.bc-r{font-size:.62rem}.bc-ya,.bc-xa{font-size:.72rem}}
+    </style>"""
+    return (css + "<div class='bc-w'><div class='bc-ya'>Baixo ← Crescimento do mercado (% a.a.) → Alto</div>"
+            f"<div class='bc-yt'>{yt}</div><div class='bc-m'><div class='bc-g'>{quad}</div>{pts}<div class='bc-xt'>{xt}</div>"
+            "<div class='bc-xa'>Alta ← Participação relativa de mercado (x líder) → Baixa</div></div></div>")
+
+
+CICLO_BSC = [("Aprendizado e crescimento", "#0d6fb8", "Conhecimento e habilidades da equipe sustentam inovações e melhorias."),
+             ("Processos internos", "#123a5e", "Equipe capacitada melhora os processos de trabalho."),
+             ("Clientes", "#d7262e", "Processos melhores conduzem a clientes mais satisfeitos."),
+             ("Financeira", "#b5191f", "Clientes satisfeitos levam a melhores resultados financeiros.")]
+
+
+def svg_bsc(ob: pd.DataFrame) -> str:
+    """Ciclo do BSC: anel com quatro segmentos em forma de seta, no sentido horário."""
+    import math
+    cx, cy, R1, R0 = 300, 260, 245, 120
+    Rm = (R1 + R0) / 2
+
+    def pt(r, a):
+        return cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))
+
+    partes = []
+    inicio = [-90, 0, 90, 180]
+    for (nome, cor, desc), a0 in zip(CICLO_BSC, inicio):
+        a1 = a0 + 88
+        ponta = a1 + 7
+        o0, o1 = pt(R1, a0), pt(R1, a1)
+        i0, i1 = pt(R0, a0), pt(R0, a1)
+        tip, notch = pt(Rm, ponta), pt(Rm, a0 + 7)
+        d = (f"M{o0[0]:.1f},{o0[1]:.1f} A{R1},{R1} 0 0 1 {o1[0]:.1f},{o1[1]:.1f} L{tip[0]:.1f},{tip[1]:.1f} "
+             f"L{i1[0]:.1f},{i1[1]:.1f} A{R0},{R0} 0 0 0 {i0[0]:.1f},{i0[1]:.1f} L{notch[0]:.1f},{notch[1]:.1f} Z")
+        partes.append(f"<path d='{d}' fill='{cor}'/>")
+        tx, ty = pt(Rm - 2, a0 + 51)
+        n = int((ob["perspectiva"] == nome).sum()) if not ob.empty else 0
+        palavras = desc.split()
+        linhas, atual = [], ""
+        for w in palavras:
+            if len(atual) + len(w) > 19:
+                linhas.append(atual)
+                atual = w
+            else:
+                atual = (atual + " " + w).strip()
+        linhas.append(atual)
+        titulo = {"Aprendizado e crescimento": ["APRENDIZADO", "E CRESCIMENTO"], "Processos internos": ["PROCESSOS", "INTERNOS"]}.get(
+            nome, [nome.upper()])
+        y0 = ty - (len(titulo) * 15 + len(linhas) * 14 + 16) / 2 + 12
+        txt = "".join(f"<tspan x='{tx:.0f}' y='{y0 + i * 15:.0f}' font-weight='800' font-size='11.5'>{_esc(t)}</tspan>" for i, t in enumerate(titulo))
+        y1 = y0 + len(titulo) * 15 + 2
+        txt += "".join(f"<tspan x='{tx:.0f}' y='{y1 + i * 14:.0f}' font-size='11'>{_esc(t)}</tspan>" for i, t in enumerate(linhas))
+        txt += (f"<tspan x='{tx:.0f}' y='{y1 + len(linhas) * 14 + 4:.0f}' font-size='11.5' font-weight='700'>"
+                f"{n} objetivo{'s' if n != 1 else ''}</tspan>")
+        partes.append(f"<text fill='white' text-anchor='middle' font-family='Helvetica,Arial,sans-serif'>{txt}</text>")
+    centro = (f"<circle cx='{cx}' cy='{cy}' r='{R0 - 8}' fill='white'/>"
+              f"<text x='{cx}' y='{cy + 26}' text-anchor='middle' font-family='Helvetica,Arial,sans-serif' font-weight='900' "
+              f"font-size='74' fill='#333'>BSC</text>")
+    return (f"<svg viewBox='0 0 600 520' style='width:100%;max-width:600px;display:block;margin:auto' "
+            f"xmlns='http://www.w3.org/2000/svg'>{''.join(partes)}{centro}</svg>")
+
+
 def html_canvas(bl: dict) -> str:
     def caixa(nome, area, cor):
-        itens = "".join(f"<li>{x}</li>" for x in bl.get(nome, [])) or "<li><i>preencha a ferramenta de origem</i></li>"
-        return (f"<div class='cv-b' style='grid-area:{area};border-top:4px solid {cor}'><div class='cv-t'>{nome}</div>"
+        itens = "".join(f"<li>{_esc(x)}</li>" for x in bl.get(nome, [])) or "<li><i>preencha a ferramenta de origem</i></li>"
+        return (f"<div class='cv-b' style='grid-area:{area};background:{cor}'><div class='cv-t'>{nome.upper()}</div>"
                 f"<ul>{itens}</ul><div class='cv-o'>vem de: {ORIGEM_CANVAS[nome]}</div></div>")
     css = """<style>
     .cv{display:grid;gap:8px;grid-template-columns:repeat(10,1fr);grid-template-areas:
       "pa pa ak ak pv pv rc rc sc sc" "pa pa kr kr pv pv ch ch sc sc" "cs cs cs cs cs rs rs rs rs rs";}
-    .cv-b{background:var(--secondary-background-color,#f4f6fa);border-radius:10px;padding:10px 12px;font-size:.86rem;min-height:130px}
-    .cv-t{font-weight:700;margin-bottom:4px} .cv-b ul{margin:0;padding-left:18px} .cv-o{font-size:.7rem;opacity:.6;margin-top:6px}
+    .cv-b{border-radius:12px;padding:14px 14px;font-size:.84rem;min-height:150px;color:#fff}
+    .cv-t{font-weight:800;margin-bottom:6px;letter-spacing:.02em;font-size:.95rem;line-height:1.15}
+    .cv-b ul{margin:0;padding-left:18px} .cv-b li{margin:2px 0} .cv-o{font-size:.7rem;opacity:.75;margin-top:8px}
     @media (max-width:700px){.cv{grid-template-columns:1fr;grid-template-areas:"sc" "pv" "ch" "rc" "rs" "kr" "ak" "pa" "cs";}}
     </style>"""
     return css + "<div class='cv'>" + "".join([
-        caixa("Parcerias-chave", "pa", "#8e44ad"), caixa("Atividades-chave", "ak", "#2980b9"),
-        caixa("Recursos-chave", "kr", "#2980b9"), caixa("Proposta de valor", "pv", "#c0392b"),
-        caixa("Relacionamento com clientes", "rc", "#e67e22"), caixa("Canais", "ch", "#e67e22"),
-        caixa("Segmentos de clientes", "sc", "#e67e22"), caixa("Estrutura de custos", "cs", "#16a085"),
-        caixa("Fontes de receita", "rs", "#16a085")]) + "</div>"
+        caixa("Parcerias-chave", "pa", "#6a3184"), caixa("Atividades-chave", "ak", "#f0901f"),
+        caixa("Recursos-chave", "kr", "#e5653e"), caixa("Proposta de valor", "pv", "#44923a"),
+        caixa("Relacionamento com clientes", "rc", "#8db833"), caixa("Canais", "ch", "#14a49a"),
+        caixa("Segmentos de clientes", "sc", "#1592c4"), caixa("Estrutura de custos", "cs", "#4456a0"),
+        caixa("Fontes de receita", "rs", "#22617a")]) + "</div>"
 
 
 def pg_canvas():
@@ -8522,22 +8960,9 @@ def pg_bcg():
     tab = bcg_tabela(d, res, lim)
     if tab.empty:
         return proxima("bcg")
-    g = tab.assign(Rótulo=tab["Produto"].str.slice(0, 22), Tam=tab["Receita anual"].clip(lower=1))
-    base = alt.Chart(g).encode(
-        x=alt.X("Participação relativa:Q", scale=alt.Scale(type="log", domain=[0.1, 10], reverse=True),
-                title="Participação relativa de mercado (escala log, líder à esquerda)"),
-        y=alt.Y("Crescimento do mercado (%):Q", title="Crescimento do mercado (% a.a.)"))
-    pts = base.mark_circle(opacity=0.8, stroke="white").encode(
-        size=alt.Size("Tam:Q", legend=None, scale=alt.Scale(range=[150, 2500])),
-        color=alt.Color("Quadrante:N", scale=alt.Scale(domain=list(QUADRANTES_BCG), range=["#f1c40f", "#27ae60", "#2980b9", "#c0392b"]),
-                        legend=alt.Legend(orient="bottom", title=None)),
-        tooltip=["Produto", "Quadrante", alt.Tooltip("Receita anual:Q", format=",.0f"), "Crescimento do mercado (%)", "Participação relativa"])
-    txt = base.mark_text(dy=-16, fontSize=11).encode(text="Rótulo:N")
-    regras = alt.Chart(pd.DataFrame({"x": [1.0]})).mark_rule(strokeDash=[4, 4]).encode(x="x:Q") + \
-        alt.Chart(pd.DataFrame({"y": [lim]})).mark_rule(strokeDash=[4, 4]).encode(y="y:Q")
-    st.altair_chart((pts + txt + regras).properties(height=420), width="stretch")
-    st.caption("⭐ Estrela (alto, forte) · 🐄 Vaca leiteira (baixo, forte) · ❓ Interrogação (alto, fraca) · 🍍 Abacaxi (baixo, fraca). "
-               "O tamanho da bolha é a receita do Ano 1.")
+    st.markdown(html_bcg(tab, lim), unsafe_allow_html=True)
+    st.caption(f"O tamanho da bolha é a receita do Ano 1. A linha horizontal fica em {num_br(lim, 1)}% a.a. (limite escolhido acima) "
+               "e a vertical em 1,0x (empatado com o líder). Passe o mouse sobre as bolhas para ver os valores.")
     vis = tab.copy()
     vis["Receita anual"] = vis["Receita anual"].map(brl)
     vis["Margem"] = vis["Margem"].map(pct)
@@ -8570,19 +8995,11 @@ def pg_ge():
                       "forca": N("Força competitiva (0 a 10)", min_value=0.0, max_value=10.0, step=0.5),
                       "justificativa": T("Justificativa", width="large")}, "unidade")
         tab = ge_tabela(d)
-    cores = {(2, 2): "#27ae60", (2, 1): "#27ae60", (1, 2): "#27ae60", (2, 0): "#f1c40f", (1, 1): "#f1c40f",
-             (0, 2): "#f1c40f", (1, 0): "#e74c3c", (0, 1): "#e74c3c", (0, 0): "#e74c3c"}
-    celulas = pd.DataFrame([{"x0": j * 10 / 3, "x1": (j + 1) * 10 / 3, "y0": i * 10 / 3, "y1": (i + 1) * 10 / 3, "cor": cores[(i, j)]}
-                            for i in range(3) for j in range(3)])
-    fundo = alt.Chart(celulas).mark_rect(opacity=0.18).encode(x=alt.X("x0:Q", scale=alt.Scale(domain=[0, 10]), title="Força competitiva"),
-                                                              x2="x1", y=alt.Y("y0:Q", scale=alt.Scale(domain=[0, 10]), title="Atratividade do mercado"),
-                                                              y2="y1", color=alt.Color("cor:N", scale=None))
-    pts = alt.Chart(tab).mark_circle(size=420, color="#1f4f8f", opacity=0.85).encode(
-        x="Força competitiva:Q", y="Atratividade:Q", tooltip=["Segmento", "Atratividade", "Força competitiva", "Recomendação"])
-    txt = alt.Chart(tab.assign(R=tab["Segmento"].str.slice(0, 24))).mark_text(dy=-18, fontSize=11).encode(
-        x="Força competitiva:Q", y="Atratividade:Q", text="R:N")
-    st.altair_chart((fundo + pts + txt).properties(height=430), width="stretch")
-    st.caption("🟩 Investir e crescer · 🟨 Seletividade / manter · 🟥 Colher ou desinvestir")
+    st.markdown(html_ge(tab), unsafe_allow_html=True)
+    st.write("")
+    for n, (cor, ic) in CORES_GE.items():
+        if (tab["Recomendação"] == n).any():
+            st.markdown(f"{ic} **{n}:** {ACOES_GE[n]}")
     st.dataframe(tab, hide_index=True, width="stretch")
     proxima("ge")
 
@@ -8683,6 +9100,7 @@ def pg_bsc():
         if st.button("Cadastrar objetivos SMART →"):
             ir("identidade", "Na aba Objetivos SMART, use o botão de sugestões ou cadastre os seus, escolhendo a perspectiva de cada um.")
             st.rerun()
+    st.markdown(svg_bsc(ob), unsafe_allow_html=True)
     cols = st.columns(2)
     for i, p in enumerate(PERSPECTIVAS[::-1][::-1]):
         with cols[i % 2].container(border=True):
@@ -9507,6 +9925,7 @@ def pg_sumario():
             "Use o rascunho automático como ponto de partida e reescreva com as palavras do grupo.")
     if st.button("✨ Gerar rascunho automático a partir dos dados", type="primary"):
         novo = gerar_sumario(proj, d, res)
+        proj["sumario_executivo"] = novo
         salvar_unica(conn, "projeto", {"sumario_executivo": novo})
         ss.pop(wk("sumario_txt"), None)
         marcar_salvo()

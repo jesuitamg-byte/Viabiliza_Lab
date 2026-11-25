@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "7.1"
+VERSAO_PROGRAMA = "7.2"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -79,14 +79,14 @@ def _versao_inicial() -> str:
         q = st.query_params.get("versao", "")
     except Exception:
         q = ""
-    if q in ("modelo", "branco", "assinatura"):
+    if q in ("modelo", "branco", "assinatura", "servico"):
         return q
-    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco", "assinatura"):
+    if os.environ.get("PNBOX_VERSAO") in ("modelo", "branco", "assinatura", "servico"):
         return os.environ["PNBOX_VERSAO"]
     arq = APP_DIR / "versao.txt"
     if arq.exists():
         v = arq.read_text(encoding="utf-8").strip().lower()
-        if v in ("modelo", "branco", "assinatura"):
+        if v in ("modelo", "branco", "assinatura", "servico"):
             return v
     return "modelo"
 
@@ -396,6 +396,8 @@ if not listar_projetos():
         criar_projeto_em_branco(PASTA / "Meu Projeto.pnbox", "Meu Projeto")
     elif VERSAO == "assinatura":
         criar_projeto_assinatura(PASTA / "Conecta Vale (modelo assinatura).pnbox")
+    elif VERSAO == "servico":
+        criar_projeto_servico(PASTA / "TecVale Soluções (modelo serviços).pnbox")
     else:
         criar_projeto_modelo(PASTA / "FitBox (modelo).pnbox")
 
@@ -688,6 +690,7 @@ with st.sidebar:
         novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")
         tipo = st.radio("Começar a partir de", ["Em branco (do zero)", "Modelo FitBox (alimentação saudável)",
                                                 "Modelo Café Mucuri (cafeteria e padaria)",
+                                                "Modelo TecVale Soluções (serviços de TI)",
                                                 "Modelo Conecta Vale (aplicativo por assinatura)", "Cópia do projeto atual"])
         if st.button("Criar projeto", type="primary", width="stretch"):
             if not novo_nome.strip():
@@ -702,6 +705,8 @@ with st.sidebar:
                     criar_projeto_cafe(destino)
                 elif tipo.startswith("Modelo Conecta"):
                     criar_projeto_assinatura(destino)
+                elif tipo.startswith("Modelo TecVale"):
+                    criar_projeto_servico(destino)
                 else:
                     conn.commit()
                     shutil.copy(ss.db, destino)

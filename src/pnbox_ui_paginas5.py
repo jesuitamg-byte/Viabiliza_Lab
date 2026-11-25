@@ -130,24 +130,175 @@ ORIGEM_CANVAS = {
 }
 
 
+# ------------------------------------------------------------------------------
+# DESENHOS DAS MATRIZES (HTML/SVG responsivos)
+# ------------------------------------------------------------------------------
+import html as _html
+
+CORES_GE = {"Seguro e crescimento": ("#3fd0c0", "🛡️"), "Seletivo ou cauteloso": ("#ffd23f", "➤"),
+            "Expansão limitada ou colheita": ("#ffa630", "↗"), "Perigo ou colheita": ("#ec4561", "⚠️")}
+# linhas de cima para baixo (atratividade alta -> baixa); colunas da esquerda para a direita (força alta -> baixa)
+GRADE_GE = [["Seguro e crescimento", "Seguro e crescimento", "Seletivo ou cauteloso"],
+            ["Seguro e crescimento", "Seletivo ou cauteloso", "Expansão limitada ou colheita"],
+            ["Seletivo ou cauteloso", "Expansão limitada ou colheita", "Perigo ou colheita"]]
+
+
+def _esc(s) -> str:
+    return _html.escape(str(s))
+
+
+def html_ge(tab: pd.DataFrame) -> str:
+    celulas = "".join(
+        f"<div class='ge-c' style='background:{CORES_GE[n][0]}'><div class='ge-i'>{CORES_GE[n][1]}</div><div>{n.replace(' ou ', ' ou<br>')}</div></div>"
+        for linha in GRADE_GE for n in linha)
+    pts = ""
+    for k, (_, r) in enumerate(tab.iterrows(), start=1):
+        left = min(max((10 - float(r["Força competitiva"])) / 10 * 100, 3), 97)
+        top = min(max((10 - float(r["Atratividade"])) / 10 * 100, 3), 97)
+        pts += (f"<div class='ge-p' style='left:{left:.1f}%;top:{top:.1f}%' title='{_esc(r['Segmento'])}: atratividade "
+                f"{num_br(r['Atratividade'], 1)}, força {num_br(r['Força competitiva'], 1)}'>{k}</div>")
+    leg = "".join(f"<li><b>{k}.</b> {_esc(r['Segmento'])} <span>→ {_esc(r['Recomendação'])}</span></li>"
+                  for k, (_, r) in enumerate(tab.iterrows(), start=1))
+    css = """<style>
+    .ge-w{display:flex;gap:10px;align-items:stretch;max-width:760px;margin:auto}
+    .ge-y{writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;color:#7a8595;font-size:.85rem;border-left:2px solid #7a8595;padding-left:6px}
+    .ge-m{flex:1;position:relative}
+    .ge-g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;aspect-ratio:1.15/1}
+    .ge-c{border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+          font-weight:600;font-size:clamp(.62rem,1.6vw,.98rem);color:#253041;padding:4px;line-height:1.2}
+    .ge-i{font-size:1.5em;margin-bottom:4px;opacity:.75}
+    .ge-p{position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:#1f3f75;color:#fff;
+          border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-weight:700}
+    .ge-x{text-align:center;color:#7a8595;font-size:.85rem;border-top:2px solid #7a8595;margin-top:8px;padding-top:4px}
+    .ge-l{max-width:760px;margin:10px auto 0;padding-left:20px} .ge-l li{margin:2px 0} .ge-l span{opacity:.7}
+    </style>"""
+    return (css + "<div class='ge-w'><div class='ge-y'>Baixa ← Atratividade do mercado → Alta</div><div class='ge-m'>"
+            f"<div class='ge-g'>{celulas}</div>{pts}<div class='ge-x'>Alta ← Força competitiva da empresa no segmento → Baixa</div>"
+            f"</div></div><ol class='ge-l' style='list-style:none'>{leg}</ol>")
+
+
+QUAD_BCG_VIS = {"Estrela": ("#ede3fb", "#7b3fe4", "⭐", ["Mercado atrativo", "Gera bom faturamento", "Exige investimento"]),
+                "Interrogação": ("#fff4c7", "#c99700", "❓", ["Ainda gera pouco retorno", "Expectativa de crescimento", "Decisão de risco"]),
+                "Vaca leiteira": ("#eefbd0", "#5e8f00", "🐄", ["Gera muito caixa", "Exige pouco investimento", "Recursos realocáveis"]),
+                "Abacaxi": ("#fde2e5", "#c8102e", "🍍", ["Gera pouco caixa", "Mercado sem crescimento", "Provável saída"])}
+
+
+def html_bcg(tab: pd.DataFrame, lim: float) -> str:
+    import math
+    ymax = max(2 * lim, 1.0)
+    quad = ""
+    for q in ("Estrela", "Interrogação", "Vaca leiteira", "Abacaxi"):
+        bg, cor, ic, itens = QUAD_BCG_VIS[q]
+        al = "flex-end" if q in ("Vaca leiteira", "Abacaxi") else "flex-start"
+        quad += (f"<div class='bc-q' style='background:{bg};justify-content:{al}'><div class='bc-t' style='color:{cor}'>{ic} {q}</div>"
+                 + "".join(f"<div class='bc-i'>✓ {i}</div>" for i in itens) + "</div>")
+    mx = max(float(tab["Receita anual"].max()), 1.0)
+    pts = ""
+    for _, r in tab.iterrows():
+        p = min(max(float(r["Participação relativa"]), 0.1), 10)
+        left = (1 - math.log10(p)) / 2 * 100
+        top = (1 - min(max(float(r["Crescimento do mercado (%)"]), 0), ymax) / ymax) * 100
+        tam = 26 + 50 * math.sqrt(max(float(r["Receita anual"]), 0) / mx)
+        cor = QUAD_BCG_VIS[r["Quadrante"]][1]
+        pts += (f"<div class='bc-p' style='left:{min(max(left, 4), 96):.1f}%;top:{min(max(top, 5), 95):.1f}%;width:{tam:.0f}px;"
+                f"height:{tam:.0f}px;background:{cor}' title='{_esc(r['Produto'])}: crescimento {num_br(r['Crescimento do mercado (%)'], 1)}%, "
+                f"participação {num_br(r['Participação relativa'], 2)}x, receita {brl(r['Receita anual'])}'></div>"
+                f"<div class='bc-r' style='left:{min(max(left, 8), 92):.1f}%;top:calc({min(max(top, 5), 95):.1f}% + {tam / 2 + 2:.0f}px)'>"
+                f"{_esc(str(r['Produto'])[:26])}</div>")
+    yt = "".join(f"<span style='top:{(1 - v / ymax) * 100:.0f}%'>{num_br(v, 0)}%</span>" for v in (0, lim / 2, lim, 1.5 * lim, ymax))
+    xt = "".join(f"<span style='left:{(1 - math.log10(v)) / 2 * 100:.0f}%'>{num_br(v, 1 if v < 1 else 0)}x</span>" for v in (10, 5, 1, 0.5, 0.1))
+    css = """<style>
+    .bc-w{display:flex;gap:6px;max-width:780px;margin:auto}
+    .bc-ya{writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;font-weight:700;color:#334;font-size:.85rem}
+    .bc-yt{position:relative;width:34px;font-size:.72rem;color:#556} .bc-yt span{position:absolute;right:2px;transform:translateY(-50%)}
+    .bc-m{flex:1;position:relative}
+    .bc-g{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;aspect-ratio:1.2/1;border:2px solid #2d4f8a;border-radius:6px;overflow:hidden}
+    .bc-q{display:flex;flex-direction:column;padding:10px 14px;border:1px solid rgba(45,79,138,.35);font-size:clamp(.62rem,1.4vw,.85rem);color:#253041}
+    .bc-t{font-weight:800;font-size:1.25em;margin-bottom:4px} .bc-i{opacity:.8;line-height:1.35}
+    .bc-p{position:absolute;transform:translate(-50%,-50%);border-radius:50%;opacity:.82;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+    .bc-r{position:absolute;transform:translateX(-50%);font-size:.72rem;font-weight:600;background:rgba(255,255,255,.85);
+          padding:0 4px;border-radius:4px;white-space:nowrap;color:#223}
+    .bc-xt{position:relative;height:18px;font-size:.72rem;color:#556} .bc-xt span{position:absolute;transform:translateX(-50%)}
+    .bc-xa{text-align:center;font-weight:700;color:#334;font-size:.85rem}
+    @media (max-width:640px){.bc-i{display:none}.bc-r{font-size:.62rem}.bc-ya,.bc-xa{font-size:.72rem}}
+    </style>"""
+    return (css + "<div class='bc-w'><div class='bc-ya'>Baixo ← Crescimento do mercado (% a.a.) → Alto</div>"
+            f"<div class='bc-yt'>{yt}</div><div class='bc-m'><div class='bc-g'>{quad}</div>{pts}<div class='bc-xt'>{xt}</div>"
+            "<div class='bc-xa'>Alta ← Participação relativa de mercado (x líder) → Baixa</div></div></div>")
+
+
+CICLO_BSC = [("Aprendizado e crescimento", "#0d6fb8", "Conhecimento e habilidades da equipe sustentam inovações e melhorias."),
+             ("Processos internos", "#123a5e", "Equipe capacitada melhora os processos de trabalho."),
+             ("Clientes", "#d7262e", "Processos melhores conduzem a clientes mais satisfeitos."),
+             ("Financeira", "#b5191f", "Clientes satisfeitos levam a melhores resultados financeiros.")]
+
+
+def svg_bsc(ob: pd.DataFrame) -> str:
+    """Ciclo do BSC: anel com quatro segmentos em forma de seta, no sentido horário."""
+    import math
+    cx, cy, R1, R0 = 300, 260, 245, 120
+    Rm = (R1 + R0) / 2
+
+    def pt(r, a):
+        return cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a))
+
+    partes = []
+    inicio = [-90, 0, 90, 180]
+    for (nome, cor, desc), a0 in zip(CICLO_BSC, inicio):
+        a1 = a0 + 88
+        ponta = a1 + 7
+        o0, o1 = pt(R1, a0), pt(R1, a1)
+        i0, i1 = pt(R0, a0), pt(R0, a1)
+        tip, notch = pt(Rm, ponta), pt(Rm, a0 + 7)
+        d = (f"M{o0[0]:.1f},{o0[1]:.1f} A{R1},{R1} 0 0 1 {o1[0]:.1f},{o1[1]:.1f} L{tip[0]:.1f},{tip[1]:.1f} "
+             f"L{i1[0]:.1f},{i1[1]:.1f} A{R0},{R0} 0 0 0 {i0[0]:.1f},{i0[1]:.1f} L{notch[0]:.1f},{notch[1]:.1f} Z")
+        partes.append(f"<path d='{d}' fill='{cor}'/>")
+        tx, ty = pt(Rm - 2, a0 + 51)
+        n = int((ob["perspectiva"] == nome).sum()) if not ob.empty else 0
+        palavras = desc.split()
+        linhas, atual = [], ""
+        for w in palavras:
+            if len(atual) + len(w) > 19:
+                linhas.append(atual)
+                atual = w
+            else:
+                atual = (atual + " " + w).strip()
+        linhas.append(atual)
+        titulo = {"Aprendizado e crescimento": ["APRENDIZADO", "E CRESCIMENTO"], "Processos internos": ["PROCESSOS", "INTERNOS"]}.get(
+            nome, [nome.upper()])
+        y0 = ty - (len(titulo) * 15 + len(linhas) * 14 + 16) / 2 + 12
+        txt = "".join(f"<tspan x='{tx:.0f}' y='{y0 + i * 15:.0f}' font-weight='800' font-size='11.5'>{_esc(t)}</tspan>" for i, t in enumerate(titulo))
+        y1 = y0 + len(titulo) * 15 + 2
+        txt += "".join(f"<tspan x='{tx:.0f}' y='{y1 + i * 14:.0f}' font-size='11'>{_esc(t)}</tspan>" for i, t in enumerate(linhas))
+        txt += (f"<tspan x='{tx:.0f}' y='{y1 + len(linhas) * 14 + 4:.0f}' font-size='11.5' font-weight='700'>"
+                f"{n} objetivo{'s' if n != 1 else ''}</tspan>")
+        partes.append(f"<text fill='white' text-anchor='middle' font-family='Helvetica,Arial,sans-serif'>{txt}</text>")
+    centro = (f"<circle cx='{cx}' cy='{cy}' r='{R0 - 8}' fill='white'/>"
+              f"<text x='{cx}' y='{cy + 26}' text-anchor='middle' font-family='Helvetica,Arial,sans-serif' font-weight='900' "
+              f"font-size='74' fill='#333'>BSC</text>")
+    return (f"<svg viewBox='0 0 600 520' style='width:100%;max-width:600px;display:block;margin:auto' "
+            f"xmlns='http://www.w3.org/2000/svg'>{''.join(partes)}{centro}</svg>")
+
+
 def html_canvas(bl: dict) -> str:
     def caixa(nome, area, cor):
-        itens = "".join(f"<li>{x}</li>" for x in bl.get(nome, [])) or "<li><i>preencha a ferramenta de origem</i></li>"
-        return (f"<div class='cv-b' style='grid-area:{area};border-top:4px solid {cor}'><div class='cv-t'>{nome}</div>"
+        itens = "".join(f"<li>{_esc(x)}</li>" for x in bl.get(nome, [])) or "<li><i>preencha a ferramenta de origem</i></li>"
+        return (f"<div class='cv-b' style='grid-area:{area};background:{cor}'><div class='cv-t'>{nome.upper()}</div>"
                 f"<ul>{itens}</ul><div class='cv-o'>vem de: {ORIGEM_CANVAS[nome]}</div></div>")
     css = """<style>
     .cv{display:grid;gap:8px;grid-template-columns:repeat(10,1fr);grid-template-areas:
       "pa pa ak ak pv pv rc rc sc sc" "pa pa kr kr pv pv ch ch sc sc" "cs cs cs cs cs rs rs rs rs rs";}
-    .cv-b{background:var(--secondary-background-color,#f4f6fa);border-radius:10px;padding:10px 12px;font-size:.86rem;min-height:130px}
-    .cv-t{font-weight:700;margin-bottom:4px} .cv-b ul{margin:0;padding-left:18px} .cv-o{font-size:.7rem;opacity:.6;margin-top:6px}
+    .cv-b{border-radius:12px;padding:14px 14px;font-size:.84rem;min-height:150px;color:#fff}
+    .cv-t{font-weight:800;margin-bottom:6px;letter-spacing:.02em;font-size:.95rem;line-height:1.15}
+    .cv-b ul{margin:0;padding-left:18px} .cv-b li{margin:2px 0} .cv-o{font-size:.7rem;opacity:.75;margin-top:8px}
     @media (max-width:700px){.cv{grid-template-columns:1fr;grid-template-areas:"sc" "pv" "ch" "rc" "rs" "kr" "ak" "pa" "cs";}}
     </style>"""
     return css + "<div class='cv'>" + "".join([
-        caixa("Parcerias-chave", "pa", "#8e44ad"), caixa("Atividades-chave", "ak", "#2980b9"),
-        caixa("Recursos-chave", "kr", "#2980b9"), caixa("Proposta de valor", "pv", "#c0392b"),
-        caixa("Relacionamento com clientes", "rc", "#e67e22"), caixa("Canais", "ch", "#e67e22"),
-        caixa("Segmentos de clientes", "sc", "#e67e22"), caixa("Estrutura de custos", "cs", "#16a085"),
-        caixa("Fontes de receita", "rs", "#16a085")]) + "</div>"
+        caixa("Parcerias-chave", "pa", "#6a3184"), caixa("Atividades-chave", "ak", "#f0901f"),
+        caixa("Recursos-chave", "kr", "#e5653e"), caixa("Proposta de valor", "pv", "#44923a"),
+        caixa("Relacionamento com clientes", "rc", "#8db833"), caixa("Canais", "ch", "#14a49a"),
+        caixa("Segmentos de clientes", "sc", "#1592c4"), caixa("Estrutura de custos", "cs", "#4456a0"),
+        caixa("Fontes de receita", "rs", "#22617a")]) + "</div>"
 
 
 def pg_canvas():
@@ -191,22 +342,9 @@ def pg_bcg():
     tab = bcg_tabela(d, res, lim)
     if tab.empty:
         return proxima("bcg")
-    g = tab.assign(Rótulo=tab["Produto"].str.slice(0, 22), Tam=tab["Receita anual"].clip(lower=1))
-    base = alt.Chart(g).encode(
-        x=alt.X("Participação relativa:Q", scale=alt.Scale(type="log", domain=[0.1, 10], reverse=True),
-                title="Participação relativa de mercado (escala log, líder à esquerda)"),
-        y=alt.Y("Crescimento do mercado (%):Q", title="Crescimento do mercado (% a.a.)"))
-    pts = base.mark_circle(opacity=0.8, stroke="white").encode(
-        size=alt.Size("Tam:Q", legend=None, scale=alt.Scale(range=[150, 2500])),
-        color=alt.Color("Quadrante:N", scale=alt.Scale(domain=list(QUADRANTES_BCG), range=["#f1c40f", "#27ae60", "#2980b9", "#c0392b"]),
-                        legend=alt.Legend(orient="bottom", title=None)),
-        tooltip=["Produto", "Quadrante", alt.Tooltip("Receita anual:Q", format=",.0f"), "Crescimento do mercado (%)", "Participação relativa"])
-    txt = base.mark_text(dy=-16, fontSize=11).encode(text="Rótulo:N")
-    regras = alt.Chart(pd.DataFrame({"x": [1.0]})).mark_rule(strokeDash=[4, 4]).encode(x="x:Q") + \
-        alt.Chart(pd.DataFrame({"y": [lim]})).mark_rule(strokeDash=[4, 4]).encode(y="y:Q")
-    st.altair_chart((pts + txt + regras).properties(height=420), width="stretch")
-    st.caption("⭐ Estrela (alto, forte) · 🐄 Vaca leiteira (baixo, forte) · ❓ Interrogação (alto, fraca) · 🍍 Abacaxi (baixo, fraca). "
-               "O tamanho da bolha é a receita do Ano 1.")
+    st.markdown(html_bcg(tab, lim), unsafe_allow_html=True)
+    st.caption(f"O tamanho da bolha é a receita do Ano 1. A linha horizontal fica em {num_br(lim, 1)}% a.a. (limite escolhido acima) "
+               "e a vertical em 1,0x (empatado com o líder). Passe o mouse sobre as bolhas para ver os valores.")
     vis = tab.copy()
     vis["Receita anual"] = vis["Receita anual"].map(brl)
     vis["Margem"] = vis["Margem"].map(pct)
@@ -239,19 +377,11 @@ def pg_ge():
                       "forca": N("Força competitiva (0 a 10)", min_value=0.0, max_value=10.0, step=0.5),
                       "justificativa": T("Justificativa", width="large")}, "unidade")
         tab = ge_tabela(d)
-    cores = {(2, 2): "#27ae60", (2, 1): "#27ae60", (1, 2): "#27ae60", (2, 0): "#f1c40f", (1, 1): "#f1c40f",
-             (0, 2): "#f1c40f", (1, 0): "#e74c3c", (0, 1): "#e74c3c", (0, 0): "#e74c3c"}
-    celulas = pd.DataFrame([{"x0": j * 10 / 3, "x1": (j + 1) * 10 / 3, "y0": i * 10 / 3, "y1": (i + 1) * 10 / 3, "cor": cores[(i, j)]}
-                            for i in range(3) for j in range(3)])
-    fundo = alt.Chart(celulas).mark_rect(opacity=0.18).encode(x=alt.X("x0:Q", scale=alt.Scale(domain=[0, 10]), title="Força competitiva"),
-                                                              x2="x1", y=alt.Y("y0:Q", scale=alt.Scale(domain=[0, 10]), title="Atratividade do mercado"),
-                                                              y2="y1", color=alt.Color("cor:N", scale=None))
-    pts = alt.Chart(tab).mark_circle(size=420, color="#1f4f8f", opacity=0.85).encode(
-        x="Força competitiva:Q", y="Atratividade:Q", tooltip=["Segmento", "Atratividade", "Força competitiva", "Recomendação"])
-    txt = alt.Chart(tab.assign(R=tab["Segmento"].str.slice(0, 24))).mark_text(dy=-18, fontSize=11).encode(
-        x="Força competitiva:Q", y="Atratividade:Q", text="R:N")
-    st.altair_chart((fundo + pts + txt).properties(height=430), width="stretch")
-    st.caption("🟩 Investir e crescer · 🟨 Seletividade / manter · 🟥 Colher ou desinvestir")
+    st.markdown(html_ge(tab), unsafe_allow_html=True)
+    st.write("")
+    for n, (cor, ic) in CORES_GE.items():
+        if (tab["Recomendação"] == n).any():
+            st.markdown(f"{ic} **{n}:** {ACOES_GE[n]}")
     st.dataframe(tab, hide_index=True, width="stretch")
     proxima("ge")
 
@@ -352,6 +482,7 @@ def pg_bsc():
         if st.button("Cadastrar objetivos SMART →"):
             ir("identidade", "Na aba Objetivos SMART, use o botão de sugestões ou cadastre os seus, escolhendo a perspectiva de cada um.")
             st.rerun()
+    st.markdown(svg_bsc(ob), unsafe_allow_html=True)
     cols = st.columns(2)
     for i, p in enumerate(PERSPECTIVAS[::-1][::-1]):
         with cols[i % 2].container(border=True):

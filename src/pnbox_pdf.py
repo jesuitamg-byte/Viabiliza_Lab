@@ -163,7 +163,7 @@ class Relatorio(FPDF):
             yy = y0 + cab + gap + j * (h + gap)
             self.set_fill_color(*cor)
             self.rect(x0, yy, lat, h, style="F")
-            self.set_text_color(255, 255, 255) if j == 0 else self.set_text_color(40, 50, 60)
+            self.set_text_color(*((255, 255, 255) if j == 0 else (40, 50, 60)))
             self.fonte("B", 9)
             y_txt = yy + (h - len(rot) * 5) / 2
             for i, letra in enumerate(self.t(rot)):
@@ -251,97 +251,167 @@ def png_porter(tab: pd.DataFrame) -> bytes | None:
 
 
 def png_ge(tab: pd.DataFrame) -> bytes | None:
+    """Matriz GE/McKinsey 3x3 com células coloridas (força alta à esquerda) e segmentos numerados."""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = _plt()
+        from matplotlib.patches import FancyBboxPatch
     except ImportError:
         return None
-    cores = {(2, 2): "#27ae60", (2, 1): "#27ae60", (1, 2): "#27ae60", (2, 0): "#f1c40f", (1, 1): "#f1c40f",
-             (0, 2): "#f1c40f", (1, 0): "#e74c3c", (0, 1): "#e74c3c", (0, 0): "#e74c3c"}
-    fig, ax = plt.subplots(figsize=(6.2, 4.6))
+    cores = {"Seguro e crescimento": "#3fd0c0", "Seletivo ou cauteloso": "#ffd23f",
+             "Expansão limitada ou colheita": "#ffa630", "Perigo ou colheita": "#ec4561"}
+    grade = [["Seletivo ou cauteloso", "Expansão limitada ou colheita", "Perigo ou colheita"],
+             ["Seguro e crescimento", "Seletivo ou cauteloso", "Expansão limitada ou colheita"],
+             ["Seguro e crescimento", "Seguro e crescimento", "Seletivo ou cauteloso"]]  # linha 0 = atratividade baixa
+    fig, ax = plt.subplots(figsize=(6.2, 5.4))
+    s = 10 / 3
     for i in range(3):
         for j in range(3):
-            ax.add_patch(plt.Rectangle((j * 10 / 3, i * 10 / 3), 10 / 3, 10 / 3, color=cores[(i, j)], alpha=0.18, lw=0))
-    ax.scatter(tab["Força competitiva"], tab["Atratividade"], s=260, color="#1f4f8f", alpha=0.85, zorder=3)
+            n = grade[i][j]
+            ax.add_patch(FancyBboxPatch((j * s + 0.12, i * s + 0.12), s - 0.24, s - 0.24, boxstyle="round,pad=0,rounding_size=0.35",
+                                        color=cores[n], lw=0, zorder=1))
+            ax.text(j * s + s / 2, i * s + s - 0.4, n.replace(" ou ", " ou\n"), ha="center", va="top", fontsize=8.5,
+                    fontweight="bold", color="#253041", alpha=0.55, zorder=2)
     for k, (_, r) in enumerate(tab.iterrows(), start=1):
-        ax.annotate(str(k), (r["Força competitiva"], r["Atratividade"]), ha="center", va="center", fontsize=8,
-                    color="white", fontweight="bold", zorder=4)
+        x, y = 10 - float(r["Força competitiva"]), float(r["Atratividade"])
+        ax.scatter([x], [y], s=380, color="#1f3f75", edgecolors="white", linewidths=2, zorder=3)
+        ax.text(x, y, str(k), ha="center", va="center", color="white", fontsize=9, fontweight="bold", zorder=4)
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
-    ax.set_xlabel("Força competitiva")
+    ax.set_xticks([s / 2, 1.5 * s, 2.5 * s])
+    ax.set_xticklabels(["Alta", "Média", "Baixa"])
+    ax.set_yticks([s / 2, 1.5 * s, 2.5 * s])
+    ax.set_yticklabels(["Baixa", "Média", "Alta"])
+    ax.set_xlabel("Força competitiva da empresa no segmento")
     ax.set_ylabel("Atratividade do mercado")
-    for v in (10 / 3, 20 / 3):
-        ax.axvline(v, color="#999", lw=0.6)
-        ax.axhline(v, color="#999", lw=0.6)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    ax.tick_params(length=0)
     return _fig_png(fig)
 
 
 def png_bcg(tab: pd.DataFrame, lim: float) -> bytes | None:
+    """Matriz BCG com quadrantes coloridos, descrições e bolhas pela receita (participação em log, líder à esquerda)."""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = _plt()
+        import numpy as np
     except ImportError:
         return None
-    cor = {"Estrela": "#f1c40f", "Vaca leiteira": "#27ae60", "Interrogação": "#2980b9", "Abacaxi": "#c0392b"}
-    fig, ax = plt.subplots(figsize=(6.2, 4.6))
+    ymax = max(2 * lim, 1.0)
+    quad = {"Estrela": ((0.1, lim), "#ede3fb", "#7b3fe4", ["Mercado atrativo", "Gera bom faturamento", "Exige investimento"]),
+            "Interrogação": ((-1, lim), "#fff4c7", "#b38600", ["Ainda gera pouco retorno", "Expectativa de crescimento", "Decisão de risco"]),
+            "Vaca leiteira": ((0.1, 0), "#eefbd0", "#4f7a00", ["Gera muito caixa", "Exige pouco investimento", "Recursos realocáveis"]),
+            "Abacaxi": ((-1, 0), "#fde2e5", "#c8102e", ["Gera pouco caixa", "Mercado sem crescimento", "Provável saída"])}
+    fig, ax = plt.subplots(figsize=(6.6, 5.4))
+    # eixo x em log10 invertido: posição = 1 - log10(p)  (10x -> 0; 1x -> 1; 0,1x -> 2)
+    for q, ((_, y0), bg, cor, itens) in quad.items():
+        x0 = 0 if q in ("Estrela", "Vaca leiteira") else 1
+        ax.add_patch(plt.Rectangle((x0, y0), 1, lim if y0 == 0 else ymax - lim, color=bg, zorder=0))
+        topo = y0 + (lim if y0 == 0 else ymax - lim)
+        # títulos: no alto dos quadrantes de cima e no rodapé dos de baixo (como na matriz clássica)
+        ax.text(x0 + 0.5, topo - 0.06 * ymax if y0 > 0 else y0 + 0.03 * ymax, q, ha="center", fontsize=12, fontweight="bold",
+                color=cor, zorder=1)
+        for n, it in enumerate(itens):
+            yy = topo - (0.13 if y0 > 0 else 0.06) * ymax - n * 0.06 * ymax
+            ax.text(x0 + 0.06, yy, "✓ " + it, fontsize=7.3, color="#334", alpha=0.75, zorder=1)
     mx = max(float(tab["Receita anual"].max()), 1.0)
-    ax.scatter(tab["Participação relativa"].clip(0.1, 10), tab["Crescimento do mercado (%)"],
-               s=[120 + 1800 * v / mx for v in tab["Receita anual"]], c=[cor[q] for q in tab["Quadrante"]],
-               alpha=0.75, edgecolors="white", zorder=3)
+    cores = {q: v[2] for q, v in quad.items()}
     for _, r in tab.iterrows():
-        ax.annotate(str(r["Produto"])[:24], (min(max(r["Participação relativa"], 0.1), 10), r["Crescimento do mercado (%)"]),
-                    textcoords="offset points", xytext=(0, 10), ha="center", fontsize=7.5)
-    ax.set_xscale("log")
-    ax.set_xlim(10, 0.1)
-    ax.axvline(1, color="#888", ls="--", lw=0.8)
-    ax.axhline(lim, color="#888", ls="--", lw=0.8)
-    ax.set_xlabel("Participação relativa de mercado (log; líder à esquerda)")
-    ax.set_ylabel("Crescimento do mercado (% a.a.)")
-    y0, y1 = ax.get_ylim()
-    ax.text(9, y1 * 0.97, "Estrela", fontsize=8, va="top", color="#7d6608")
-    ax.text(0.11, y1 * 0.97, "Interrogação", fontsize=8, va="top", ha="right", color="#1b4f72")
-    ax.text(9, y0 + (y1 - y0) * 0.03, "Vaca leiteira", fontsize=8, color="#196f3d")
-    ax.text(0.11, y0 + (y1 - y0) * 0.03, "Abacaxi", fontsize=8, ha="right", color="#7b241c")
+        x = 1 - np.log10(min(max(float(r["Participação relativa"]), 0.1), 10))
+        y = min(max(float(r["Crescimento do mercado (%)"]), 0), ymax * 0.97)
+        ax.scatter([x], [y], s=150 + 1700 * float(r["Receita anual"]) / mx, color=cores[r["Quadrante"]], alpha=0.8,
+                   edgecolors="white", linewidths=2, zorder=3)
+        ax.annotate(str(r["Produto"])[:26], (x, y), textcoords="offset points", xytext=(0, -16), ha="center", fontsize=7,
+                    fontweight="bold", zorder=4, bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.8))
+    ax.axvline(1, color="#2d4f8a", lw=1)
+    ax.axhline(lim, color="#2d4f8a", lw=1)
+    ax.set_xlim(0, 2)
+    ax.set_ylim(0, ymax)
+    ax.set_xticks([0, 1 - np.log10(5), 1, 1 - np.log10(0.5), 2])
+    ax.set_xticklabels(["10x", "5x", "1x", "0,5x", "0,1x"])
+    ax.set_yticks([0, lim / 2, lim, 1.5 * lim, ymax])
+    ax.set_yticklabels([f"{num_br(v, 0)}%" for v in (0, lim / 2, lim, 1.5 * lim, ymax)])
+    ax.set_xlabel("Participação relativa de mercado (alta à esquerda)")
+    ax.set_ylabel("Taxa de crescimento do mercado")
+    for sp in ax.spines.values():
+        sp.set_color("#2d4f8a")
     return _fig_png(fig)
 
 
+def png_bsc(ob: pd.DataFrame) -> bytes | None:
+    """Ciclo do Balanced Scorecard (aprendizado -> processos -> clientes -> financeira), com o número de objetivos."""
+    try:
+        plt = _plt()
+        import numpy as np
+        from matplotlib.patches import Wedge, Polygon
+    except ImportError:
+        return None
+    seg = [("APRENDIZADO E\nCRESCIMENTO", "Aprendizado e crescimento", "#0d6fb8", 90, "Conhecimento e habilidades\nda equipe sustentam\nas melhorias."),
+           ("PROCESSOS\nINTERNOS", "Processos internos", "#123a5e", 0, "Equipe capacitada\nmelhora os processos."),
+           ("CLIENTES", "Clientes", "#d7262e", -90, "Processos melhores\nconduzem a clientes\nmais satisfeitos."),
+           ("FINANCEIRA", "Financeira", "#b5191f", 180, "Clientes satisfeitos\nlevam a melhores\nresultados.")]
+    R1, R0 = 1.0, 0.48
+    Rm = (R1 + R0) / 2
+    fig, ax = plt.subplots(figsize=(5.6, 5.6))
+    for tit, nome, cor, a_ini, desc in seg:
+        a_fim = a_ini - 86  # sentido horário
+        ax.add_patch(Wedge((0, 0), R1, a_fim, a_ini, width=R1 - R0, color=cor))
+        ang = np.radians(a_fim)
+        ponta = np.radians(a_fim - 7)
+        ax.add_patch(Polygon([(R1 * np.cos(ang), R1 * np.sin(ang)), (Rm * np.cos(ponta), Rm * np.sin(ponta)),
+                              (R0 * np.cos(ang), R0 * np.sin(ang))], color=cor))
+        am = np.radians(a_ini - 43)
+        n = int((ob["perspectiva"] == nome).sum()) if ob is not None and not ob.empty else 0
+        ax.text(Rm * np.cos(am), Rm * np.sin(am), f"{tit}\n\n{desc}\n{n} objetivo{'s' if n != 1 else ''}", ha="center",
+                va="center", color="white", fontsize=6.8, fontweight="bold", linespacing=1.15)
+    ax.add_patch(plt.Circle((0, 0), R0 - 0.03, color="white"))
+    ax.text(0, 0, "BSC", ha="center", va="center", fontsize=34, fontweight="black", color="#333")
+    ax.set_xlim(-1.08, 1.08)
+    ax.set_ylim(-1.08, 1.08)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    return _fig_png(fig)
+
+
+CORES_CANVAS = {"Parcerias-chave": (106, 49, 132), "Atividades-chave": (240, 144, 31), "Recursos-chave": (229, 101, 62),
+                "Proposta de valor": (68, 146, 58), "Relacionamento com clientes": (141, 184, 51), "Canais": (20, 164, 154),
+                "Segmentos de clientes": (21, 146, 196), "Estrutura de custos": (68, 86, 160), "Fontes de receita": (34, 97, 122)}
+
+
 def canvas_pdf(pdf, bl: dict):
-    """Desenha o Business Model Canvas em uma página (retrato, 180 mm de largura)."""
-    x0, y0, w, h1, h2 = pdf.l_margin, pdf.get_y() + 2, 36, 62, 45
+    """Desenha o Business Model Canvas em uma página (retrato, 180 mm de largura), com um bloco colorido por campo."""
+    x0, y0, w, h1, h2, g = pdf.l_margin, pdf.get_y() + 2, 36, 62, 45, 1.2
     caixas = [("Parcerias-chave", 0, 0, 1, 2), ("Atividades-chave", 1, 0, 1, 1), ("Recursos-chave", 1, 1, 1, 1),
               ("Proposta de valor", 2, 0, 1, 2), ("Relacionamento com clientes", 3, 0, 1, 1), ("Canais", 3, 1, 1, 1),
               ("Segmentos de clientes", 4, 0, 1, 2)]
     for nome, c, r, cw, rh in caixas:
         x, y = x0 + c * w, y0 + r * h1
-        pdf.rect(x, y, w * cw, h1 * rh)
-        _texto_caixa(pdf, nome, bl.get(nome, []), x, y, w * cw, h1 * rh)
+        _texto_caixa(pdf, nome, bl.get(nome, []), x + g / 2, y + g / 2, w * cw - g, h1 * rh - g)
     yb = y0 + 2 * h1
     for i, nome in enumerate(["Estrutura de custos", "Fontes de receita"]):
-        x = x0 + i * 90
-        pdf.rect(x, yb, 90, h2)
-        _texto_caixa(pdf, nome, bl.get(nome, []), x, yb, 90, h2)
+        _texto_caixa(pdf, nome, bl.get(nome, []), x0 + i * 90 + g / 2, yb + g / 2, 90 - g, h2 - g)
     pdf.set_y(yb + h2 + 3)
 
 
 def _texto_caixa(pdf, nome, itens, x, y, w, h):
-    pdf.set_fill_color(*AZUL)
-    pdf.rect(x, y, w, 6, style="F")
-    pdf.set_xy(x + 1, y + 0.8)
-    pdf.fonte("B", 6.6 if len(nome) > 22 else 7)
+    cor = CORES_CANVAS.get(nome, AZUL)
+    pdf.set_fill_color(*cor)
+    try:
+        pdf.rect(x, y, w, h, style="F", round_corners=True, corner_radius=2.5)
+    except TypeError:  # fpdf2 antigo, sem cantos arredondados
+        pdf.rect(x, y, w, h, style="F")
+    pdf.set_xy(x + 2, y + 2)
+    pdf.fonte("B", 7.2)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(w - 2, 4.4, pdf.t(nome.replace("Relacionamento com clientes", "Relacionamento")))
-    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell(w - 4, 3.4, pdf.t(nome.upper()), align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.fonte("", 6.6)
-    yy = y + 7.5
+    yy = pdf.get_y() + 1.5
     for it in itens:
         if yy > y + h - 4:
             break
-        pdf.set_xy(x + 1.2, yy)
-        txt = pdf.t("• " + str(it))
-        pdf.multi_cell(w - 2.4, 3.1, txt[:160], align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_xy(x + 2, yy)
+        pdf.multi_cell(w - 4, 3.1, pdf.t("• " + str(it))[:160], align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         yy = pdf.get_y() + 0.6
+    pdf.set_text_color(0, 0, 0)
 
 
 # ------------------------------------------------------------------------------
@@ -843,6 +913,9 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
                 pdf.paragrafo(f"{q} ({', '.join(itens)}): {txt}", "", 8)
     if ob is not None and not ob.empty:
         pdf.secao("BALANCED SCORECARD", nova_pagina=True)
+        img = png_bsc(ob)
+        if img:
+            pdf.image(io.BytesIO(img), x=55, w=100)
         ind = bsc_indicadores_plano(proj, d, res)
         for per in PERSPECTIVAS:
             sub = ob[ob["perspectiva"] == per]

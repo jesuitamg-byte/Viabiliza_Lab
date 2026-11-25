@@ -121,7 +121,10 @@ def gerar_sumario(proj: dict, d: dict, res: dict) -> str:
     pb = res["payback_desc"]
     viavel = res["vpl"] > 0 and a1["resultado"] > 0
     p = []
-    p.append(f"{nome} é um empreendimento do setor de {proj['setor_atuacao'] or 'atuação a definir'}, localizado em "
+    setores = [s.strip().lower() for s in str(proj["setor_atuacao"] or "").split(";") if s.strip()]
+    setores = [s for s in setores if s not in ("comércio", "serviço", "indústria")] or setores
+    setor_txt = (", ".join(setores[:2]) if len(setores) <= 2 else f"{setores[0]} e {setores[1]}") or "atuação a definir"
+    p.append(f"{nome} é um empreendimento do setor de {setor_txt}, localizado em "
              f"{proj['cidade_uf'] or 'cidade a definir'}, com o objetivo de {str(proj['objetivo']).lower()}. "
              f"O enquadramento tributário previsto é o {proj['enquadramento']} e o porte, {proj['porte']}.")
     if seg_top or valores:

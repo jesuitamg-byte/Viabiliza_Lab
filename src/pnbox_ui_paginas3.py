@@ -121,6 +121,7 @@ def pg_sumario():
             "Use o rascunho automático como ponto de partida e reescreva com as palavras do grupo.")
     if st.button("✨ Gerar rascunho automático a partir dos dados", type="primary"):
         novo = gerar_sumario(proj, d, res)
+        proj["sumario_executivo"] = novo
         salvar_unica(conn, "projeto", {"sumario_executivo": novo})
         ss.pop(wk("sumario_txt"), None)
         marcar_salvo()

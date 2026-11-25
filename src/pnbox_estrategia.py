@@ -204,6 +204,13 @@ def forca_competitiva_padrao(d: dict) -> float:
     return float(min(10, max(0, 5 * nossa / outras)))
 
 
+CELULAS_GE = {3: "Seguro e crescimento", 2: "Seletivo ou cauteloso", 1: "Expansão limitada ou colheita", 0: "Perigo ou colheita"}
+ACOES_GE = {"Seguro e crescimento": "Investir para crescer e defender a posição.",
+            "Seletivo ou cauteloso": "Investir com cautela, só onde houver vantagem clara.",
+            "Expansão limitada ou colheita": "Manter com pouco investimento e aproveitar o caixa.",
+            "Perigo ou colheita": "Colher o que for possível ou sair do segmento."}
+
+
 def ge_tabela(d: dict) -> pd.DataFrame:
     seg = d["segmentos"]
     ge = d["ge"]
@@ -219,7 +226,7 @@ def ge_tabela(d: dict) -> pd.DataFrame:
         na, nf = nivel(atr), nivel(forca)
         pontos = {"Alta": 2, "Média": 1, "Baixa": 0}
         soma = pontos[na] + pontos[nf]
-        rec = "Investir e crescer" if soma >= 3 else ("Seletividade / manter" if soma == 2 else "Colher ou desinvestir")
+        rec = CELULAS_GE[min(soma, 3) if soma < 3 else 3]
         linhas.append({"Segmento": s_["nome"], "Atratividade": round(atr, 1), "Força competitiva": round(forca, 1),
                        "Nível atratividade": na, "Nível força": nf, "Recomendação": rec,
                        "Origem da força": "informada" if f_inf > 0 else "automática (aderência + concorrência)"})
