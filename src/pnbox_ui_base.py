@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.0"
+VERSAO_PROGRAMA = "9.0.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -862,33 +862,51 @@ with st.sidebar:
 # ------------------------------------------------------------------------------
 # CABEÇALHO DAS FERRAMENTAS
 # ------------------------------------------------------------------------------
-def rolar_para_topo():
-    """Ao trocar de página, volta a tela para o início (útil sobretudo no celular)."""
+def rodape_navegacao(p: str):
+    """
+    Fim de cada página: botão de voltar ao painel e, quando a página acabou de ser aberta,
+    rola a tela para o início e registra a página no histórico do navegador, para que o
+    botão Voltar do navegador leve de volta ao painel do plano.
+    """
+    if p != "inicio" and p in PAG:
+        st.write("")
+        if st.button("← Voltar ao painel do plano", key="voltar_fim_" + p, width="stretch"):
+            ir("inicio")
+            st.rerun()
+    if ss.get("_pag_vista") == p:
+        return
+    ss["_pag_vista"] = p
+    ss["_nav_n"] = ss.get("_nav_n", 0) + 1
     try:
         import streamlit.components.v1 as components
-    except Exception:          # recurso opcional: se a versão do Streamlit não tiver, apenas não rola a tela
+    except Exception:          # recurso opcional
         return
     import logging
     logging.getLogger("streamlit").setLevel(logging.ERROR)
     components.html("""<script>
-      try { const d = window.parent.document;
-        for (const s of ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main']) {
-          const el = d.querySelector(s); if (el) el.scrollTo({top: 0}); }
-        window.parent.scrollTo({top: 0});
-      } catch (e) {}
-    </script>""", height=0)
+    /* pagina: %s, abertura %d */
+    try {
+      const w = window.parent, d = w.document, pag = "%s";
+      const topo = () => { for (const s of ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main']) {
+          const el = d.querySelector(s); if (el) el.scrollTo({top: 0}); } w.scrollTo({top: 0}); };
+      topo(); [80, 250, 600, 1200].forEach(t => setTimeout(topo, t));
+      if (!w.__vlHistorico) {
+        w.__vlHistorico = true;
+        w.addEventListener("popstate", () => {
+          if (!w.location.hash) { const b = d.querySelector(".st-key-nav_inicio button"); if (b) b.click(); }
+        });
+      }
+      const base = w.location.pathname + w.location.search, h = w.location.hash.slice(1);
+      if (pag === "inicio") { if (h) w.history.replaceState(null, "", base); }
+      else if (!h) { w.history.pushState({vl: pag}, "", base + "#" + pag); }
+      else if (h !== pag) { w.history.replaceState({vl: pag}, "", base + "#" + pag); }
+    } catch (e) {}
+    </script>""" % (p, ss["_nav_n"], p), height=0)
 
 
 def cabecalho(p: str):
     _, grupo, icone, titulo, descricao = PAG[p]
-    if ss.get("_pag_vista") != p:
-        ss["_pag_vista"] = p
-        rolar_para_topo()
-    c1, c2 = st.columns([1, 5])
-    if c1.button("← Voltar ao plano", key="voltar_" + p, width="stretch"):
-        ir("inicio")
-        st.rerun()
-    c2.caption(f"{grupo}  ›  {titulo}")
+    st.caption(f"{grupo}  ›  {titulo}")
     st.title(f"{icone} {titulo}")
     st.markdown(f"<div class='pn-card-info'>ℹ️ {descricao}</div>", unsafe_allow_html=True)
     if ss.alerta and ss.alerta[0] == p:

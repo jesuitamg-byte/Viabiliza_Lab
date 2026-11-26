@@ -7,6 +7,15 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.0.1 (25/11/2026): ajustes de navegação
+
+**Ajustes de navegação**
+- O botão de voltar ao painel do plano passa a ficar no **fim de cada página**, abaixo dos botões de ferramenta anterior e seguinte.
+- Ao abrir uma ferramenta pelo cartão, a página **começa no topo**. Antes, o comando de rolar a tela era ignorado quando se repetia, e a página podia abrir no fim.
+- O **botão Voltar do navegador** (e o gesto de voltar no celular) leva de volta ao painel do plano. Passar de uma ferramenta para a seguinte não acumula etapas no histórico: um único Voltar retorna ao painel.
+
+---
+
 ## v9.0 (25/11/2026): mapa de concorrentes, árvore de decisão e acessibilidade
 
 **Mapa de concorrentes, árvore de decisão e acessibilidade**

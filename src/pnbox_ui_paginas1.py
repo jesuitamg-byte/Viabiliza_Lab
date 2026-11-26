@@ -42,9 +42,6 @@ def salvo_txt():
 # PAINEL DO PLANO (tela inicial)
 # ==============================================================================
 def pg_inicio():
-    if ss.get("_pag_vista") != "inicio":
-        ss["_pag_vista"] = "inicio"
-        rolar_para_topo()
     if not ss.get("bemvindo_ok"):
         with st.container(border=True):
             st.markdown(f"""

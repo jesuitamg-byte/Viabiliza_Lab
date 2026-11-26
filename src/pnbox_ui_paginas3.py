@@ -573,6 +573,7 @@ ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade
          "impacto": pg_impacto, "editais": pg_editais, "novidades": pg_novidades}
 try:
     ROTAS.get(ss.pagina, pg_inicio)()
+    rodape_navegacao(ss.pagina if ss.pagina in ROTAS else "inicio")
     copia_automatica()
 finally:
     try:
