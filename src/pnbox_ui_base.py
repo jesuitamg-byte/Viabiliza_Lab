@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.0.1"
+VERSAO_PROGRAMA = "9.0.2"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -890,11 +890,12 @@ def rodape_navegacao(p: str):
       const topo = () => { for (const s of ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main']) {
           const el = d.querySelector(s); if (el) el.scrollTo({top: 0}); } w.scrollTo({top: 0}); };
       topo(); [80, 250, 600, 1200].forEach(t => setTimeout(topo, t));
-      if (!w.__vlHistorico) {
-        w.__vlHistorico = true;
-        w.addEventListener("popstate", () => {
-          if (!w.location.hash) { const b = d.querySelector(".st-key-nav_inicio button"); if (b) b.click(); }
-        });
+      /* o ouvinte é criado no contexto da página principal: este quadro é removido na próxima atualização
+         e uma função criada aqui deixaria de funcionar */
+      if (!w.__vlHistorico2) {
+        w.__vlHistorico2 = true;
+        new w.Function('window.addEventListener("popstate", function () {' +
+          ' if (!window.location.hash) { var b = document.querySelector(".st-key-nav_inicio button"); if (b) b.click(); } });')();
       }
       const base = w.location.pathname + w.location.search, h = w.location.hash.slice(1);
       if (pag === "inicio") { if (h) w.history.replaceState(null, "", base); }

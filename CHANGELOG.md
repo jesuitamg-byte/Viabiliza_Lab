@@ -7,6 +7,13 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.0.2 (26/11/2026): correção do botão Voltar do navegador
+
+**Correção: botão Voltar do navegador**
+- O botão Voltar do navegador não levava ao painel do plano. O comando que escutava o Voltar ficava preso a um quadro interno da página que o Streamlit remove a cada atualização, e parava de funcionar logo depois de criado. Agora ele é registrado na própria página e continua ativo durante todo o uso.
+
+---
+
 ## v9.0.1 (25/11/2026): ajustes de navegação
 
 **Ajustes de navegação**
