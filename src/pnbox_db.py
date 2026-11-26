@@ -86,6 +86,9 @@ SCHEMA = {
         ("val_multiplo_receita", "REAL"), ("rodada_investimento", "REAL"), ("rodada_pre_money", "REAL"),
         ("imp_problema", "TEXT"), ("imp_publico", "TEXT"), ("imp_atividades", "TEXT"), ("imp_produtos", "TEXT"),
         ("imp_resultados", "TEXT"), ("imp_impacto", "TEXT"), ("ods", "TEXT"), ("edital_trl", "REAL"),
+        # v8.1: mix de marketing integrado (Produto e Preço)
+        ("mix_nucleo", "TEXT"), ("mix_real", "TEXT"), ("mix_ampliado", "TEXT"), ("mix_ciclo", "TEXT"),
+        ("mix_estrategia_preco", "TEXT"), ("mix_posicao_preco", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -184,6 +187,9 @@ SCHEMA = {
     "edital_textos": [("secao", "TEXT"), ("texto", "TEXT"), ("limite", "REAL")],
     "edital_orcamento": [("rubrica", "TEXT"), ("item", "TEXT"), ("valor", "REAL")],
     "comentarios": [("pagina", "TEXT"), ("comentario", "TEXT"), ("autor", "TEXT"), ("data", "TEXT"), ("resolvido", "INTEGER")],
+    # --- v8.1: mix de marketing integrado ---
+    "precos_concorrentes": [("concorrente", "TEXT"), ("produto", "TEXT"), ("preco", "REAL"), ("fonte", "TEXT")],
+    "meios_pagamento": [("forma", "TEXT"), ("pct_vendas", "REAL"), ("taxa_pct", "REAL"), ("prazo_dias", "REAL")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 

@@ -1151,6 +1151,34 @@ def popular_v8(conn, qual: str) -> None:
     conn.execute("UPDATE emprestimos SET sistema='Price' WHERE sistema IS NULL OR sistema=''")
 
 
+_MIX = {
+    "fitbox": ("Comer bem sem ter de pensar no cardápio nem cozinhar", "Marmitas com cardápio de nutricionista, embalagem própria e tabela nutricional",
+               "Entrega agendada, troca de prato sem custo e plano mensal", "Crescimento", "Valor percebido", "Intermediário", (1.08, 0.92)),
+    "cafe": ("Um lugar agradável para uma pausa com café da região", "Cafés especiais de produtores locais, pães e salgados da casa",
+             "Wi-fi, cartão fidelidade e encomendas para festas", "Maturidade", "Referência na concorrência", "Intermediário", (1.05, 0.97)),
+    "assinatura": ("Saber o que acontece na cidade e ser encontrado pelo público", "Aplicativo de agenda local com planos para parceiros",
+                   "Suporte por WhatsApp e relatório mensal de visualizações", "Introdução", "Penetração", "Econômico", (1.30, 1.15)),
+    "servico": ("Computador funcionando de novo, rápido e sem dor de cabeça", "Manutenção e suporte de TI com técnico certificado",
+                "Garantia por escrito de 90 dias, coleta e entrega", "Maturidade", "Valor percebido", "Premium", (0.85, 0.90)),
+}
+
+
+def popular_mix(conn, qual: str) -> None:
+    """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
+    if qual not in _MIX:
+        return
+    nuc, real, amp, ciclo, est, pos, fatores = _MIX[qual]
+    conn.execute("UPDATE projeto SET mix_nucleo=?, mix_real=?, mix_ampliado=?, mix_ciclo=?, mix_estrategia_preco=?, "
+                 "mix_posicao_preco=? WHERE id=1", (nuc, real, amp, ciclo, est, pos))
+    prods = conn.execute("SELECT descricao, preco_venda FROM catalogo WHERE preco_venda > 0 "
+                         "ORDER BY preco_venda * qtd_mensal DESC LIMIT 2").fetchall()
+    concs = [r[0] for r in conn.execute("SELECT nome FROM concorrentes LIMIT 2").fetchall()]
+    for c, f in zip(concs, fatores):
+        for prod, preco in prods:
+            conn.execute("INSERT INTO precos_concorrentes (concorrente, produto, preco, fonte) VALUES (?,?,?,?)",
+                         (c, prod, round(preco * f, 2), "Exemplo didático"))
+
+
 def popular_validacao(conn, qual: str) -> None:
     v = _VALIDACAO[qual]
     vpc = v["vpc"]
@@ -1177,3 +1205,4 @@ def popular_validacao(conn, qual: str) -> None:
     conn.executemany("INSERT INTO formalizacao (item, status, observacao) VALUES (?,?,'')", list(v["formal"].items()))
     conn.executemany("INSERT INTO banca_respostas (pergunta, resposta) VALUES (?,?)", v["banca"])
     popular_v8(conn, qual)
+    popular_mix(conn, qual)

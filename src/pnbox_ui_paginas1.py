@@ -646,36 +646,6 @@ def pg_swot():
 # ==============================================================================
 # MARKETING E OPERAÇÃO
 # ==============================================================================
-def pg_marketing():
-    cabecalho("marketing")
-    v = {}
-    c1, c2 = st.columns(2)
-    v["mkt_produto"] = c1.text_area("📦 Produto: o que será vendido, linhas, diferenciais, embalagem, marca",
-                                    proj["mkt_produto"], height=150, key=wk("m1"))
-    v["mkt_preco"] = c2.text_area("🏷️ Preço: estratégia (popular, intermediário, premium), comparação com concorrentes, descontos",
-                                  proj["mkt_preco"], height=150, key=wk("m2"))
-    v["mkt_praca"] = c1.text_area("📍 Praça: onde e como o cliente compra (loja, delivery, site, apps, revendedores)",
-                                  proj["mkt_praca"], height=150, key=wk("m3"))
-    v["mkt_promocao"] = c2.text_area("📣 Promoção: como o cliente vai conhecer o negócio (redes, anúncios, parcerias, eventos)",
-                                     proj["mkt_promocao"], height=150, key=wk("m4"))
-    auto_unica("projeto", v)
-    salvo_txt()
-    try:
-        cat = R()["cat"]
-        if not cat.empty:
-            st.subheader("Apoio para a decisão de preço")
-            a, b, c = st.columns(3)
-            a.metric("Ticket médio (Mês 1)", brl(div(cat["receita_mensal"].sum(), cat["qtd_mensal"].sum())))
-            b.metric("Margem média sobre o preço", pct(div(cat["margem_unit"].mul(cat["qtd_mensal"]).sum(), cat["receita_mensal"].sum())))
-            c.metric("Itens no catálogo", num_br(len(cat), 0))
-            if st.button("🏷️ Ver formação de preço por produto"):
-                ir("preco")
-                st.rerun()
-    except Exception:
-        pass
-    proxima("marketing")
-
-
 def pg_canais():
     cabecalho("canais")
     t1, t2 = st.tabs(["🛒 Canais de aquisição", "🔻 Funil de vendas"])

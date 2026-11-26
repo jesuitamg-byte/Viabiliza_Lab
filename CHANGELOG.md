@@ -7,6 +7,19 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.1 (25/11/2026): mix de marketing integrado: Produto e Preço
+
+**Plano de marketing (4Ps): Produto e Preço**
+- A página do 4Ps passa a ser um painel com abas por P e um diagnóstico do mix. Os textos já escritos continuam como justificativa.
+- **Produto:** níveis de produto (benefício central, produto em si e produto ampliado), fase do ciclo de vida com a orientação de cada fase, concentração do portfólio (itens que fazem 80% da receita) e aviso quando o diferencial não aparece na proposta de valor nem no posicionamento.
+- **Preço:** estratégia de preço (penetração, desnatação, valor percebido, custo mais margem, referência na concorrência) e posição de preço (econômico, intermediário, premium).
+- **Preços dos concorrentes** por produto, com o índice de preço (seu preço ÷ média dos concorrentes).
+- **Margem de contribuição de cada item** e a conta de equilíbrio: quanto o volume precisa subir para compensar um desconto e quanto pode cair depois de um aumento.
+- **Condições de pagamento** (Pix, dinheiro, débito, crédito, parcelado) com taxa e prazo de cada forma. Um botão aplica a taxa média aos custos variáveis e os prazos ao capital de giro.
+- **Diagnóstico do mix:** alertas de margem negativa ou estreita, preço incoerente com a estratégia ou com a posição declarada, preço fora da faixa da pesquisa Van Westendorp e dependência de um único item.
+
+---
+
 ## v8.0 (25/11/2026): dados públicos, ABNT, financiamento e modo professor completo
 
 **Funções básicas**

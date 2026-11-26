@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.0 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,19 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.1 (25/11/2026): mix de marketing integrado: Produto e Preço
+
+**Plano de marketing (4Ps): Produto e Preço**
+- A página do 4Ps passa a ser um painel com abas por P e um diagnóstico do mix. Os textos já escritos continuam como justificativa.
+- **Produto:** níveis de produto (benefício central, produto em si e produto ampliado), fase do ciclo de vida com a orientação de cada fase, concentração do portfólio (itens que fazem 80% da receita) e aviso quando o diferencial não aparece na proposta de valor nem no posicionamento.
+- **Preço:** estratégia de preço (penetração, desnatação, valor percebido, custo mais margem, referência na concorrência) e posição de preço (econômico, intermediário, premium).
+- **Preços dos concorrentes** por produto, com o índice de preço (seu preço ÷ média dos concorrentes).
+- **Margem de contribuição de cada item** e a conta de equilíbrio: quanto o volume precisa subir para compensar um desconto e quanto pode cair depois de um aumento.
+- **Condições de pagamento** (Pix, dinheiro, débito, crédito, parcelado) com taxa e prazo de cada forma. Um botão aplica a taxa média aos custos variáveis e os prazos ao capital de giro.
+- **Diagnóstico do mix:** alertas de margem negativa ou estreita, preço incoerente com a estratégia ou com a posição declarada, preço fora da faixa da pesquisa Van Westendorp e dependência de um único item.
 
 ---
 
@@ -264,6 +277,9 @@ SCHEMA = {
         ("val_multiplo_receita", "REAL"), ("rodada_investimento", "REAL"), ("rodada_pre_money", "REAL"),
         ("imp_problema", "TEXT"), ("imp_publico", "TEXT"), ("imp_atividades", "TEXT"), ("imp_produtos", "TEXT"),
         ("imp_resultados", "TEXT"), ("imp_impacto", "TEXT"), ("ods", "TEXT"), ("edital_trl", "REAL"),
+        # v8.1: mix de marketing integrado (Produto e Preço)
+        ("mix_nucleo", "TEXT"), ("mix_real", "TEXT"), ("mix_ampliado", "TEXT"), ("mix_ciclo", "TEXT"),
+        ("mix_estrategia_preco", "TEXT"), ("mix_posicao_preco", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -362,6 +378,9 @@ SCHEMA = {
     "edital_textos": [("secao", "TEXT"), ("texto", "TEXT"), ("limite", "REAL")],
     "edital_orcamento": [("rubrica", "TEXT"), ("item", "TEXT"), ("valor", "REAL")],
     "comentarios": [("pagina", "TEXT"), ("comentario", "TEXT"), ("autor", "TEXT"), ("data", "TEXT"), ("resolvido", "INTEGER")],
+    # --- v8.1: mix de marketing integrado ---
+    "precos_concorrentes": [("concorrente", "TEXT"), ("produto", "TEXT"), ("preco", "REAL"), ("fonte", "TEXT")],
+    "meios_pagamento": [("forma", "TEXT"), ("pct_vendas", "REAL"), ("taxa_pct", "REAL"), ("prazo_dias", "REAL")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 
@@ -1763,6 +1782,34 @@ def popular_v8(conn, qual: str) -> None:
     conn.execute("UPDATE emprestimos SET sistema='Price' WHERE sistema IS NULL OR sistema=''")
 
 
+_MIX = {
+    "fitbox": ("Comer bem sem ter de pensar no cardápio nem cozinhar", "Marmitas com cardápio de nutricionista, embalagem própria e tabela nutricional",
+               "Entrega agendada, troca de prato sem custo e plano mensal", "Crescimento", "Valor percebido", "Intermediário", (1.08, 0.92)),
+    "cafe": ("Um lugar agradável para uma pausa com café da região", "Cafés especiais de produtores locais, pães e salgados da casa",
+             "Wi-fi, cartão fidelidade e encomendas para festas", "Maturidade", "Referência na concorrência", "Intermediário", (1.05, 0.97)),
+    "assinatura": ("Saber o que acontece na cidade e ser encontrado pelo público", "Aplicativo de agenda local com planos para parceiros",
+                   "Suporte por WhatsApp e relatório mensal de visualizações", "Introdução", "Penetração", "Econômico", (1.30, 1.15)),
+    "servico": ("Computador funcionando de novo, rápido e sem dor de cabeça", "Manutenção e suporte de TI com técnico certificado",
+                "Garantia por escrito de 90 dias, coleta e entrega", "Maturidade", "Valor percebido", "Premium", (0.85, 0.90)),
+}
+
+
+def popular_mix(conn, qual: str) -> None:
+    """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
+    if qual not in _MIX:
+        return
+    nuc, real, amp, ciclo, est, pos, fatores = _MIX[qual]
+    conn.execute("UPDATE projeto SET mix_nucleo=?, mix_real=?, mix_ampliado=?, mix_ciclo=?, mix_estrategia_preco=?, "
+                 "mix_posicao_preco=? WHERE id=1", (nuc, real, amp, ciclo, est, pos))
+    prods = conn.execute("SELECT descricao, preco_venda FROM catalogo WHERE preco_venda > 0 "
+                         "ORDER BY preco_venda * qtd_mensal DESC LIMIT 2").fetchall()
+    concs = [r[0] for r in conn.execute("SELECT nome FROM concorrentes LIMIT 2").fetchall()]
+    for c, f in zip(concs, fatores):
+        for prod, preco in prods:
+            conn.execute("INSERT INTO precos_concorrentes (concorrente, produto, preco, fonte) VALUES (?,?,?,?)",
+                         (c, prod, round(preco * f, 2), "Exemplo didático"))
+
+
 def popular_validacao(conn, qual: str) -> None:
     v = _VALIDACAO[qual]
     vpc = v["vpc"]
@@ -1789,6 +1836,7 @@ def popular_validacao(conn, qual: str) -> None:
     conn.executemany("INSERT INTO formalizacao (item, status, observacao) VALUES (?,?,'')", list(v["formal"].items()))
     conn.executemany("INSERT INTO banca_respostas (pergunta, resposta) VALUES (?,?)", v["banca"])
     popular_v8(conn, qual)
+    popular_mix(conn, qual)
 
 # ##############################################################################
 # PARTE: pnbox_motor.py
@@ -4540,6 +4588,237 @@ def regras_v8(proj: dict, d: dict) -> dict:
         "impacto": (all(imp) and n("impacto_indicadores") >= 1, any(imp)),
         "editais": (n("edital_textos") >= 1 and n("edital_orcamento") >= 1, n("edital_textos") >= 1),
     }
+
+# ##############################################################################
+# PARTE: pnbox_mix.py
+# ##############################################################################
+
+
+
+
+
+
+def _p(x: float, casas: int = 1) -> str:
+    """Percentual no formato brasileiro (0,257 -> 25,7%)."""
+    return f"{x * 100:.{casas}f}%".replace(".", ",")
+
+
+# ------------------------------------------------------------------------------
+# PRODUTO
+# ------------------------------------------------------------------------------
+CICLO_VIDA = {
+    "Introdução": "Vendas baixas e custo alto de conquistar cliente. Foco em fazer o produto ser conhecido e "
+                  "experimentado; o preço costuma ser de penetração ou de desnatação.",
+    "Crescimento": "As vendas sobem e surgem concorrentes. Foco em ampliar a distribuição e reforçar a marca.",
+    "Maturidade": "O mercado para de crescer e a disputa é por participação. Foco em diferenciar, "
+                  "fidelizar e controlar custos; guerra de preço corrói a margem.",
+    "Declínio": "As vendas caem. Foco em reduzir custos, enxugar a linha ou reposicionar o produto.",
+}
+
+
+def pareto_produtos(cat: pd.DataFrame) -> dict:
+    """Quantos itens respondem por 80% da receita (concentração do portfólio)."""
+    if cat is None or cat.empty or cat["receita_mensal"].sum() <= 0:
+        return {"n": 0, "total": 0, "itens": []}
+    c = cat.sort_values("receita_mensal", ascending=False)
+    acum = c["receita_mensal"].cumsum() / c["receita_mensal"].sum()
+    n = int((acum < 0.8).sum()) + 1
+    return {"n": min(n, len(c)), "total": len(c), "itens": c["descricao"].head(n).tolist(),
+            "share_top": float(c["receita_mensal"].iloc[0] / c["receita_mensal"].sum())}
+
+
+# ------------------------------------------------------------------------------
+# PREÇO
+# ------------------------------------------------------------------------------
+ESTRATEGIAS_PRECO = {
+    "Penetração": ("Preço abaixo do mercado para ganhar clientes depressa. Exige volume alto e custo baixo.", "abaixo"),
+    "Desnatação": ("Preço alto no lançamento, para quem valoriza a novidade; cai depois.", "acima"),
+    "Valor percebido": ("Preço definido pelo benefício que o cliente enxerga, medido em pesquisa.", None),
+    "Custo mais margem": ("Custo unitário mais uma margem (markup). Simples, mas ignora o cliente e a concorrência.", None),
+    "Referência na concorrência": ("Preço alinhado ao praticado pelos concorrentes diretos.", "igual"),
+}
+POSICOES_PRECO = {
+    "Econômico": (0.0, 0.95),
+    "Intermediário": (0.90, 1.10),
+    "Premium": (1.05, 99.0),
+}
+
+
+def mc_produtos(res: dict) -> pd.DataFrame:
+    """Margem de contribuição percentual de cada item: preço − custo direto − impostos − outros variáveis."""
+    cat = res.get("cat")
+    if cat is None or cat.empty:
+        return pd.DataFrame(columns=["Produto", "Preço", "Custo direto", "MC %", "Peso na receita"])
+    aliq, var = float(res.get("aliq") or 0), float(res.get("var_pct") or 0)
+    tot = float(cat["receita_mensal"].sum()) or 1.0
+    return pd.DataFrame({
+        "Produto": cat["descricao"], "Preço": cat["preco_venda"], "Custo direto": cat["custo_unit"],
+        "MC %": [div(p - c, p) - aliq - var if p > 0 else float("nan")
+                 for p, c in zip(cat["preco_venda"], cat["custo_unit"])],
+        "Peso na receita": cat["receita_mensal"] / tot,
+    })
+
+
+def mc_media(res: dict) -> float:
+    mc = mc_produtos(res)
+    if mc.empty:
+        return float("nan")
+    ok = mc.dropna(subset=["MC %"])
+    return float((ok["MC %"] * ok["Peso na receita"]).sum() / ok["Peso na receita"].sum()) if ok["Peso na receita"].sum() > 0 else float("nan")
+
+
+def volume_para_desconto(mc: float, desconto: float) -> float:
+    """Aumento de volume necessário para manter a margem total após um desconto (frações)."""
+    if mc != mc or mc <= 0 or desconto >= mc:
+        return float("inf")
+    return desconto / (mc - desconto)
+
+
+def queda_tolerada_aumento(mc: float, aumento: float) -> float:
+    """Quanto o volume pode cair, após um aumento de preço, sem reduzir a margem total (frações)."""
+    if mc != mc or mc + aumento <= 0:
+        return float("nan")
+    return aumento / (mc + aumento)
+
+
+def comparar_concorrentes(cat: pd.DataFrame, precos: pd.DataFrame) -> pd.DataFrame:
+    """Preço próprio x média dos concorrentes, produto a produto."""
+    if cat is None or cat.empty or precos is None or precos.empty:
+        return pd.DataFrame(columns=["Produto", "Seu preço", "Média dos concorrentes", "Menor", "Maior", "Índice"])
+    p = precos[(precos["preco"] > 0) & (precos["produto"].astype(str).str.strip() != "")]
+    linhas = []
+    for prod, g in p.groupby("produto"):
+        meu = cat.loc[cat["descricao"] == prod, "preco_venda"]
+        if meu.empty:
+            continue
+        m = float(meu.iloc[0])
+        media = float(g["preco"].mean())
+        linhas.append({"Produto": prod, "Seu preço": m, "Média dos concorrentes": media,
+                       "Menor": float(g["preco"].min()), "Maior": float(g["preco"].max()),
+                       "Índice": div(m, media)})
+    return pd.DataFrame(linhas)
+
+
+def indice_preco_medio(cat: pd.DataFrame, comp: pd.DataFrame) -> float:
+    """Índice de preço (seu preço ÷ média dos concorrentes), ponderado pela receita dos itens comparados."""
+    if comp.empty:
+        return float("nan")
+    pesos = [float(cat.loc[cat["descricao"] == p, "receita_mensal"].sum()) for p in comp["Produto"]]
+    if sum(pesos) <= 0:
+        return float(comp["Índice"].mean())
+    return float(sum(i * w for i, w in zip(comp["Índice"], pesos)) / sum(pesos))
+
+
+def checar_produto_preco(proj: dict, d: dict, res: dict, vw: dict | None = None) -> list[tuple[str, str]]:
+    """Alertas de Produto e Preço. Cada item é (nível, mensagem) com nível 'ok', 'atencao' ou 'critico'."""
+    out = []
+    cat = res.get("cat")
+    if cat is None or cat.empty:
+        return [("atencao", "Cadastre os produtos ou serviços para que o programa confira preço e margem.")]
+    # Margens
+    mc = mc_produtos(res)
+    neg = mc[mc["MC %"] <= 0]["Produto"].tolist()
+    if neg:
+        out.append(("critico", "Itens vendidos abaixo do custo variável: " + ", ".join(neg) +
+                    ". Cada venda deles aumenta o prejuízo."))
+    mm = mc_media(res)
+    if mm == mm:
+        nivel = "ok" if mm >= 0.30 else ("atencao" if mm >= 0.15 else "critico")
+        out.append((nivel, f"Margem de contribuição média de {_p(mm)}. "
+                    + ("Há folga para custos fixos e descontos." if nivel == "ok" else
+                       "Pouca folga: qualquer desconto ou aumento de custo pesa muito." if nivel == "atencao" else
+                       "Margem muito estreita: o negócio depende de volume muito alto para pagar os custos fixos.")))
+    # Concorrência e posição de preço
+    comp = comparar_concorrentes(cat, d.get("precos_concorrentes"))
+    idx = indice_preco_medio(cat, comp)
+    pos = proj.get("mix_posicao_preco") or ""
+    est = proj.get("mix_estrategia_preco") or ""
+    if idx == idx:
+        txt = f"Seus preços estão, em média, {_p(abs(idx - 1), 0)} {'acima' if idx >= 1 else 'abaixo'} dos concorrentes pesquisados."
+        if pos in POSICOES_PRECO:
+            lo, hi = POSICOES_PRECO[pos]
+            if not (lo <= idx <= hi):
+                out.append(("atencao", txt + f" Isso não combina com o posicionamento {pos.lower()} declarado."))
+            else:
+                out.append(("ok", txt + f" Coerente com o posicionamento {pos.lower()}."))
+        else:
+            out.append(("ok", txt))
+        esperado = ESTRATEGIAS_PRECO.get(est, ("", None))[1]
+        if esperado == "abaixo" and idx >= 1:
+            out.append(("atencao", "A estratégia é de penetração, mas os preços não estão abaixo da concorrência."))
+        if esperado == "acima" and idx <= 1:
+            out.append(("atencao", "A estratégia é de desnatação, mas os preços não estão acima da concorrência."))
+        if esperado == "igual" and not (0.9 <= idx <= 1.1):
+            out.append(("atencao", "A estratégia é seguir a concorrência, mas a diferença passa de 10%."))
+    else:
+        out.append(("atencao", "Sem preços de concorrentes cadastrados: a comparação de mercado não pôde ser feita."))
+    if est == "Penetração" and mm == mm and mm < 0.25:
+        out.append(("atencao", "Penetração com margem estreita é arriscada: confira se o volume previsto é realista."))
+    # Van Westendorp
+    if vw and vw.get("ok"):
+        alvo = proj.get("vw_produto") or ""
+        linha = cat[cat["descricao"] == alvo]
+        preco = float(linha["preco_venda"].iloc[0]) if not linha.empty else float("nan")
+        if preco == preco and vw["pmc"] == vw["pmc"] and vw["pme"] == vw["pme"]:
+            if preco < vw["pmc"]:
+                out.append(("atencao", f"O preço de {alvo} está abaixo da faixa aceitável da pesquisa: pode passar imagem de baixa qualidade."))
+            elif preco > vw["pme"]:
+                out.append(("critico", f"O preço de {alvo} está acima da faixa aceitável da pesquisa: muitos clientes o acham caro demais."))
+            else:
+                out.append(("ok", f"O preço de {alvo} está dentro da faixa aceitável da pesquisa de preço."))
+    elif est == "Valor percebido":
+        out.append(("atencao", "A estratégia é de valor percebido, mas não há pesquisa de preço (Van Westendorp) com respostas suficientes."))
+    # Ciclo de vida
+    ciclo = proj.get("mix_ciclo") or ""
+    if ciclo == "Maturidade" and est == "Desnatação":
+        out.append(("atencao", "Desnatação funciona no lançamento; num mercado maduro o cliente já conhece as alternativas."))
+    if ciclo == "Declínio" and est == "Penetração":
+        out.append(("atencao", "Penetração num mercado em declínio dificilmente compensa: o volume total está caindo."))
+    # Concentração
+    pt = pareto_produtos(cat)
+    if pt["total"] >= 3 and pt["n"] == 1:
+        out.append(("atencao", f"Um único item ({pt['itens'][0]}) responde por {_p(pt['share_top'], 0)} da receita: "
+                    "o plano fica muito dependente dele."))
+    return out
+
+
+# ------------------------------------------------------------------------------
+# PREÇO: CONDIÇÕES DE PAGAMENTO
+# ------------------------------------------------------------------------------
+PAGAMENTO_EXEMPLO = pd.DataFrame([
+    {"forma": "Pix", "pct_vendas": 35.0, "taxa_pct": 0.0, "prazo_dias": 0.0},
+    {"forma": "Dinheiro", "pct_vendas": 10.0, "taxa_pct": 0.0, "prazo_dias": 0.0},
+    {"forma": "Cartão de débito", "pct_vendas": 20.0, "taxa_pct": 1.5, "prazo_dias": 1.0},
+    {"forma": "Cartão de crédito à vista", "pct_vendas": 25.0, "taxa_pct": 3.5, "prazo_dias": 30.0},
+    {"forma": "Cartão de crédito parcelado", "pct_vendas": 10.0, "taxa_pct": 6.0, "prazo_dias": 60.0},
+])
+
+
+def resumo_pagamento(df: pd.DataFrame) -> dict:
+    if df is None or df.empty:
+        return {"soma": 0.0, "taxa": 0.0, "prazo": 0.0}
+    w = df["pct_vendas"].astype(float)
+    soma = float(w.sum())
+    taxa = float((w * df["taxa_pct"]).sum() / 100) if soma else 0.0          # % sobre a receita total
+    prazo = float((w * df["prazo_dias"]).sum() / soma) if soma else 0.0
+    return {"soma": soma, "taxa": taxa, "prazo": prazo}
+
+
+def aplicar_pagamento(df_pag: pd.DataFrame, cv: pd.DataFrame, prazos: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Atualiza 'Taxas de cartões' nos custos variáveis e substitui os prazos de recebimento."""
+    r = resumo_pagamento(df_pag)
+    cv = cv.copy()
+    mask = cv["descricao"].astype(str).str.lower().str.startswith("taxas de cart")
+    if mask.any():
+        cv.loc[mask, "percentual"] = 0.0
+        cv.loc[cv.index[mask][0], "percentual"] = round(r["taxa"], 4)
+    else:
+        cv = pd.concat([cv, pd.DataFrame([{"descricao": "Taxas de cartões", "percentual": round(r["taxa"], 4)}])],
+                       ignore_index=True)
+    g = df_pag[df_pag["pct_vendas"] > 0].groupby("prazo_dias", as_index=False)["pct_vendas"].sum()
+    novos = pd.DataFrame({"tipo": "Recebimento", "prazo_dias": g["prazo_dias"], "percentual": g["pct_vendas"]})
+    prazos = pd.concat([prazos[prazos["tipo"] != "Recebimento"], novos], ignore_index=True)
+    return cv, prazos
 
 # ##############################################################################
 # PARTE: pnbox_pdf.py
@@ -7420,7 +7699,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.0"
+VERSAO_PROGRAMA = "8.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -8895,36 +9174,6 @@ def pg_swot():
 # ==============================================================================
 # MARKETING E OPERAÇÃO
 # ==============================================================================
-def pg_marketing():
-    cabecalho("marketing")
-    v = {}
-    c1, c2 = st.columns(2)
-    v["mkt_produto"] = c1.text_area("📦 Produto: o que será vendido, linhas, diferenciais, embalagem, marca",
-                                    proj["mkt_produto"], height=150, key=wk("m1"))
-    v["mkt_preco"] = c2.text_area("🏷️ Preço: estratégia (popular, intermediário, premium), comparação com concorrentes, descontos",
-                                  proj["mkt_preco"], height=150, key=wk("m2"))
-    v["mkt_praca"] = c1.text_area("📍 Praça: onde e como o cliente compra (loja, delivery, site, apps, revendedores)",
-                                  proj["mkt_praca"], height=150, key=wk("m3"))
-    v["mkt_promocao"] = c2.text_area("📣 Promoção: como o cliente vai conhecer o negócio (redes, anúncios, parcerias, eventos)",
-                                     proj["mkt_promocao"], height=150, key=wk("m4"))
-    auto_unica("projeto", v)
-    salvo_txt()
-    try:
-        cat = R()["cat"]
-        if not cat.empty:
-            st.subheader("Apoio para a decisão de preço")
-            a, b, c = st.columns(3)
-            a.metric("Ticket médio (Mês 1)", brl(div(cat["receita_mensal"].sum(), cat["qtd_mensal"].sum())))
-            b.metric("Margem média sobre o preço", pct(div(cat["margem_unit"].mul(cat["qtd_mensal"]).sum(), cat["receita_mensal"].sum())))
-            c.metric("Itens no catálogo", num_br(len(cat), 0))
-            if st.button("🏷️ Ver formação de preço por produto"):
-                ir("preco")
-                st.rerun()
-    except Exception:
-        pass
-    proxima("marketing")
-
-
 def pg_canais():
     cabecalho("canais")
     t1, t2 = st.tabs(["🛒 Canais de aquisição", "🔻 Funil de vendas"])
@@ -11874,6 +12123,177 @@ def professor_extras(projetos: list):
         if excedeu:
             st.error("Passaram do capital disponível: " + ", ".join(excedeu))
         st.dataframe(resultado_rodada(ed), hide_index=True, width="stretch", column_config={"Capital recebido": N(format="R$ %.0f")})
+
+# ##############################################################################
+# PARTE: pnbox_ui_paginas8.py
+# ##############################################################################
+
+
+
+ICONE_NIVEL = {"ok": "✅", "atencao": "⚠️", "critico": "⛔"}
+
+
+def mostrar_alertas(alertas):
+    for nivel, msg in alertas:
+        {"ok": st.success, "atencao": st.warning, "critico": st.error}[nivel](msg, icon=ICONE_NIVEL[nivel])
+
+
+def _select(rotulo, campo, opcoes_, ajuda=None):
+    atual = proj.get(campo) or ""
+    lista = [""] + list(opcoes_)
+    return st.selectbox(rotulo, lista, index=lista.index(atual) if atual in lista else 0,
+                        format_func=lambda x: x or "(escolha)", key=wk(campo), help=ajuda)
+
+
+def _aba_produto():
+    st.caption("Kotler e Keller (2012) descrevem o produto em níveis: o benefício que o cliente compra, "
+               "o produto em si e o que vem junto com ele.")
+    v = {}
+    c1, c2, c3 = st.columns(3)
+    v["mix_nucleo"] = c1.text_area("🎯 Benefício central: o que o cliente realmente compra",
+                                   proj.get("mix_nucleo") or "", height=120, key=wk("mx_n"),
+                                   placeholder="Ex.: não é um bolo, é a comemoração resolvida sem trabalho.")
+    v["mix_real"] = c2.text_area("📦 Produto em si: marca, qualidade, embalagem, linhas",
+                                 proj.get("mix_real") or "", height=120, key=wk("mx_r"))
+    v["mix_ampliado"] = c3.text_area("🎁 Produto ampliado: garantia, entrega, suporte, pós-venda",
+                                     proj.get("mix_ampliado") or "", height=120, key=wk("mx_a"))
+    v["mix_ciclo"] = _select("Fase do ciclo de vida do produto no mercado", "mix_ciclo", CICLO_VIDA)
+    if v["mix_ciclo"]:
+        st.info(CICLO_VIDA[v["mix_ciclo"]], icon="📈")
+    v["mkt_produto"] = st.text_area("📝 Justificativa e detalhes do produto", proj["mkt_produto"], height=110,
+                                    key=wk("m1"))
+    auto_unica("projeto", v)
+    cat = R()["cat"]
+    if not cat.empty:
+        st.markdown("**Portfólio (do catálogo de produtos)**")
+        pt = pareto_produtos(cat)
+        a, b, c = st.columns(3)
+        a.metric("Itens no catálogo", num_br(pt["total"], 0))
+        b.metric("Itens que fazem 80% da receita", num_br(pt["n"], 0))
+        c.metric("Peso do item principal", pct(pt.get("share_top", float("nan"))))
+        if pt["n"]:
+            st.caption("Itens que sustentam a receita: " + ", ".join(pt["itens"]))
+    dif = [proj.get("vpc_criadores"), proj.get("posic_diferencial")]
+    if not any(str(x or "").strip() for x in dif):
+        st.warning("Os diferenciais do produto ainda não aparecem no canvas da proposta de valor nem no "
+                   "posicionamento. Um diferencial que só está no texto do 4Ps é difícil de defender na banca.",
+                   icon="⚠️")
+
+
+def _aba_preco():
+    res = R()
+    cat = res["cat"]
+    c1, c2 = st.columns(2)
+    with c1:
+        est = _select("Estratégia de preço", "mix_estrategia_preco", ESTRATEGIAS_PRECO)
+        if est:
+            st.caption(ESTRATEGIAS_PRECO[est][0])
+    with c2:
+        pos = _select("Posição de preço em relação ao mercado", "mix_posicao_preco", POSICOES_PRECO)
+    auto_unica("projeto", {"mix_estrategia_preco": est, "mix_posicao_preco": pos})
+
+    st.markdown("#### Preços dos concorrentes")
+    st.caption("Anote o preço que cada concorrente cobra pelo produto equivalente ao seu. "
+               "Vale preço de vitrine, cardápio, site ou orçamento pedido.")
+    prods = [x for x in cat["descricao"].astype(str) if x.strip()] if not cat.empty else []
+    concs = [n for n in d["concorrentes"]["nome"].astype(str) if n.strip()]
+    editor("precos_concorrentes", {
+        "concorrente": S("Concorrente", options=concs, required=True) if concs else T("Concorrente", required=True),
+        "produto": S("Produto equivalente ao seu", options=prods) if prods else T("Produto equivalente ao seu"),
+        "preco": moeda("Preço cobrado"), "fonte": T("Onde viu o preço", width="medium")}, "concorrente")
+    comp = comparar_concorrentes(cat, d["precos_concorrentes"])
+    if not comp.empty:
+        mostra = comp.copy()
+        for col in ["Seu preço", "Média dos concorrentes", "Menor", "Maior"]:
+            mostra[col] = mostra[col].map(brl)
+        mostra["Índice"] = mostra["Índice"].map(lambda x: f"{x:.2f}".replace(".", ","))
+        st.dataframe(mostra, hide_index=True, width="stretch")
+        st.caption("Índice = seu preço ÷ média dos concorrentes. Acima de 1, você é mais caro.")
+
+    st.markdown("#### Margem de cada item")
+    mc = mc_produtos(res)
+    if not mc.empty:
+        t = mc.copy()
+        t["Preço"], t["Custo direto"] = t["Preço"].map(brl), t["Custo direto"].map(brl)
+        t["MC %"], t["Peso na receita"] = t["MC %"].map(pct), t["Peso na receita"].map(pct)
+        st.dataframe(t, hide_index=True, width="stretch")
+        st.caption("MC % = preço menos custo direto, impostos sobre a venda e outros custos variáveis, sobre o preço.")
+
+    st.markdown("#### Desconto ou aumento: quanto o volume precisa mudar")
+    mm = mc_media(res)
+    if mm == mm and mm > 0:
+        a, b = st.columns(2)
+        dsc = a.slider("Desconto em estudo (%)", 0, 50, 10, key=wk("mx_desc")) / 100
+        aum = b.slider("Aumento em estudo (%)", 0, 50, 10, key=wk("mx_aum")) / 100
+        vol = volume_para_desconto(mm, dsc)
+        queda = queda_tolerada_aumento(mm, aum)
+        a.metric("Volume a mais para empatar", "impossível" if math.isinf(vol) else pct(vol))
+        b.metric("Queda de volume tolerada", pct(queda))
+        st.caption(f"Com margem de contribuição média de {pct(mm)}, um desconto de {dsc * 100:.0f}% só mantém "
+                   f"o lucro se as vendas subirem {'mais do que é possível' if math.isinf(vol) else pct(vol)}. "
+                   f"Um aumento de {aum * 100:.0f}% mantém o lucro mesmo que as vendas caiam até {pct(queda)}. "
+                   "É uma conta de equilíbrio, não uma previsão de como os clientes vão reagir.")
+    else:
+        st.caption("Cadastre produtos com preço e custo para ver esta conta.")
+
+    st.markdown("#### Condições de pagamento")
+    st.caption("Como os clientes vão pagar. As taxas e prazos de exemplo são apenas referência: "
+               "confira os da sua maquininha ou banco.")
+    if d["meios_pagamento"].empty and st.button("Preencher com um exemplo", key=wk("mx_pag_ex")):
+        recarregar_tabela("meios_pagamento", PAGAMENTO_EXEMPLO.copy(), "forma")
+        st.rerun()
+    editor("meios_pagamento", {"forma": T("Forma de pagamento", required=True),
+                               "pct_vendas": N("% das vendas", min_value=0.0, max_value=100.0, format="%.1f"),
+                               "taxa_pct": N("Taxa cobrada (%)", min_value=0.0, max_value=30.0, format="%.2f"),
+                               "prazo_dias": N("Dias até o dinheiro entrar", min_value=0.0, format="%.0f")}, "forma")
+    pg = d["meios_pagamento"]
+    if not pg.empty:
+        r = resumo_pagamento(pg)
+        a, b, c = st.columns(3)
+        a.metric("Soma das formas", f"{r['soma']:.0f}%".replace(".", ","))
+        b.metric("Taxa média sobre a receita", f"{r['taxa']:.2f}%".replace(".", ","))
+        c.metric("Prazo médio de recebimento", f"{r['prazo']:.0f} dias")
+        if abs(r["soma"] - 100) > 0.5:
+            st.warning("As formas de pagamento precisam somar 100% das vendas.", icon="⚠️")
+        else:
+            st.caption("Ao aplicar, a taxa média substitui a linha \"Taxas de cartões\" nos custos variáveis "
+                       "e os prazos substituem os prazos de recebimento do capital de giro.")
+            if st.button("✅ Aplicar ao plano financeiro", key=wk("mx_pag_ap")):
+                cv, pz = aplicar_pagamento(pg, d["custos_variaveis"], d["capital_giro_prazos"])
+                recarregar_tabela("custos_variaveis", cv, "descricao")
+                recarregar_tabela("capital_giro_prazos", pz, "tipo")
+                st.toast("Taxas e prazos aplicados ao plano.", icon="✅")
+                st.rerun()
+
+    v = {"mkt_preco": st.text_area("📝 Justificativa e detalhes do preço", proj["mkt_preco"], height=110, key=wk("m2"))}
+    auto_unica("projeto", v)
+
+
+def pg_marketing():
+    cabecalho("marketing")
+    st.caption("Cada P tem escolhas que alimentam o restante do plano. Os campos de texto continuam "
+               "valendo como justificativa.")
+    abas = st.tabs(["📦 Produto", "🏷️ Preço", "📍 Praça", "📣 Promoção", "🔎 Diagnóstico do mix"])
+    with abas[0]:
+        _aba_produto()
+    with abas[1]:
+        _aba_preco()
+    with abas[2]:
+        auto_unica("projeto", {"mkt_praca": st.text_area(
+            "📍 Praça: onde e como o cliente compra (loja, delivery, site, apps, revendedores)",
+            proj["mkt_praca"], height=150, key=wk("m3"))})
+    with abas[3]:
+        auto_unica("projeto", {"mkt_promocao": st.text_area(
+            "📣 Promoção: como o cliente vai conhecer o negócio (redes, anúncios, parcerias, eventos)",
+            proj["mkt_promocao"], height=150, key=wk("m4"))})
+    with abas[4]:
+        vw = None
+        try:
+            vw = van_westendorp(d["precos_vw"])
+        except Exception:
+            pass
+        mostrar_alertas(checar_produto_preco(proj, d, R(), vw))
+    proxima("marketing")
 
 # ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
