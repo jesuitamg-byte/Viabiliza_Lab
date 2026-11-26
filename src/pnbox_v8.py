@@ -609,6 +609,9 @@ def referencias_abnt_dados(proj: dict, d: dict, acesso: str | None = None) -> li
     if any(str(c).startswith("pof") for c in chaves):
         refs.append(f"{ibge} **Pesquisa de orçamentos familiares 2017-2018**: tabela 6715. Rio de Janeiro: IBGE, 2019. "
                     f"Disponível em: https://sidra.ibge.gov.br/tabela/6715. Acesso em: {hoje}.")
+    if "bcb_selic" in chaves or "bcb_ipca12" in chaves:
+        refs.append("BANCO CENTRAL DO BRASIL. **Sistema gerenciador de séries temporais**: séries 432 e 13522. Brasília: BCB, 2026. "
+                    f"Disponível em: https://www3.bcb.gov.br/sgspub. Acesso em: {hoje}.")
     setor = str(proj.get("setor_referencia") or "")
     if setor.startswith("Comércio"):
         refs.append(f"{ibge} **Pesquisa anual de comércio 2024**: tabela 10645. Rio de Janeiro: IBGE, [2026]. "

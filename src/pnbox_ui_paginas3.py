@@ -535,7 +535,7 @@ Você está usando a **versão on-line**. Os projetos ficam guardados **no armaz
 ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade, "canvas": pg_canvas, "porter": pg_porter,
          "ge": pg_ge, "bcg": pg_bcg, "bsc": pg_bsc, "reforma": pg_reforma, "segmentos": pg_segmentos, "personas": pg_personas,
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
-         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade, "tornado": pg_tornado,
+         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade, "tornado": pg_tornado, "taxas": pg_taxas,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
          "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,

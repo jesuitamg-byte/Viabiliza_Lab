@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.7 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.8 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,16 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.8 (25/11/2026): Selic, inflação e TMA em degraus
+
+**Selic, inflação e TMA**
+- Nova ferramenta **Selic, inflação e TMA**: busca a meta da taxa Selic (série 432) e o IPCA acumulado em 12 meses (série 13522) no Sistema Gerenciador de Séries Temporais do Banco Central, com o juro real calculado pela equação de Fisher. Sem internet, usa os últimos valores guardados no programa (Selic de 13,75% em 04/11/2026; IPCA de 4,63% até outubro de 2026).
+- **TMA em degraus:** taxa livre de risco (Selic), prêmio pelo risco do negócio (com quatro níveis de referência) e prêmio por ser pequeno negócio e de difícil revenda, com gráfico e botões para usar a TMA sugerida e o IPCA como inflação de custos no plano.
+- Leitura dos resultados: TMA abaixo da Selic, risco possivelmente subestimado, inflação de custos distante do IPCA e empréstimos com taxa abaixo da Selic (só realistas em linhas subsidiadas).
+- Os valores consultados ficam salvos no projeto e entram nas referências do relatório ABNT.
 
 ---
 
@@ -4742,6 +4752,9 @@ def referencias_abnt_dados(proj: dict, d: dict, acesso: str | None = None) -> li
     if any(str(c).startswith("pof") for c in chaves):
         refs.append(f"{ibge} **Pesquisa de orçamentos familiares 2017-2018**: tabela 6715. Rio de Janeiro: IBGE, 2019. "
                     f"Disponível em: https://sidra.ibge.gov.br/tabela/6715. Acesso em: {hoje}.")
+    if "bcb_selic" in chaves or "bcb_ipca12" in chaves:
+        refs.append("BANCO CENTRAL DO BRASIL. **Sistema gerenciador de séries temporais**: séries 432 e 13522. Brasília: BCB, 2026. "
+                    f"Disponível em: https://www3.bcb.gov.br/sgspub. Acesso em: {hoje}.")
     setor = str(proj.get("setor_referencia") or "")
     if setor.startswith("Comércio"):
         refs.append(f"{ibge} **Pesquisa anual de comércio 2024**: tabela 10645. Rio de Janeiro: IBGE, [2026]. "
@@ -5330,7 +5343,8 @@ def regras_mix(proj: dict, d: dict) -> dict:
     return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et)),
             "sazonalidade": (tem_saz, saz is not None and len(saz) > 0),
             "tornado": (len(d.get("mc_faixas", [])) > 0 and (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
-                        len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0)}
+                        len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
+            "taxas": ("bcb_selic" in set(d["dados_publicos"]["chave"]), "bcb_selic" in set(d["dados_publicos"]["chave"]))}
 
 
 def frase_posicionamento(proj: dict) -> str:
@@ -6130,6 +6144,74 @@ def leitura_tornado(tor: pd.DataFrame, rup: pd.DataFrame) -> list[str]:
         r = ok.iloc[ok["Variação que zera o VPL"].abs().argmin()]
         out.append(f"A margem de segurança mais estreita está em {r['Variável'].lower()}: uma variação de "
                    f"{_p(r['Variação que zera o VPL'], 0)} já zera o VPL.")
+    return out
+
+
+# ------------------------------------------------------------------------------
+# TAXAS DO BANCO CENTRAL E TMA EM DEGRAUS (v8.8)
+# ------------------------------------------------------------------------------
+API_BCB = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados/ultimos/1?formato=json"
+SERIES_BCB = {
+    "bcb_selic": (432, "Meta da taxa Selic (% ao ano)"),
+    "bcb_ipca12": (13522, "IPCA acumulado em 12 meses (%)"),
+}
+# Últimos valores conhecidos, usados quando não há internet (conferidos em nov. 2026)
+BCB_RESERVA = {
+    "bcb_selic": (13.75, "04/11/2026", "Copom, 282ª reunião"),
+    "bcb_ipca12": (4.63, "10/2026", "IBGE, divulgado em 12/11/2026"),
+}
+PREMIOS_RISCO = {
+    "Baixo (negócio conhecido, demanda estável, pouco investimento)": 4.0,
+    "Médio (negócio comum, alguma concorrência)": 6.0,
+    "Alto (produto novo, mercado não testado, muita concorrência)": 9.0,
+    "Muito alto (inovação, tecnologia, dependência de um cliente)": 12.0,
+}
+
+
+def buscar_bcb(chave: str) -> tuple:
+    """(valor, data, fonte) da série do SGS; se a consulta falhar, devolve o último valor conhecido."""
+
+    codigo, _ = SERIES_BCB[chave]
+    try:
+        js = baixar_json(API_BCB.format(codigo=codigo))
+        return float(str(js[-1]["valor"]).replace(",", ".")), js[-1]["data"], f"Banco Central do Brasil, SGS série {codigo}"
+    except Exception:
+        v, dt, fonte = BCB_RESERVA[chave]
+        return v, dt, f"{fonte} (valor guardado no programa)"
+
+
+def tma_degraus(selic: float, premio_risco: float, premio_pequeno: float) -> dict:
+    """TMA pelo método de acumulação (build-up): taxa livre de risco + prêmios, em pontos percentuais ao ano."""
+    total = selic + premio_risco + premio_pequeno
+    return {"livre": selic, "risco": premio_risco, "pequeno": premio_pequeno, "tma": total}
+
+
+def taxa_real(nominal_pct: float, inflacao_pct: float) -> float:
+    """Taxa real pela equação de Fisher, em %."""
+    return ((1 + nominal_pct / 100) / (1 + inflacao_pct / 100) - 1) * 100
+
+
+def leitura_taxas(proj: dict, d: dict, res: dict, selic: float, ipca: float, tma_sug: float) -> list[str]:
+    tma = float(proj.get("tma_anual_pct") or 0)
+    out = [f"Com Selic de {_n(selic, 2)}% e inflação de {_n(ipca, 2)}% em 12 meses, o juro real da renda fixa está em torno de "
+           f"{_n(taxa_real(selic, ipca), 1)}% ao ano: é o mínimo que o dinheiro dos sócios renderia sem risco."]
+    if tma < selic:
+        out.append(f"A TMA do plano ({_n(tma, 1)}%) está abaixo da Selic: o projeto está sendo comparado com uma alternativa pior "
+                   "do que deixar o dinheiro aplicado. O VPL fica otimista.")
+    elif tma < tma_sug - 0.5:
+        out.append(f"A TMA do plano ({_n(tma, 1)}%) está abaixo da sugerida pelos degraus ({_n(tma_sug, 1)}%): o risco do negócio "
+                   "pode estar subestimado.")
+    else:
+        out.append(f"A TMA do plano ({_n(tma, 1)}%) cobre a Selic e os prêmios de risco escolhidos.")
+    inf = float(proj.get("inflacao_custos_anual_pct") or 0)
+    if abs(inf - ipca) > 1.5:
+        out.append(f"A inflação de custos do plano ({_n(inf, 1)}%) está longe do IPCA atual ({_n(ipca, 2)}%); vale justificar a escolha.")
+    emp = d.get("emprestimos")
+    if emp is not None and not emp.empty and float(emp["valor"].sum()) > 0:
+        tx = float((emp["valor"] * emp["taxa_anual_pct"]).sum() / emp["valor"].sum())
+        if tx < selic:
+            out.append(f"Os empréstimos estão com taxa média de {_n(tx, 1)}% ao ano, abaixo da Selic: só é realista em linhas "
+                       "subsidiadas (como Pronampe ou fundos públicos). Confira a condição real.")
     return out
 
 # ##############################################################################
@@ -7654,7 +7736,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade", "tornado"} | OPCIONAIS_V8
+    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade", "tornado", "taxas"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -9068,7 +9150,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.7"
+VERSAO_PROGRAMA = "8.8"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -9271,6 +9353,8 @@ PAGINAS = [
      "Investimentos fixos, pré-operacionais, capital de giro e de onde vem o dinheiro."),
     ("financiamento", "Finanças", "🏦", "Financiamento (SAC, Price e carência)",
      "Parcelas, juros e custo efetivo de cada empréstimo, e comparação entre propostas de crédito."),
+    ("taxas", "Finanças", "🏛️", "Selic, inflação e TMA",
+     "Taxas atuais do Banco Central e a TMA montada em degraus: livre de risco, risco do negócio e pequeno porte."),
     ("produtos", "Finanças", "📦", "Produtos e materiais",
      "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
     ("sazonalidade", "Finanças", "📅", "Sazonalidade das vendas",
@@ -9762,7 +9846,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado", "taxas")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -14043,6 +14127,68 @@ def pg_tornado():
         width="stretch")
     proxima("tornado")
 
+
+# ------------------------------------------------------------------------------
+# TAXAS DO BANCO CENTRAL (v8.8)
+# ------------------------------------------------------------------------------
+def _valor_bcb(chave_):
+    dp = d["dados_publicos"]
+    linha = dp[dp["chave"] == chave_]
+    if not linha.empty:
+        return float(linha["valor"].iloc[0]), str(linha["periodo"].iloc[0]), str(linha["fonte"].iloc[0])
+    v, dt, fonte = BCB_RESERVA[chave_]
+    return v, dt, f"{fonte} (valor guardado no programa)"
+
+
+def pg_taxas():
+    cabecalho("taxas")
+    res = R()
+    st.caption("A TMA (taxa mínima de atratividade) é o retorno que o projeto precisa superar para valer a pena. Um jeito usual "
+               "de montá-la é somar à taxa livre de risco um prêmio pelo risco do negócio e outro por ser pequeno e pouco líquido.")
+    if st.button("🔄 Buscar as taxas atuais no Banco Central", key=wk("bcb_busca")):
+        novos = []
+        for ch in SERIES_BCB:
+            v, dt, fonte = buscar_bcb(ch)
+            novos.append({"chave": ch, "rotulo": SERIES_BCB[ch][1], "valor": v, "periodo": dt, "fonte": fonte})
+        dp = d["dados_publicos"]
+        novo = pd.concat([dp[~dp["chave"].isin(list(SERIES_BCB))], pd.DataFrame(novos)], ignore_index=True)
+        recarregar_tabela("dados_publicos", novo, "chave")
+        st.rerun()
+    selic, dt_s, f_s = _valor_bcb("bcb_selic")
+    ipca, dt_i, f_i = _valor_bcb("bcb_ipca12")
+    a, b, c = st.columns(3)
+    a.metric("Meta Selic", f"{num_br(selic, 2)}% a.a.", dt_s, delta_color="off")
+    b.metric("IPCA em 12 meses", f"{num_br(ipca, 2)}%", dt_i, delta_color="off")
+    c.metric("Juro real (Selic descontada a inflação)", f"{num_br(taxa_real(selic, ipca), 2)}% a.a.")
+    st.caption(f"Fontes: {f_s}; {f_i}.")
+    st.markdown("#### TMA em degraus")
+    x, y = st.columns(2)
+    risco_txt = x.selectbox("Risco do negócio", list(PREMIOS_RISCO), index=1, key=wk("tma_risco"))
+    pr_risco = x.number_input("Prêmio pelo risco do negócio (pontos percentuais)", 0.0, 30.0, PREMIOS_RISCO[risco_txt], 0.5,
+                              key=wk("tma_pr_" + risco_txt[:5]))
+    pr_peq = y.number_input("Prêmio por ser pequeno negócio e de difícil revenda (pontos percentuais)", 0.0, 15.0, 3.0, 0.5,
+                            key=wk("tma_peq"))
+    dg = tma_degraus(selic, pr_risco, pr_peq)
+    graf = pd.DataFrame({"Degrau": ["1. Livre de risco (Selic)", "2. Risco do negócio", "3. Pequeno e pouco líquido"],
+                         "Pontos percentuais": [dg["livre"], dg["risco"], dg["pequeno"]]})
+    st.altair_chart(alt.Chart(graf).mark_bar().encode(x=alt.X("sum(Pontos percentuais):Q", title="TMA (% ao ano)"),
+                                                      color=alt.Color("Degrau:N", legend=alt.Legend(orient="bottom"))), width="stretch")
+    k1, k2 = st.columns(2)
+    k1.metric("TMA sugerida", f"{num_br(dg['tma'], 2)}% a.a.")
+    k2.metric("TMA usada no plano", f"{num_br(proj['tma_anual_pct'], 2)}% a.a.")
+    b1, b2 = st.columns(2)
+    if b1.button("✅ Usar a TMA sugerida no plano", key=wk("tma_usar")):
+        auto_unica("projeto", {"tma_anual_pct": round(dg["tma"], 2)})
+        st.toast("TMA atualizada.", icon="✅")
+        st.rerun()
+    if b2.button("✅ Usar o IPCA como inflação de custos", key=wk("ipca_usar")):
+        auto_unica("projeto", {"inflacao_custos_anual_pct": round(ipca, 2)})
+        st.toast("Inflação de custos atualizada.", icon="✅")
+        st.rerun()
+    mostrar_leitura("taxas", leitura_taxas(proj, d, res, selic, ipca, dg["tma"]))
+    st.caption("Os prêmios são escolhas do grupo e precisam ser justificados no plano; não existe um valor oficial para eles.")
+    proxima("taxas")
+
 # ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
 # ##############################################################################
@@ -14581,7 +14727,7 @@ Você está usando a **versão on-line**. Os projetos ficam guardados **no armaz
 ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade, "canvas": pg_canvas, "porter": pg_porter,
          "ge": pg_ge, "bcg": pg_bcg, "bsc": pg_bsc, "reforma": pg_reforma, "segmentos": pg_segmentos, "personas": pg_personas,
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
-         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade, "tornado": pg_tornado,
+         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade, "tornado": pg_tornado, "taxas": pg_taxas,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
          "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,

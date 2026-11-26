@@ -7,6 +7,16 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.8 (25/11/2026): Selic, inflação e TMA em degraus
+
+**Selic, inflação e TMA**
+- Nova ferramenta **Selic, inflação e TMA**: busca a meta da taxa Selic (série 432) e o IPCA acumulado em 12 meses (série 13522) no Sistema Gerenciador de Séries Temporais do Banco Central, com o juro real calculado pela equação de Fisher. Sem internet, usa os últimos valores guardados no programa (Selic de 13,75% em 04/11/2026; IPCA de 4,63% até outubro de 2026).
+- **TMA em degraus:** taxa livre de risco (Selic), prêmio pelo risco do negócio (com quatro níveis de referência) e prêmio por ser pequeno negócio e de difícil revenda, com gráfico e botões para usar a TMA sugerida e o IPCA como inflação de custos no plano.
+- Leitura dos resultados: TMA abaixo da Selic, risco possivelmente subestimado, inflação de custos distante do IPCA e empréstimos com taxa abaixo da Selic (só realistas em linhas subsidiadas).
+- Os valores consultados ficam salvos no projeto e entram nas referências do relatório ABNT.
+
+---
+
 ## v8.7 (25/11/2026): sensibilidade do VPL (tornado e ponto de ruptura)
 
 **Sensibilidade do VPL (tornado)**

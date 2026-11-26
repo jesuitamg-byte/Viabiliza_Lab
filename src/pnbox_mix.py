@@ -562,7 +562,8 @@ def regras_mix(proj: dict, d: dict) -> dict:
     return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et)),
             "sazonalidade": (tem_saz, saz is not None and len(saz) > 0),
             "tornado": (len(d.get("mc_faixas", [])) > 0 and (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
-                        len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0)}
+                        len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
+            "taxas": ("bcb_selic" in set(d["dados_publicos"]["chave"]), "bcb_selic" in set(d["dados_publicos"]["chave"]))}
 
 
 def frase_posicionamento(proj: dict) -> str:

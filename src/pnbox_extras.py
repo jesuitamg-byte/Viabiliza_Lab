@@ -89,7 +89,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade", "tornado"} | OPCIONAIS_V8
+    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade", "tornado", "taxas"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):

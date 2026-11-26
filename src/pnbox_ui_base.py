@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.7"
+VERSAO_PROGRAMA = "8.8"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -231,6 +231,8 @@ PAGINAS = [
      "Investimentos fixos, pré-operacionais, capital de giro e de onde vem o dinheiro."),
     ("financiamento", "Finanças", "🏦", "Financiamento (SAC, Price e carência)",
      "Parcelas, juros e custo efetivo de cada empréstimo, e comparação entre propostas de crédito."),
+    ("taxas", "Finanças", "🏛️", "Selic, inflação e TMA",
+     "Taxas atuais do Banco Central e a TMA montada em degraus: livre de risco, risco do negócio e pequeno porte."),
     ("produtos", "Finanças", "📦", "Produtos e materiais",
      "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
     ("sazonalidade", "Finanças", "📅", "Sazonalidade das vendas",
@@ -722,7 +724,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado", "taxas")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")

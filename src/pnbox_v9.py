@@ -174,3 +174,71 @@ def leitura_tornado(tor: pd.DataFrame, rup: pd.DataFrame) -> list[str]:
         out.append(f"A margem de segurança mais estreita está em {r['Variável'].lower()}: uma variação de "
                    f"{_p(r['Variação que zera o VPL'], 0)} já zera o VPL.")
     return out
+
+
+# ------------------------------------------------------------------------------
+# TAXAS DO BANCO CENTRAL E TMA EM DEGRAUS (v8.8)
+# ------------------------------------------------------------------------------
+API_BCB = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados/ultimos/1?formato=json"
+SERIES_BCB = {
+    "bcb_selic": (432, "Meta da taxa Selic (% ao ano)"),
+    "bcb_ipca12": (13522, "IPCA acumulado em 12 meses (%)"),
+}
+# Últimos valores conhecidos, usados quando não há internet (conferidos em nov. 2026)
+BCB_RESERVA = {
+    "bcb_selic": (13.75, "04/11/2026", "Copom, 282ª reunião"),
+    "bcb_ipca12": (4.63, "10/2026", "IBGE, divulgado em 12/11/2026"),
+}
+PREMIOS_RISCO = {
+    "Baixo (negócio conhecido, demanda estável, pouco investimento)": 4.0,
+    "Médio (negócio comum, alguma concorrência)": 6.0,
+    "Alto (produto novo, mercado não testado, muita concorrência)": 9.0,
+    "Muito alto (inovação, tecnologia, dependência de um cliente)": 12.0,
+}
+
+
+def buscar_bcb(chave: str) -> tuple:
+    """(valor, data, fonte) da série do SGS; se a consulta falhar, devolve o último valor conhecido."""
+    from pnbox_v8 import baixar_json
+    codigo, _ = SERIES_BCB[chave]
+    try:
+        js = baixar_json(API_BCB.format(codigo=codigo))
+        return float(str(js[-1]["valor"]).replace(",", ".")), js[-1]["data"], f"Banco Central do Brasil, SGS série {codigo}"
+    except Exception:
+        v, dt, fonte = BCB_RESERVA[chave]
+        return v, dt, f"{fonte} (valor guardado no programa)"
+
+
+def tma_degraus(selic: float, premio_risco: float, premio_pequeno: float) -> dict:
+    """TMA pelo método de acumulação (build-up): taxa livre de risco + prêmios, em pontos percentuais ao ano."""
+    total = selic + premio_risco + premio_pequeno
+    return {"livre": selic, "risco": premio_risco, "pequeno": premio_pequeno, "tma": total}
+
+
+def taxa_real(nominal_pct: float, inflacao_pct: float) -> float:
+    """Taxa real pela equação de Fisher, em %."""
+    return ((1 + nominal_pct / 100) / (1 + inflacao_pct / 100) - 1) * 100
+
+
+def leitura_taxas(proj: dict, d: dict, res: dict, selic: float, ipca: float, tma_sug: float) -> list[str]:
+    tma = float(proj.get("tma_anual_pct") or 0)
+    out = [f"Com Selic de {_n(selic, 2)}% e inflação de {_n(ipca, 2)}% em 12 meses, o juro real da renda fixa está em torno de "
+           f"{_n(taxa_real(selic, ipca), 1)}% ao ano: é o mínimo que o dinheiro dos sócios renderia sem risco."]
+    if tma < selic:
+        out.append(f"A TMA do plano ({_n(tma, 1)}%) está abaixo da Selic: o projeto está sendo comparado com uma alternativa pior "
+                   "do que deixar o dinheiro aplicado. O VPL fica otimista.")
+    elif tma < tma_sug - 0.5:
+        out.append(f"A TMA do plano ({_n(tma, 1)}%) está abaixo da sugerida pelos degraus ({_n(tma_sug, 1)}%): o risco do negócio "
+                   "pode estar subestimado.")
+    else:
+        out.append(f"A TMA do plano ({_n(tma, 1)}%) cobre a Selic e os prêmios de risco escolhidos.")
+    inf = float(proj.get("inflacao_custos_anual_pct") or 0)
+    if abs(inf - ipca) > 1.5:
+        out.append(f"A inflação de custos do plano ({_n(inf, 1)}%) está longe do IPCA atual ({_n(ipca, 2)}%); vale justificar a escolha.")
+    emp = d.get("emprestimos")
+    if emp is not None and not emp.empty and float(emp["valor"].sum()) > 0:
+        tx = float((emp["valor"] * emp["taxa_anual_pct"]).sum() / emp["valor"].sum())
+        if tx < selic:
+            out.append(f"Os empréstimos estão com taxa média de {_n(tx, 1)}% ao ano, abaixo da Selic: só é realista em linhas "
+                       "subsidiadas (como Pronampe ou fundos públicos). Confira a condição real.")
+    return out

@@ -506,3 +506,65 @@ def pg_tornado():
         color=alt.Color("VPL:Q", scale=alt.Scale(scheme="redblue", domainMid=0)), tooltip=["Preço", "Volume", alt.Tooltip("VPL:Q", format=",.0f")]),
         width="stretch")
     proxima("tornado")
+
+
+# ------------------------------------------------------------------------------
+# TAXAS DO BANCO CENTRAL (v8.8)
+# ------------------------------------------------------------------------------
+def _valor_bcb(chave_):
+    dp = d["dados_publicos"]
+    linha = dp[dp["chave"] == chave_]
+    if not linha.empty:
+        return float(linha["valor"].iloc[0]), str(linha["periodo"].iloc[0]), str(linha["fonte"].iloc[0])
+    v, dt, fonte = BCB_RESERVA[chave_]
+    return v, dt, f"{fonte} (valor guardado no programa)"
+
+
+def pg_taxas():
+    cabecalho("taxas")
+    res = R()
+    st.caption("A TMA (taxa mínima de atratividade) é o retorno que o projeto precisa superar para valer a pena. Um jeito usual "
+               "de montá-la é somar à taxa livre de risco um prêmio pelo risco do negócio e outro por ser pequeno e pouco líquido.")
+    if st.button("🔄 Buscar as taxas atuais no Banco Central", key=wk("bcb_busca")):
+        novos = []
+        for ch in SERIES_BCB:
+            v, dt, fonte = buscar_bcb(ch)
+            novos.append({"chave": ch, "rotulo": SERIES_BCB[ch][1], "valor": v, "periodo": dt, "fonte": fonte})
+        dp = d["dados_publicos"]
+        novo = pd.concat([dp[~dp["chave"].isin(list(SERIES_BCB))], pd.DataFrame(novos)], ignore_index=True)
+        recarregar_tabela("dados_publicos", novo, "chave")
+        st.rerun()
+    selic, dt_s, f_s = _valor_bcb("bcb_selic")
+    ipca, dt_i, f_i = _valor_bcb("bcb_ipca12")
+    a, b, c = st.columns(3)
+    a.metric("Meta Selic", f"{num_br(selic, 2)}% a.a.", dt_s, delta_color="off")
+    b.metric("IPCA em 12 meses", f"{num_br(ipca, 2)}%", dt_i, delta_color="off")
+    c.metric("Juro real (Selic descontada a inflação)", f"{num_br(taxa_real(selic, ipca), 2)}% a.a.")
+    st.caption(f"Fontes: {f_s}; {f_i}.")
+    st.markdown("#### TMA em degraus")
+    x, y = st.columns(2)
+    risco_txt = x.selectbox("Risco do negócio", list(PREMIOS_RISCO), index=1, key=wk("tma_risco"))
+    pr_risco = x.number_input("Prêmio pelo risco do negócio (pontos percentuais)", 0.0, 30.0, PREMIOS_RISCO[risco_txt], 0.5,
+                              key=wk("tma_pr_" + risco_txt[:5]))
+    pr_peq = y.number_input("Prêmio por ser pequeno negócio e de difícil revenda (pontos percentuais)", 0.0, 15.0, 3.0, 0.5,
+                            key=wk("tma_peq"))
+    dg = tma_degraus(selic, pr_risco, pr_peq)
+    graf = pd.DataFrame({"Degrau": ["1. Livre de risco (Selic)", "2. Risco do negócio", "3. Pequeno e pouco líquido"],
+                         "Pontos percentuais": [dg["livre"], dg["risco"], dg["pequeno"]]})
+    st.altair_chart(alt.Chart(graf).mark_bar().encode(x=alt.X("sum(Pontos percentuais):Q", title="TMA (% ao ano)"),
+                                                      color=alt.Color("Degrau:N", legend=alt.Legend(orient="bottom"))), width="stretch")
+    k1, k2 = st.columns(2)
+    k1.metric("TMA sugerida", f"{num_br(dg['tma'], 2)}% a.a.")
+    k2.metric("TMA usada no plano", f"{num_br(proj['tma_anual_pct'], 2)}% a.a.")
+    b1, b2 = st.columns(2)
+    if b1.button("✅ Usar a TMA sugerida no plano", key=wk("tma_usar")):
+        auto_unica("projeto", {"tma_anual_pct": round(dg["tma"], 2)})
+        st.toast("TMA atualizada.", icon="✅")
+        st.rerun()
+    if b2.button("✅ Usar o IPCA como inflação de custos", key=wk("ipca_usar")):
+        auto_unica("projeto", {"inflacao_custos_anual_pct": round(ipca, 2)})
+        st.toast("Inflação de custos atualizada.", icon="✅")
+        st.rerun()
+    mostrar_leitura("taxas", leitura_taxas(proj, d, res, selic, ipca, dg["tma"]))
+    st.caption("Os prêmios são escolhas do grupo e precisam ser justificados no plano; não existe um valor oficial para eles.")
+    proxima("taxas")
