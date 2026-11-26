@@ -18,3 +18,4 @@ v8.7 | 2ab7b03 | sensibilidade do VPL (tornado e ponto de ruptura)
 v8.8 | 6c668e2 | Selic, inflação e TMA em degraus
 v8.9 | e73b0ca | pitch em PowerPoint e pontos de partida por setor
 v9.0 | 99f5e6b | mapa de concorrentes, árvore de decisão e acessibilidade
+v9.0.1 | cbab537 | ajustes de navegação
