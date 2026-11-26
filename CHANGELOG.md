@@ -7,6 +7,17 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.5 (25/11/2026): leitura automática dos resultados e modo exercício
+
+**Leitura automática dos resultados**
+- Ao final das tabelas do programa aparece a caixa **📌 Leitura dos resultados**, com duas a quatro frases que dizem o que os números mostram.
+- Há regras para 37 tabelas: produtos, custos, equipe, investimentos, empréstimos, sócios, prazos, segmentos, SWOT, Porter, riscos, pesquisas de preço e entrevistas, canais, funil, orçamento de marketing, fornecedores, cronograma, BCG, objetivos, mix de marketing e outras. Também há leitura para a DRE e para o fluxo de caixa.
+- As regras são fixas e não usam IA: o resultado é o mesmo em qualquer computador e o professor sabe de onde veio cada frase.
+- **Modo exercício** (menu lateral): o aluno escreve a própria leitura de cada tabela e só depois vê a do programa. As leituras ficam salvas no projeto e saem no relatório PDF, numa seção própria, para o professor avaliar.
+- A leitura automática pode ser desligada no menu lateral.
+
+---
+
 ## v8.4 (25/11/2026): plano de marketing estruturado
 
 **Plano de marketing estruturado**

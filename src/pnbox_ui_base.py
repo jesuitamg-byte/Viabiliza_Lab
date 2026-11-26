@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.4"
+VERSAO_PROGRAMA = "8.5"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -587,7 +587,37 @@ def editor(tabela, config, campo_chave, altura=None, filtro=None):
     if not filtro:
         d[tabela] = ed[ed[campo_chave].astype(str).str.strip() != ""].reset_index(drop=True) if campo_chave else ed
     invalidar()
+    if not filtro and tabela in LEITURAS:
+        try:
+            frases = LEITURAS[tabela](limpar(d[tabela], tabela), proj, d, R)
+        except Exception:
+            frases = []
+        mostrar_leitura(tabela, frases)
     return ed
+
+
+def mostrar_leitura(chave_: str, frases: list):
+    """Caixa "Leitura dos resultados" ao final de uma tabela. No modo exercício, o aluno escreve antes de ver."""
+    if not frases or not ss.get("tg_leit", True):
+        return
+    with st.container(border=True):
+        st.markdown("**📌 Leitura dos resultados**")
+        if ss.get("tg_exerc", False):
+            la = d["leituras_aluno"]
+            atual = la.loc[la["tabela"] == chave_, "texto"]
+            atual = str(atual.iloc[0]) if not atual.empty else ""
+            txt = st.text_area("Antes de ver a leitura do programa, escreva a sua: o que esta tabela mostra?", atual,
+                               key=wk("la_" + chave_), height=90)
+            if txt != atual:
+                novo = pd.concat([la[la["tabela"] != chave_], pd.DataFrame([{"tabela": chave_, "texto": txt}])], ignore_index=True)
+                salvar(conn, "leituras_aluno", novo, "tabela")
+                d["leituras_aluno"] = limpar(novo, "leituras_aluno")
+                marcar_salvo()
+            if len(txt.strip()) < 20:
+                st.caption("A leitura do programa aparece depois que você escrever ao menos uma frase.")
+                return
+            st.caption("Compare com a leitura do programa:")
+        st.markdown("\n".join(f"- {f}" for f in frases))
 
 
 def auto_unica(tabela: str, novos: dict):
@@ -772,6 +802,11 @@ with st.sidebar:
     if tema_escuro != (ss.tema == "escuro"):
         ss.tema = "escuro" if tema_escuro else "claro"
         st.rerun()
+
+    st.toggle("📌 Leitura automática das tabelas", value=True, key="tg_leit",
+              help="Ao final de cada tabela, frases que dizem o que os números mostram.")
+    st.toggle("✍️ Modo exercício", value=False, key="tg_exerc",
+              help="O aluno escreve a própria leitura de cada tabela antes de ver a do programa. As leituras ficam salvas no projeto.")
 
     with st.expander("🧭 Ir direto para...", expanded=False):
         for g in GRUPOS:

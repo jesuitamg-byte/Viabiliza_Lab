@@ -596,6 +596,12 @@ def secoes_v71(pdf, proj, d, res):
 
 def secoes_v8(pdf, proj, d, res):
     """Seções da versão 8 no relatório completo."""
+    la = d.get("leituras_aluno", pd.DataFrame())
+    if la is not None and not la.empty and (la["texto"].astype(str).str.strip() != "").any():
+        pdf.secao("LEITURAS DOS RESULTADOS ESCRITAS PELO GRUPO", nova_pagina=True)
+        la = la[la["texto"].astype(str).str.strip() != ""]
+        pdf.tabela(pd.DataFrame({"Tabela": la["tabela"].str.replace("_", " ").str.capitalize(), "Leitura do grupo": la["texto"]}),
+                   larguras=(40, 140), alinhar=("LEFT", "LEFT"), tam=8)
     est = d.get("swot_estrategias", pd.DataFrame())
     if not est.empty:
         pdf.secao("SWOT CRUZADA: ESTRATÉGIAS", nova_pagina=True)

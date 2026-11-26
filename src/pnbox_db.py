@@ -201,6 +201,7 @@ SCHEMA = {
     "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
     "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
     "kpis_mkt": [("indicador", "TEXT"), ("meta", "TEXT"), ("frequencia", "TEXT"), ("fonte", "TEXT"), ("responsavel", "TEXT")],
+    "leituras_aluno": [("tabela", "TEXT"), ("texto", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 

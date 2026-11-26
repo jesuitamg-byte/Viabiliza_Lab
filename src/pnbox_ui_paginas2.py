@@ -359,6 +359,7 @@ def pg_dre():
         st.dataframe(mm.assign(**{c: mm[c].map(brl) for c in mm.columns[1:]}), hide_index=True, width="stretch")
     st.subheader("Demonstração do resultado (Anos 1 a 3)")
     st.dataframe(tabela_dre(r), hide_index=True, width="stretch", height=560)
+    mostrar_leitura("dre", leitura_dre(r))
     st.bar_chart(pd.DataFrame({"Receita": [r["anos"][a]["rec_bruta"] for a in r["ANOS"]],
                                "EBITDA": [r["anos"][a]["ebitda"] for a in r["ANOS"]],
                                "Resultado líquido": [r["anos"][a]["resultado"] for a in r["ANOS"]]},
@@ -392,6 +393,7 @@ def pg_fluxo():
     st.altair_chart((barras_ + linha).properties(height=380), width="stretch")
     st.caption("Barras: recebimentos (azul) e pagamentos (rosa) do mês. Linha verde: saldo acumulado em caixa.")
     st.dataframe(fm.assign(**{c: fm[c].map(brl) for c in fm.columns[1:]}), hide_index=True, width="stretch")
+    mostrar_leitura("fluxo", leitura_fluxo(r))
     proxima("fluxo")
 
 
