@@ -7,6 +7,23 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.4 (25/11/2026): plano de marketing estruturado
+
+**Plano de marketing estruturado**
+- Nova ferramenta **Plano de marketing**, que amarra as ferramentas de marketing na sequência da literatura: análise da situação, objetivos, estratégia, táticas, ações e controle (Smith, 2011; McDonald, 2007; Las Casas, 2011).
+- **Situação de cada etapa** (completa, em andamento ou vazia), com atalhos para a ferramenta que alimenta cada uma.
+- **Situação:** síntese do diagnóstico escrita pelo grupo, somada ao tamanho do mercado e à comparação de preços com os concorrentes.
+- **Objetivos:** os objetivos SMART da perspectiva Clientes.
+- **Estratégia:** declaração de posicionamento, direção de crescimento pela matriz de Ansoff e estratégia competitiva de Porter, com alertas quando contradizem a estratégia de preço.
+- **Táticas:** resumo do mix montado a partir das escolhas estruturadas, com a coerência do mix.
+- **Ações:** o calendário de marketing.
+- **Controle:** indicadores com meta, frequência, fonte do dado e responsável, com sugestões prontas.
+- O relatório PDF e o **relatório ABNT** ganham o plano de marketing completo, com citações e referências (Smith, McDonald, Las Casas, Kotler e Keller, Booms e Bitner, Ansoff).
+- A antiga página "Plano de marketing (4Ps)" passa a se chamar **Mix de marketing (4Ps e 7Ps)**.
+- Os modelos Café Mucuri e TecVale trazem o plano de marketing preenchido como exemplo.
+
+---
+
 ## v8.3 (25/11/2026): 7Ps de serviços, coerência do mix e 4Cs
 
 **Mix de marketing: 7Ps de serviços, coerência do mix e 4Cs**

@@ -22,6 +22,7 @@ from pnbox_db import SCHEMA, conectar, ler, ler_unica
 from pnbox_estrategia import (checar_smart, PERSPECTIVAS, canvas_blocos, bcg_tabela, ge_tabela, porter_tabela,
 from pnbox_validacao import *  # noqa
 from pnbox_v8 import *  # noqa
+from pnbox_mix import *  # noqa
                               porter_leitura, bsc_indicadores_plano, simular_reforma, frase_smart)
 from pnbox_pdf import Relatorio, graficos_png, AZUL, FONTES_CANDIDATAS
 
@@ -80,6 +81,7 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "sumario": (len(str(proj["sumario_executivo"])) > 200, bool(proj["sumario_executivo"])),
         **regras_v71(proj, d),
         **regras_v8(proj, d),
+        **regras_mix(proj, d),
     }
 
 
@@ -87,7 +89,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao"} | OPCIONAIS_V8
+    fora = {"realizado", "adocao", "plano_mkt"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):

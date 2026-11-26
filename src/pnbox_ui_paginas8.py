@@ -309,3 +309,107 @@ def pg_marketing():
     with abas[5]:
         _aba_diagnostico()
     proxima("marketing")
+
+
+# ------------------------------------------------------------------------------
+# PLANO DE MARKETING (v8.4)
+# ------------------------------------------------------------------------------
+SELO_ETAPA = {2: "✅", 1: "◐", 0: "○"}
+
+
+def _botao_ir(rotulo, pagina, chave_):
+    if st.button(rotulo, key=wk(chave_)):
+        ir(pagina)
+        st.rerun()
+
+
+def pg_plano_mkt():
+    cabecalho("plano_mkt")
+    res = R()
+    st.caption("O plano segue a sequência proposta na literatura: análise da situação, objetivos, estratégia, táticas, "
+               "ações e controle (Smith, 2011; McDonald, 2007; Las Casas, 2011). Quase tudo vem das outras ferramentas; "
+               "aqui o grupo amarra as partes e completa o que falta.")
+    et = etapas_plano_mkt(proj, d)
+    cols = st.columns(6)
+    for c, (nome, s, falta) in zip(cols, et):
+        c.metric(nome, SELO_ETAPA[s], help=f"Completa quando houver {falta}.")
+    cont = conteudo_plano_mkt(proj, d, res)
+    abas = st.tabs([f"{i + 1}. {n}" for i, (n, _) in enumerate(ETAPAS_PLANO)])
+    with abas[0]:
+        st.caption(ETAPAS_PLANO[0][1])
+        st.markdown(cont[0]["texto"] if not _tem_txt(proj.get("pm_situacao")) else
+                    cont[0]["texto"].replace(str(proj["pm_situacao"]), "").strip() or "")
+        c = st.columns(4)
+        for col, (rot, pg) in zip(c, [("🎯 Mercado", "mercado"), ("🥊 Concorrência", "concorrencia"), ("🧩 SWOT", "swot"),
+                                      ("🔀 SWOT cruzada", "swot_cruzada")]):
+            with col:
+                _botao_ir(rot, pg, "pm_ir_" + pg)
+        auto_unica("projeto", {"pm_situacao": st.text_area(
+            "Síntese do diagnóstico: as três conclusões mais importantes para o marketing", proj.get("pm_situacao") or "",
+            height=120, key=wk("pm_sit"))})
+    with abas[1]:
+        st.caption(ETAPAS_PLANO[1][1] + " Entram aqui os objetivos da perspectiva Clientes cadastrados em Missão, visão, valores e objetivos.")
+        if cont[1]["tabela"] is not None:
+            st.dataframe(cont[1]["tabela"], hide_index=True, width="stretch")
+        else:
+            st.info("Nenhum objetivo da perspectiva Clientes ainda. Exemplos: conquistar 300 clientes ativos até o mês 6; "
+                    "chegar a 40% de recompra em 30 dias até o mês 9.", icon="💡")
+        _botao_ir("🧭 Abrir os objetivos SMART", "identidade", "pm_ir_obj")
+    with abas[2]:
+        st.caption(ETAPAS_PLANO[2][1])
+        fp = frase_posicionamento(proj)
+        st.markdown("**Declaração de posicionamento:** " + (fp or "_ainda não preenchida_"))
+        _botao_ir("📌 Abrir o posicionamento", "posicionamento", "pm_ir_pos")
+        a, b = st.columns(2)
+        with a:
+            ans = _select("Direção de crescimento (matriz de Ansoff)", "pm_ansoff", ANSOFF,
+                          "Para um negócio novo, pense no principal movimento dos próximos anos depois da abertura.")
+            if ans:
+                st.caption(f"**{ANSOFF[ans][0]}.** {ANSOFF[ans][1]}")
+        with b:
+            gen = _select("Estratégia competitiva (Porter)", "pm_generica", GENERICAS)
+            if gen:
+                st.caption(GENERICAS[gen])
+        auto_unica("projeto", {"pm_ansoff": ans, "pm_generica": gen})
+        if gen.startswith("Liderança") and proj.get("mix_posicao_preco") == "Premium":
+            st.warning("Liderança em custo com preço premium: as duas escolhas puxam para lados opostos.", icon="⚠️")
+        if gen and "diferenciação" in gen.lower() and proj.get("mix_estrategia_preco") == "Penetração":
+            st.warning("Diferenciação com preço de penetração: se o diferencial existe, ele pode ser cobrado.", icon="⚠️")
+    with abas[3]:
+        st.caption(ETAPAS_PLANO[3][1])
+        if cont[3]["tabela"] is not None:
+            st.dataframe(cont[3]["tabela"], hide_index=True, width="stretch")
+        co = coerencia_mix(proj, d, res)
+        if not co.empty:
+            ok = int(co["Situação"].str.startswith("✅").sum())
+            (st.success if ok == len(co) else st.warning)(f"Coerência do mix: {ok} de {len(co)} combinações coerentes.")
+        _botao_ir("📣 Abrir o mix de marketing", "marketing", "pm_ir_mix")
+    with abas[4]:
+        st.caption(ETAPAS_PLANO[4][1])
+        if cont[4]["tabela"] is not None:
+            st.markdown(cont[4]["texto"])
+            st.dataframe(cont[4]["tabela"], hide_index=True, width="stretch")
+        else:
+            st.info("As ações ficam no calendário do orçamento de marketing.", icon="💡")
+        _botao_ir("🗓️ Abrir o calendário de marketing", "orcamento_mkt", "pm_ir_cal")
+    with abas[5]:
+        st.caption(ETAPAS_PLANO[5][1] + " McDonald (2007) lembra que o plano só fecha o ciclo quando os resultados "
+                   "voltam para a análise da situação seguinte.")
+        if d["kpis_mkt"].empty and st.button("✨ Sugerir indicadores", key=wk("pm_kpi_sug")):
+            recarregar_tabela("kpis_mkt", pd.DataFrame([{"indicador": i, "meta": "", "frequencia": f, "fonte": fo, "responsavel": ""}
+                                                        for i, f, fo in KPIS_SUGERIDOS]), "indicador")
+            st.rerun()
+        editor("kpis_mkt", {"indicador": T("Indicador", required=True, width="medium"), "meta": T("Meta"),
+                            "frequencia": S("Frequência", options=FREQUENCIAS), "fonte": T("De onde vem o dado", width="medium"),
+                            "responsavel": T("Responsável")}, "indicador")
+        sem_meta = [i for i, m in zip(d["kpis_mkt"]["indicador"], d["kpis_mkt"]["meta"]) if not str(m).strip()]
+        if sem_meta:
+            st.warning("Indicadores sem meta não servem para controle: " + ", ".join(sem_meta) + ".", icon="⚠️")
+        _botao_ir("📊 Abrir o acompanhamento do realizado", "realizado", "pm_ir_real")
+    with st.expander("📄 Ver o plano de marketing montado"):
+        for i, sec in enumerate(cont, 1):
+            st.markdown(f"**{i}. {sec['titulo']}**")
+            st.markdown(sec["texto"])
+            if sec["tabela"] is not None:
+                st.dataframe(sec["tabela"], hide_index=True, width="stretch")
+    proxima("plano_mkt")

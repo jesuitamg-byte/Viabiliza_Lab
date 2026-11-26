@@ -17,6 +17,7 @@ from pnbox_motor import brl, num_br, pct, div, tabela_dre, tabela_indicadores, c
 from pnbox_extras import gerar_sumario
 from pnbox_validacao import placar_evidencias, resumo_entrevistas, monte_carlo, faixas_mc, preco_referencia
 from pnbox_v8 import QUADRANTES_CRUZADA, comparar_setor, referencias_abnt_dados, valuation
+from pnbox_mix import CITA_MKT, REFS_MKT, conteudo_plano_mkt
 
 ENTRELINHA = 6.4      # 12 pt com espaçamento 1,5
 RECUO = " " * 8  # recuo de primeira linha do parágrafo
@@ -28,6 +29,9 @@ REFS_METODO = {
     "sebrae": "SERVIÇO BRASILEIRO DE APOIO ÀS MICRO E PEQUENAS EMPRESAS. **Aplicações de análise de sobrevivência em estudos do "
               "Sebrae**. Brasília: Sebrae, 2026. Disponível em: https://datasebrae.com.br. Acesso em: {hoje}.",
 }
+
+
+REFS_METODO.update(REFS_MKT)
 
 
 class RelatorioABNT(Relatorio):
@@ -248,8 +252,22 @@ def _conteudo(pdf, proj, d, res, refs_extra: list) -> list:
             larguras=(28, 66, 66), alinhar=("LEFT", "LEFT", "LEFT"))
     # 5 MARKETING
     pdf.secao_abnt("5", "Plano de marketing")
-    pdf.texto("\n".join(f"{r}: {proj.get(k)}" for r, k in (("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"),
-                                                           ("Promoção", "mkt_promocao")) if proj.get(k)))
+    pdf.texto("O plano de marketing segue a sequência análise da situação, objetivos, estratégia, táticas, ações e controle "
+              "(Smith, 2011; McDonald, 2007), também adotada para micro e pequenas empresas por Las Casas (2011).")
+    usadas += ["smith", "mcdonald", "lascasas"]
+    for i, sec in enumerate(conteudo_plano_mkt(proj, d, res), 1):
+        pdf.secao_abnt(f"5.{i}", sec["titulo"], 2)
+        cits = [CITA_MKT[r] for r in sec["refs"] if r not in ("smith", "mcdonald")]
+        cit = f"({'; '.join(cits)})" if cits else ""
+        pdf.texto(sec["texto"].rstrip(".") + f" {cit}." if cit else sec["texto"])
+        usadas += sec["refs"]
+        tb = sec["tabela"]
+        if tb is not None and not tb.empty:
+            n = len(tb.columns)
+            larg = {2: (40, 120), 4: (70, 40, 30, 20), 5: (45, 25, 25, 40, 25)}.get(n)
+            if n == 4 and "Mês" in tb.columns:
+                larg = (15, 85, 35, 25)
+            pdf.tabela_abnt(sec["titulo"], tb, larguras=larg, alinhar=tuple(["LEFT"] * n), tam=9)
     # 6 OPERACIONAL
     pdf.secao_abnt("6", "Plano operacional")
     pdf.texto(proj.get("op_processos") or "Processos a descrever.")

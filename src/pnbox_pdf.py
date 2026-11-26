@@ -18,6 +18,7 @@ from fpdf.fonts import FontFace
 
 from pnbox_validacao import *  # noqa
 from pnbox_v8 import *  # noqa
+from pnbox_mix import *  # noqa
 
 AZUL = (28, 49, 80)
 def _fontes_matplotlib():
@@ -1020,7 +1021,28 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
 
     # ---------------- 9. INVESTIMENTOS ----------------
     # ---------------- MARKETING E OPERAÇÃO ----------------
-    if any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
+    if any(s for _, s, _ in etapas_plano_mkt(proj, d)) or proj.get("mix_nucleo") or proj.get("mix_estrategia_preco"):
+        pdf.secao("PLANO DE MARKETING", nova_pagina=True)
+        for i, sec in enumerate(conteudo_plano_mkt(proj, d, res), 1):
+            pdf.subtitulo(f"{i}. {sec['titulo']}")
+            pdf.paragrafo(sec["texto"])
+            tb = sec["tabela"]
+            if tb is not None and not tb.empty:
+                n = len(tb.columns)
+                larg = {2: (40, 140), 4: (75, 45, 35, 25), 5: (50, 30, 25, 45, 30)}.get(n)
+                if n == 4 and "Mês" in tb.columns:
+                    larg = (15, 95, 40, 30)
+                pdf.tabela(tb, larguras=larg, alinhar=tuple(["LEFT"] * n), tam=7.5)
+        co = coerencia_mix(proj, d, res)
+        if not co.empty:
+            pdf.subtitulo("Coerência do mix")
+            pdf.tabela(co.assign(Situação=co["Situação"].str.replace("✅ ", "").str.replace("⚠️ ", "")),
+                       larguras=(55, 25, 100), alinhar=("LEFT", "LEFT", "LEFT"), tam=7.5)
+        for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
+            if proj.get(k):
+                pdf.subtitulo(f"Justificativa: {rot.lower()}")
+                pdf.paragrafo(proj[k])
+    elif any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
         pdf.secao("PLANO DE MARKETING (4Ps)")
         for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
             if proj.get(k):

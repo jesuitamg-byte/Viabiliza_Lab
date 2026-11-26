@@ -95,6 +95,8 @@ SCHEMA = {
         ("mix_pessoas", "TEXT"), ("mix_processos", "TEXT"), ("mix_evidencia", "TEXT"),
         ("mix_4c_cliente", "TEXT"), ("mix_4c_custo", "TEXT"), ("mix_4c_conveniencia", "TEXT"), ("mix_4c_comunicacao", "TEXT"),
         ("mix_4c_n1", "REAL"), ("mix_4c_n2", "REAL"), ("mix_4c_n3", "REAL"), ("mix_4c_n4", "REAL"),
+        # v8.4: plano de marketing
+        ("pm_situacao", "TEXT"), ("pm_ansoff", "TEXT"), ("pm_generica", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -198,6 +200,7 @@ SCHEMA = {
     "meios_pagamento": [("forma", "TEXT"), ("pct_vendas", "REAL"), ("taxa_pct", "REAL"), ("prazo_dias", "REAL")],
     "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
     "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
+    "kpis_mkt": [("indicador", "TEXT"), ("meta", "TEXT"), ("frequencia", "TEXT"), ("fonte", "TEXT"), ("responsavel", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 

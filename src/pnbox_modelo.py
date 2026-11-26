@@ -1194,6 +1194,36 @@ _MIX3 = {   # pessoas, evidência física, etapas do mapa do serviço (etapa, on
 }
 
 
+_MIX4 = {   # síntese da situação, Ansoff, estratégia competitiva, objetivos de clientes, indicadores (indicador, meta, frequência, fonte)
+    "cafe": ("O centro tem fluxo alto de pessoas e poucas opções de café especial. A concorrência é de padarias com preço parecido. "
+             "A principal fraqueza é depender do movimento de rua nos meses fracos.",
+             "Penetração de mercado", "Diferenciação",
+             [("Conquistar clientes que voltam toda semana", "Clientes no cartão fidelidade", 400, "clientes", 6),
+              ("Aumentar o gasto médio por visita", "Ticket médio", 22, "reais", 9)],
+             [("Clientes novos por mês", "50", "Mensal", "Cartão fidelidade"),
+              ("Gasto médio por compra (ticket médio)", "R$ 22", "Semanal", "Sistema de caixa"),
+              ("Nota de satisfação (NPS)", "60", "Trimestral", "Pesquisa no balcão")]),
+    "servico": ("Empresas e profissionais liberais da cidade dependem de técnicos informais sem garantia. "
+                "O concorrente mais forte cobra menos, mas não dá prazo nem garantia por escrito.",
+                "Penetração de mercado", "Foco em diferenciação",
+                [("Fechar contratos mensais com empresas", "Contratos ativos", 25, "contratos", 12)],
+                [("Contratos mensais ativos", "25 até o mês 12", "Mensal", "Planilha de contratos"),
+                 ("Tempo de resposta ao chamado", "até 2 horas", "Semanal", "WhatsApp"),
+                 ("Custo por cliente novo (CAC)", "até R$ 150", "Mensal", "Gasto de marketing ÷ clientes novos")]),
+}
+
+
+_CAL_MIX = {
+    "cafe": [(1, "Inauguração com degustação de cafés da região", "Eventos", 600), (1, "Perfil no Instagram e Google Meu Negócio", "Redes sociais", 0),
+             (2, "Lançamento do cartão fidelidade", "Loja", 150), (4, "Parceria com o produtor de café do mês", "Parcerias", 200),
+             (6, "Campanha do Dia dos Pais com kits de presente", "Redes sociais", 300)],
+    "servico": [(1, "Visitas a escritórios do centro com proposta de contrato", "Venda direta", 300),
+                (1, "Anúncio no Google para conserto de computador", "Busca paga", 400),
+                (3, "Palestra gratuita sobre segurança digital na associação comercial", "Eventos", 250),
+                (6, "Campanha de indicação: um mês grátis para quem indicar", "Indicação", 500)],
+}
+
+
 def popular_mix(conn, qual: str) -> None:
     """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
     if qual not in _MIX:
@@ -1217,6 +1247,14 @@ def popular_mix(conn, qual: str) -> None:
         pessoas, evid, etapas = _MIX3[qual]
         conn.execute("UPDATE projeto SET mix_pessoas=?, mix_evidencia=? WHERE id=1", (pessoas, evid))
         conn.executemany("INSERT INTO blueprint (etapa, linha, tempo_min, ponto_falha) VALUES (?,?,?,?)", etapas)
+    if qual in _MIX4:
+        sit, ans, gen, objs, kpis = _MIX4[qual]
+        conn.execute("UPDATE projeto SET pm_situacao=?, pm_ansoff=?, pm_generica=? WHERE id=1", (sit, ans, gen))
+        conn.executemany("INSERT INTO objetivos (objetivo, perspectiva, indicador, meta, unidade, prazo_meses) VALUES (?,'Clientes',?,?,?,?)",
+                         objs)
+        conn.executemany("INSERT INTO kpis_mkt (indicador, meta, frequencia, fonte, responsavel) VALUES (?,?,?,?,'Sócio-gerente')", kpis)
+        if not conn.execute("SELECT COUNT(*) FROM calendario_mkt").fetchone()[0]:
+            conn.executemany("INSERT INTO calendario_mkt (mes, acao, canal, custo) VALUES (?,?,?,?)", _CAL_MIX[qual])
 
 
 def popular_validacao(conn, qual: str) -> None:

@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.3"
+VERSAO_PROGRAMA = "8.4"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -215,8 +215,10 @@ PAGINAS = [
      "Linhas de produto por crescimento do mercado e participação relativa: estrelas, vacas leiteiras, interrogações e abacaxis."),
     ("bsc", "Análise estratégica", "🗺️", "Balanced Scorecard",
      "Objetivos e indicadores nas quatro perspectivas e o mapa estratégico que liga tudo."),
-    ("marketing", "Marketing e operação", "📣", "Plano de marketing (4Ps)",
-     "Produto, preço, praça e promoção: como o negócio vai chegar ao cliente."),
+    ("plano_mkt", "Marketing e operação", "🧭", "Plano de marketing",
+     "Situação, objetivos, estratégia, táticas, ações e controle, amarrando as ferramentas de marketing."),
+    ("marketing", "Marketing e operação", "📣", "Mix de marketing (4Ps e 7Ps)",
+     "Produto, preço, praça e promoção (e, em serviços, pessoas, processos e evidência física) ligados aos números do plano."),
     ("canais", "Marketing e operação", "🛒", "Canais e funil de vendas",
      "Avalie os canais de aquisição e acompanhe a conversão do funil."),
     ("orcamento_mkt", "Marketing e operação", "💸", "Orçamento de marketing e funil AARRR",
@@ -680,12 +682,13 @@ def situacao(p: str) -> str:
     }
     regras.update(regras_v71(proj, d))
     regras.update(regras_v8(proj, d))
+    regras.update(regras_mix(proj, d))
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p == "plano_mkt"
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")

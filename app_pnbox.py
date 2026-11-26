@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.3 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.4 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,23 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.4 (25/11/2026): plano de marketing estruturado
+
+**Plano de marketing estruturado**
+- Nova ferramenta **Plano de marketing**, que amarra as ferramentas de marketing na sequência da literatura: análise da situação, objetivos, estratégia, táticas, ações e controle (Smith, 2011; McDonald, 2007; Las Casas, 2011).
+- **Situação de cada etapa** (completa, em andamento ou vazia), com atalhos para a ferramenta que alimenta cada uma.
+- **Situação:** síntese do diagnóstico escrita pelo grupo, somada ao tamanho do mercado e à comparação de preços com os concorrentes.
+- **Objetivos:** os objetivos SMART da perspectiva Clientes.
+- **Estratégia:** declaração de posicionamento, direção de crescimento pela matriz de Ansoff e estratégia competitiva de Porter, com alertas quando contradizem a estratégia de preço.
+- **Táticas:** resumo do mix montado a partir das escolhas estruturadas, com a coerência do mix.
+- **Ações:** o calendário de marketing.
+- **Controle:** indicadores com meta, frequência, fonte do dado e responsável, com sugestões prontas.
+- O relatório PDF e o **relatório ABNT** ganham o plano de marketing completo, com citações e referências (Smith, McDonald, Las Casas, Kotler e Keller, Booms e Bitner, Ansoff).
+- A antiga página "Plano de marketing (4Ps)" passa a se chamar **Mix de marketing (4Ps e 7Ps)**.
+- Os modelos Café Mucuri e TecVale trazem o plano de marketing preenchido como exemplo.
 
 ---
 
@@ -308,6 +325,8 @@ SCHEMA = {
         ("mix_pessoas", "TEXT"), ("mix_processos", "TEXT"), ("mix_evidencia", "TEXT"),
         ("mix_4c_cliente", "TEXT"), ("mix_4c_custo", "TEXT"), ("mix_4c_conveniencia", "TEXT"), ("mix_4c_comunicacao", "TEXT"),
         ("mix_4c_n1", "REAL"), ("mix_4c_n2", "REAL"), ("mix_4c_n3", "REAL"), ("mix_4c_n4", "REAL"),
+        # v8.4: plano de marketing
+        ("pm_situacao", "TEXT"), ("pm_ansoff", "TEXT"), ("pm_generica", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -411,6 +430,7 @@ SCHEMA = {
     "meios_pagamento": [("forma", "TEXT"), ("pct_vendas", "REAL"), ("taxa_pct", "REAL"), ("prazo_dias", "REAL")],
     "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
     "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
+    "kpis_mkt": [("indicador", "TEXT"), ("meta", "TEXT"), ("frequencia", "TEXT"), ("fonte", "TEXT"), ("responsavel", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 
@@ -1855,6 +1875,36 @@ _MIX3 = {   # pessoas, evidência física, etapas do mapa do serviço (etapa, on
 }
 
 
+_MIX4 = {   # síntese da situação, Ansoff, estratégia competitiva, objetivos de clientes, indicadores (indicador, meta, frequência, fonte)
+    "cafe": ("O centro tem fluxo alto de pessoas e poucas opções de café especial. A concorrência é de padarias com preço parecido. "
+             "A principal fraqueza é depender do movimento de rua nos meses fracos.",
+             "Penetração de mercado", "Diferenciação",
+             [("Conquistar clientes que voltam toda semana", "Clientes no cartão fidelidade", 400, "clientes", 6),
+              ("Aumentar o gasto médio por visita", "Ticket médio", 22, "reais", 9)],
+             [("Clientes novos por mês", "50", "Mensal", "Cartão fidelidade"),
+              ("Gasto médio por compra (ticket médio)", "R$ 22", "Semanal", "Sistema de caixa"),
+              ("Nota de satisfação (NPS)", "60", "Trimestral", "Pesquisa no balcão")]),
+    "servico": ("Empresas e profissionais liberais da cidade dependem de técnicos informais sem garantia. "
+                "O concorrente mais forte cobra menos, mas não dá prazo nem garantia por escrito.",
+                "Penetração de mercado", "Foco em diferenciação",
+                [("Fechar contratos mensais com empresas", "Contratos ativos", 25, "contratos", 12)],
+                [("Contratos mensais ativos", "25 até o mês 12", "Mensal", "Planilha de contratos"),
+                 ("Tempo de resposta ao chamado", "até 2 horas", "Semanal", "WhatsApp"),
+                 ("Custo por cliente novo (CAC)", "até R$ 150", "Mensal", "Gasto de marketing ÷ clientes novos")]),
+}
+
+
+_CAL_MIX = {
+    "cafe": [(1, "Inauguração com degustação de cafés da região", "Eventos", 600), (1, "Perfil no Instagram e Google Meu Negócio", "Redes sociais", 0),
+             (2, "Lançamento do cartão fidelidade", "Loja", 150), (4, "Parceria com o produtor de café do mês", "Parcerias", 200),
+             (6, "Campanha do Dia dos Pais com kits de presente", "Redes sociais", 300)],
+    "servico": [(1, "Visitas a escritórios do centro com proposta de contrato", "Venda direta", 300),
+                (1, "Anúncio no Google para conserto de computador", "Busca paga", 400),
+                (3, "Palestra gratuita sobre segurança digital na associação comercial", "Eventos", 250),
+                (6, "Campanha de indicação: um mês grátis para quem indicar", "Indicação", 500)],
+}
+
+
 def popular_mix(conn, qual: str) -> None:
     """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
     if qual not in _MIX:
@@ -1878,6 +1928,14 @@ def popular_mix(conn, qual: str) -> None:
         pessoas, evid, etapas = _MIX3[qual]
         conn.execute("UPDATE projeto SET mix_pessoas=?, mix_evidencia=? WHERE id=1", (pessoas, evid))
         conn.executemany("INSERT INTO blueprint (etapa, linha, tempo_min, ponto_falha) VALUES (?,?,?,?)", etapas)
+    if qual in _MIX4:
+        sit, ans, gen, objs, kpis = _MIX4[qual]
+        conn.execute("UPDATE projeto SET pm_situacao=?, pm_ansoff=?, pm_generica=? WHERE id=1", (sit, ans, gen))
+        conn.executemany("INSERT INTO objetivos (objetivo, perspectiva, indicador, meta, unidade, prazo_meses) VALUES (?,'Clientes',?,?,?,?)",
+                         objs)
+        conn.executemany("INSERT INTO kpis_mkt (indicador, meta, frequencia, fonte, responsavel) VALUES (?,?,?,?,'Sócio-gerente')", kpis)
+        if not conn.execute("SELECT COUNT(*) FROM calendario_mkt").fetchone()[0]:
+            conn.executemany("INSERT INTO calendario_mkt (mes, acao, canal, custo) VALUES (?,?,?,?)", _CAL_MIX[qual])
 
 
 def popular_validacao(conn, qual: str) -> None:
@@ -5130,9 +5188,203 @@ QUATRO_CS = [
      "Há conversa com o cliente, e não só anúncio? Ele consegue perguntar, reclamar e indicar?"),
 ]
 
+
+# ------------------------------------------------------------------------------
+# PLANO DE MARKETING (v8.4): situação, objetivos, estratégia, táticas, ações e controle
+# Smith (2011), McDonald (2007) e Las Casas (2011)
+# ------------------------------------------------------------------------------
+ANSOFF = {
+    "Penetração de mercado": ("Produto atual, mercado atual", "Vender mais do mesmo para o mesmo público: frequência, fidelidade e "
+                              "conquista de clientes dos concorrentes. É o caminho de menor risco."),
+    "Desenvolvimento de produto": ("Produto novo, mercado atual", "Oferecer novos produtos ou serviços a quem já é cliente. "
+                                   "Risco moderado: exige criar e testar o novo produto."),
+    "Desenvolvimento de mercado": ("Produto atual, mercado novo", "Levar o produto a outros bairros, cidades, públicos ou canais. "
+                                   "Risco moderado: exige conhecer o novo público."),
+    "Diversificação": ("Produto novo, mercado novo", "Entrar com produto novo em mercado novo. É o caminho de maior risco, "
+                       "porque nada do que a empresa já sabe se aplica diretamente."),
+}
+GENERICAS = {
+    "Liderança em custo": "Ser o mais barato de produzir e vender, com preço competitivo.",
+    "Diferenciação": "Oferecer algo que o cliente valoriza e pelo qual aceita pagar mais.",
+    "Foco em custo": "Atender um nicho específico com o menor custo.",
+    "Foco em diferenciação": "Atender um nicho específico com uma oferta feita sob medida para ele.",
+}
+FREQUENCIAS = ["Diária", "Semanal", "Mensal", "Trimestral", "Semestral", "Anual"]
+KPIS_SUGERIDOS = [
+    ("Clientes novos por mês", "Mensal", "Cadastro de clientes ou vendas"),
+    ("Custo por cliente novo (CAC)", "Mensal", "Gasto de marketing ÷ clientes novos"),
+    ("Gasto médio por compra (ticket médio)", "Semanal", "Sistema de caixa"),
+    ("Taxa de recompra em 30 dias", "Mensal", "Cadastro de clientes ou cartão fidelidade"),
+    ("Conversão de contatos em vendas", "Semanal", "WhatsApp, redes sociais ou CRM"),
+    ("Nota de satisfação (NPS)", "Trimestral", "Pesquisa com clientes"),
+    ("Receita por canal de venda", "Mensal", "Relatórios dos canais e do caixa"),
+]
+ETAPAS_PLANO = [
+    ("Situação", "Onde estamos? Mercado, clientes, concorrentes e fatores internos e externos."),
+    ("Objetivos", "Aonde queremos chegar? Objetivos de marketing mensuráveis e com prazo."),
+    ("Estratégia", "Como chegar lá? Público-alvo, posicionamento e direção de crescimento."),
+    ("Táticas", "Com que ferramentas? O mix de marketing (4Ps ou 7Ps)."),
+    ("Ações", "Quem faz o quê e quando? Calendário, responsáveis e custos."),
+    ("Controle", "Chegamos lá? Indicadores, metas e frequência de acompanhamento."),
+]
+
+
+def _tem_txt(x) -> bool:
+    return bool(str(x or "").strip())
+
+
+def objetivos_marketing(d: dict) -> pd.DataFrame:
+    ob = d.get("objetivos")
+    if ob is None or ob.empty:
+        return pd.DataFrame(columns=["objetivo", "indicador", "meta", "unidade", "prazo_meses"])
+    return ob[ob["perspectiva"] == "Clientes"]
+
+
+def etapas_plano_mkt(proj: dict, d: dict) -> list[tuple[str, int, str]]:
+    """Situação de cada etapa: (etapa, 0 = vazia / 1 = parcial / 2 = completa, o que falta)."""
+    def n(t):
+        x = d.get(t)
+        return 0 if x is None else len(x)
+    s = [proj.get("tam_clientes") or 0, n("concorrentes"), n("swot"), _tem_txt(proj.get("pm_situacao"))]
+    sit = sum(bool(x) for x in s)
+    obm = objetivos_marketing(d)
+    est = [_tem_txt(proj.get("posic_segmento")), _tem_txt(proj.get("pm_ansoff")), _tem_txt(proj.get("pm_generica"))]
+    tat = [_tem_txt(proj.get("mix_nucleo")), _tem_txt(proj.get("mix_estrategia_preco")), n("canais_venda") > 0,
+           _tem_txt(proj.get("mix_objetivo_com"))]
+    acoes = n("calendario_mkt")
+    kp = n("kpis_mkt")
+    return [
+        ("Situação", 2 if sit >= 4 else (1 if sit else 0), "mercado, concorrentes, SWOT e a síntese do diagnóstico"),
+        ("Objetivos", 2 if len(obm) >= 2 else (1 if len(obm) else 0), "ao menos dois objetivos da perspectiva Clientes"),
+        ("Estratégia", 2 if all(est) else (1 if any(est) else 0), "público-alvo, direção de crescimento e estratégia competitiva"),
+        ("Táticas", 2 if all(tat) else (1 if any(tat) else 0), "produto, estratégia de preço, canais de venda e objetivo da comunicação"),
+        ("Ações", 2 if acoes >= 4 else (1 if acoes else 0), "ao menos quatro ações no calendário de marketing"),
+        ("Controle", 2 if kp >= 3 else (1 if kp else 0), "ao menos três indicadores com meta e frequência"),
+    ]
+
+
+def regras_mix(proj: dict, d: dict) -> dict:
+    et = etapas_plano_mkt(proj, d)
+    completas = sum(1 for _, s, _ in et if s == 2)
+    return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et))}
+
+
+def frase_posicionamento(proj: dict) -> str:
+    p = {k: str(proj.get(k) or "").strip() for k in ("posic_segmento", "posic_necessidade", "posic_marca", "posic_categoria",
+                                                     "posic_beneficio", "posic_concorrente", "posic_diferencial")}
+    if not (p["posic_segmento"] and p["posic_marca"]):
+        return ""
+    return (f"Para {p['posic_segmento']}, que {p['posic_necessidade'] or '...'}, {p['posic_marca']} é {p['posic_categoria'] or '...'} "
+            f"que {p['posic_beneficio'] or '...'}. Diferentemente de {p['posic_concorrente'] or '...'}, "
+            f"{p['posic_diferencial'] or '...'}.")
+
+
+def resumo_mix_linhas(proj: dict, d: dict, res: dict) -> list[tuple[str, str]]:
+    """Uma linha por P, montada a partir das escolhas estruturadas (para o plano e os relatórios)."""
+    cv = d.get("canais_venda")
+    canais = ", ".join(f"{c} ({_n(p)}%)" for c, p in zip(cv["canal"], cv["pct_vendas"])) if cv is not None and not cv.empty else ""
+    mm = mc_media(res)
+    linhas = [
+        ("Produto", "; ".join(x for x in [proj.get("mix_nucleo"), proj.get("mix_ampliado")] if _tem_txt(x))
+         + (f". Fase do ciclo de vida: {proj['mix_ciclo'].lower()}." if _tem_txt(proj.get("mix_ciclo")) else "")),
+        ("Preço", ", ".join(x for x in [f"estratégia de {proj['mix_estrategia_preco'].lower()}" if _tem_txt(proj.get("mix_estrategia_preco")) else "",
+                                         f"posição {proj['mix_posicao_preco'].lower()}" if _tem_txt(proj.get("mix_posicao_preco")) else "",
+                                         f"margem de contribuição média de {_p(mm)}" if mm == mm else ""] if x)),
+        ("Praça", ", ".join(x for x in [f"distribuição {proj['mix_distribuicao'].lower()}" if _tem_txt(proj.get("mix_distribuicao")) else "",
+                                         f"canais: {canais}" if canais else ""] if x)),
+        ("Promoção", proj.get("mix_objetivo_com") or ""),
+    ]
+    for rot, campo in (("Pessoas", "mix_pessoas"), ("Processos", "mix_processos"), ("Evidência física", "mix_evidencia")):
+        if _tem_txt(proj.get(campo)):
+            linhas.append((rot, proj[campo]))
+    texto = {"Produto": "mkt_produto", "Preço": "mkt_preco", "Praça": "mkt_praca", "Promoção": "mkt_promocao"}
+    def cap(x):
+        x = str(x).strip()
+        return x[:1].upper() + x[1:]
+    return [(r, cap(t if t else str(proj.get(texto.get(r, ""), "") or ""))) for r, t in linhas
+            if t or _tem_txt(proj.get(texto.get(r, "")))]
+
+
+def conteudo_plano_mkt(proj: dict, d: dict, res: dict) -> list[dict]:
+    """Seções do plano de marketing para a tela e os relatórios: titulo, texto, tabela (DataFrame ou None), refs."""
+    out = []
+    # 1 Situação
+    t = []
+    if proj.get("tam_clientes"):
+        t.append(f"O mercado atendível foi estimado em {_n(float(proj.get('sam_clientes') or 0))} clientes, com meta de "
+                 f"participação de {_n(float(proj.get('som_pct') or 0), 1)}%.")
+    nc = len(d.get("concorrentes", []))
+    if nc:
+        comp = comparar_concorrentes(res.get("cat"), d.get("precos_concorrentes"))
+        idx = indice_preco_medio(res.get("cat"), comp) if not comp.empty else float("nan")
+        t.append(f"Foram analisados {nc} concorrentes" + (f", cujos preços ficam, em média, {_p(abs(idx - 1), 0)} "
+                 f"{'abaixo' if idx >= 1 else 'acima'} dos do projeto." if idx == idx else "."))
+    if _tem_txt(proj.get("pm_situacao")):
+        t.append(str(proj["pm_situacao"]))
+    out.append({"titulo": "Análise da situação", "texto": " ".join(t) or "Diagnóstico a elaborar.", "tabela": None, "refs": ["smith"]})
+    # 2 Objetivos
+    obm = objetivos_marketing(d)
+    tab = None
+    if not obm.empty:
+        tab = pd.DataFrame({"Objetivo": obm["objetivo"], "Indicador": obm["indicador"],
+                            "Meta": [f"{_n(m, 0)} {u}".strip() for m, u in zip(obm["meta"], obm["unidade"])],
+                            "Prazo (mês)": obm["prazo_meses"].map(lambda v: _n(v))})
+    out.append({"titulo": "Objetivos de marketing", "texto": "Os objetivos seguem os critérios SMART: específicos, mensuráveis, "
+                "atingíveis, relevantes e com prazo." if tab is not None else "Objetivos a definir.", "tabela": tab, "refs": []})
+    # 3 Estratégia
+    t = []
+    fp = frase_posicionamento(proj)
+    if fp:
+        t.append("Declaração de posicionamento: " + fp)
+    if _tem_txt(proj.get("pm_ansoff")):
+        t.append(f"Direção de crescimento (matriz de Ansoff): {proj['pm_ansoff'].lower()}, isto é, "
+                 f"{ANSOFF.get(proj['pm_ansoff'], ('', ''))[0].lower()}.")
+    if _tem_txt(proj.get("pm_generica")):
+        t.append(f"Estratégia competitiva: {proj['pm_generica'].lower()}. {GENERICAS.get(proj['pm_generica'], '')}")
+    out.append({"titulo": "Estratégia de marketing", "texto": " ".join(t) or "Estratégia a definir.", "tabela": None,
+                "refs": ["ansoff"] if _tem_txt(proj.get("pm_ansoff")) else []})
+    # 4 Táticas
+    lm = resumo_mix_linhas(proj, d, res)
+    refs = ["kotler"] + (["booms"] if any(r in ("Pessoas", "Processos", "Evidência física") for r, _ in lm) else [])
+    out.append({"titulo": "Táticas: mix de marketing", "texto": "O mix de marketing traduz a estratégia em decisões sobre cada P.",
+                "tabela": pd.DataFrame(lm, columns=["Elemento", "Decisão"]) if lm else None, "refs": refs})
+    # 5 Ações
+    cal = d.get("calendario_mkt")
+    tab = None
+    if cal is not None and not cal.empty:
+        c = cal.sort_values("mes")
+        tab = pd.DataFrame({"Mês": c["mes"].map(lambda v: _n(v)), "Ação": c["acao"], "Canal": c["canal"],
+                            "Custo (R$)": c["custo"].map(lambda v: _n(v, 2))})
+    out.append({"titulo": "Plano de ação", "texto": (f"O calendário prevê {len(cal)} ações, com custo total de R$ "
+                f"{_n(float(cal['custo'].sum()), 2)}." if tab is not None else "Ações a programar."), "tabela": tab, "refs": []})
+    # 6 Controle
+    kp = d.get("kpis_mkt")
+    tab = None
+    if kp is not None and not kp.empty:
+        tab = pd.DataFrame({"Indicador": kp["indicador"], "Meta": kp["meta"], "Frequência": kp["frequencia"],
+                            "Fonte do dado": kp["fonte"], "Responsável": kp["responsavel"]})
+    out.append({"titulo": "Controle", "texto": "Os indicadores abaixo serão acompanhados e comparados com as metas, e os desvios "
+                "levam à revisão das táticas, fechando o ciclo de planejamento." if tab is not None else "Indicadores a definir.",
+                "tabela": tab, "refs": ["mcdonald"]})
+    return out
+
+
+REFS_MKT = {
+    "smith": "SMITH, P. R. **The SOSTAC guide**: to writing the perfect plan. [S. l.]: PR Smith, 2011.",
+    "mcdonald": "McDONALD, Malcolm. **Marketing plans**: how to prepare them, how to use them. 6. ed. Oxford: Butterworth-Heinemann, 2007.",
+    "kotler": "KOTLER, Philip; KELLER, Kevin Lane. **Administração de marketing**. 14. ed. São Paulo: Pearson Education do Brasil, 2012.",
+    "booms": "BOOMS, Bernard H.; BITNER, Mary Jo. Marketing strategies and organization structures for service firms. In: DONNELLY, "
+             "James H.; GEORGE, William R. (ed.). **Marketing of services**. Chicago: American Marketing Association, 1981. p. 47-51.",
+    "ansoff": "ANSOFF, H. Igor. Strategies for diversification. **Harvard Business Review**, v. 35, n. 5, p. 113-124, 1957.",
+    "lascasas": "LAS CASAS, Alexandre Luzzi. **Plano de marketing para micro e pequena empresa**. 6. ed. São Paulo: Atlas, 2011.",
+}
+CITA_MKT = {"smith": "Smith, 2011", "mcdonald": "McDonald, 2007", "kotler": "Kotler; Keller, 2012",
+            "booms": "Booms; Bitner, 1981", "ansoff": "Ansoff, 1957", "lascasas": "Las Casas, 2011"}
+
 # ##############################################################################
 # PARTE: pnbox_pdf.py
 # ##############################################################################
+
 
 
 
@@ -6140,7 +6392,28 @@ def gerar_pdf(proj, d, res, extras) -> bytes:
 
     # ---------------- 9. INVESTIMENTOS ----------------
     # ---------------- MARKETING E OPERAÇÃO ----------------
-    if any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
+    if any(s for _, s, _ in etapas_plano_mkt(proj, d)) or proj.get("mix_nucleo") or proj.get("mix_estrategia_preco"):
+        pdf.secao("PLANO DE MARKETING", nova_pagina=True)
+        for i, sec in enumerate(conteudo_plano_mkt(proj, d, res), 1):
+            pdf.subtitulo(f"{i}. {sec['titulo']}")
+            pdf.paragrafo(sec["texto"])
+            tb = sec["tabela"]
+            if tb is not None and not tb.empty:
+                n = len(tb.columns)
+                larg = {2: (40, 140), 4: (75, 45, 35, 25), 5: (50, 30, 25, 45, 30)}.get(n)
+                if n == 4 and "Mês" in tb.columns:
+                    larg = (15, 95, 40, 30)
+                pdf.tabela(tb, larguras=larg, alinhar=tuple(["LEFT"] * n), tam=7.5)
+        co = coerencia_mix(proj, d, res)
+        if not co.empty:
+            pdf.subtitulo("Coerência do mix")
+            pdf.tabela(co.assign(Situação=co["Situação"].str.replace("✅ ", "").str.replace("⚠️ ", "")),
+                       larguras=(55, 25, 100), alinhar=("LEFT", "LEFT", "LEFT"), tam=7.5)
+        for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
+            if proj.get(k):
+                pdf.subtitulo(f"Justificativa: {rot.lower()}")
+                pdf.paragrafo(proj[k])
+    elif any(proj.get(k) for k in ("mkt_produto", "mkt_preco", "mkt_praca", "mkt_promocao")):
         pdf.secao("PLANO DE MARKETING (4Ps)")
         for rot, k in [("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"), ("Promoção", "mkt_promocao")]:
             if proj.get(k):
@@ -6606,6 +6879,7 @@ def regras_situacao(proj: dict, d: dict) -> dict:
         "sumario": (len(str(proj["sumario_executivo"])) > 200, bool(proj["sumario_executivo"])),
         **regras_v71(proj, d),
         **regras_v8(proj, d),
+        **regras_mix(proj, d),
     }
 
 
@@ -6613,7 +6887,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao"} | OPCIONAIS_V8
+    fora = {"realizado", "adocao", "plano_mkt"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -7653,6 +7927,7 @@ def ficha_avaliacao_pdf(avaliacoes: list, rubrica=RUBRICA_PADRAO, professor="", 
 
 
 
+
 ENTRELINHA = 6.4      # 12 pt com espaçamento 1,5
 RECUO = " " * 8  # recuo de primeira linha do parágrafo
 
@@ -7663,6 +7938,9 @@ REFS_METODO = {
     "sebrae": "SERVIÇO BRASILEIRO DE APOIO ÀS MICRO E PEQUENAS EMPRESAS. **Aplicações de análise de sobrevivência em estudos do "
               "Sebrae**. Brasília: Sebrae, 2026. Disponível em: https://datasebrae.com.br. Acesso em: {hoje}.",
 }
+
+
+REFS_METODO.update(REFS_MKT)
 
 
 class RelatorioABNT(Relatorio):
@@ -7883,8 +8161,22 @@ def _conteudo(pdf, proj, d, res, refs_extra: list) -> list:
             larguras=(28, 66, 66), alinhar=("LEFT", "LEFT", "LEFT"))
     # 5 MARKETING
     pdf.secao_abnt("5", "Plano de marketing")
-    pdf.texto("\n".join(f"{r}: {proj.get(k)}" for r, k in (("Produto", "mkt_produto"), ("Preço", "mkt_preco"), ("Praça", "mkt_praca"),
-                                                           ("Promoção", "mkt_promocao")) if proj.get(k)))
+    pdf.texto("O plano de marketing segue a sequência análise da situação, objetivos, estratégia, táticas, ações e controle "
+              "(Smith, 2011; McDonald, 2007), também adotada para micro e pequenas empresas por Las Casas (2011).")
+    usadas += ["smith", "mcdonald", "lascasas"]
+    for i, sec in enumerate(conteudo_plano_mkt(proj, d, res), 1):
+        pdf.secao_abnt(f"5.{i}", sec["titulo"], 2)
+        cits = [CITA_MKT[r] for r in sec["refs"] if r not in ("smith", "mcdonald")]
+        cit = f"({'; '.join(cits)})" if cits else ""
+        pdf.texto(sec["texto"].rstrip(".") + f" {cit}." if cit else sec["texto"])
+        usadas += sec["refs"]
+        tb = sec["tabela"]
+        if tb is not None and not tb.empty:
+            n = len(tb.columns)
+            larg = {2: (40, 120), 4: (70, 40, 30, 20), 5: (45, 25, 25, 40, 25)}.get(n)
+            if n == 4 and "Mês" in tb.columns:
+                larg = (15, 85, 35, 25)
+            pdf.tabela_abnt(sec["titulo"], tb, larguras=larg, alinhar=tuple(["LEFT"] * n), tam=9)
     # 6 OPERACIONAL
     pdf.secao_abnt("6", "Plano operacional")
     pdf.texto(proj.get("op_processos") or "Processos a descrever.")
@@ -8009,7 +8301,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.3"
+VERSAO_PROGRAMA = "8.4"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -8196,8 +8488,10 @@ PAGINAS = [
      "Linhas de produto por crescimento do mercado e participação relativa: estrelas, vacas leiteiras, interrogações e abacaxis."),
     ("bsc", "Análise estratégica", "🗺️", "Balanced Scorecard",
      "Objetivos e indicadores nas quatro perspectivas e o mapa estratégico que liga tudo."),
-    ("marketing", "Marketing e operação", "📣", "Plano de marketing (4Ps)",
-     "Produto, preço, praça e promoção: como o negócio vai chegar ao cliente."),
+    ("plano_mkt", "Marketing e operação", "🧭", "Plano de marketing",
+     "Situação, objetivos, estratégia, táticas, ações e controle, amarrando as ferramentas de marketing."),
+    ("marketing", "Marketing e operação", "📣", "Mix de marketing (4Ps e 7Ps)",
+     "Produto, preço, praça e promoção (e, em serviços, pessoas, processos e evidência física) ligados aos números do plano."),
     ("canais", "Marketing e operação", "🛒", "Canais e funil de vendas",
      "Avalie os canais de aquisição e acompanhe a conversão do funil."),
     ("orcamento_mkt", "Marketing e operação", "💸", "Orçamento de marketing e funil AARRR",
@@ -8661,12 +8955,13 @@ def situacao(p: str) -> str:
     }
     regras.update(regras_v71(proj, d))
     regras.update(regras_v8(proj, d))
+    regras.update(regras_mix(proj, d))
     if p not in regras:
         return ""
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p == "plano_mkt"
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -12743,6 +13038,110 @@ def pg_marketing():
         _aba_diagnostico()
     proxima("marketing")
 
+
+# ------------------------------------------------------------------------------
+# PLANO DE MARKETING (v8.4)
+# ------------------------------------------------------------------------------
+SELO_ETAPA = {2: "✅", 1: "◐", 0: "○"}
+
+
+def _botao_ir(rotulo, pagina, chave_):
+    if st.button(rotulo, key=wk(chave_)):
+        ir(pagina)
+        st.rerun()
+
+
+def pg_plano_mkt():
+    cabecalho("plano_mkt")
+    res = R()
+    st.caption("O plano segue a sequência proposta na literatura: análise da situação, objetivos, estratégia, táticas, "
+               "ações e controle (Smith, 2011; McDonald, 2007; Las Casas, 2011). Quase tudo vem das outras ferramentas; "
+               "aqui o grupo amarra as partes e completa o que falta.")
+    et = etapas_plano_mkt(proj, d)
+    cols = st.columns(6)
+    for c, (nome, s, falta) in zip(cols, et):
+        c.metric(nome, SELO_ETAPA[s], help=f"Completa quando houver {falta}.")
+    cont = conteudo_plano_mkt(proj, d, res)
+    abas = st.tabs([f"{i + 1}. {n}" for i, (n, _) in enumerate(ETAPAS_PLANO)])
+    with abas[0]:
+        st.caption(ETAPAS_PLANO[0][1])
+        st.markdown(cont[0]["texto"] if not _tem_txt(proj.get("pm_situacao")) else
+                    cont[0]["texto"].replace(str(proj["pm_situacao"]), "").strip() or "")
+        c = st.columns(4)
+        for col, (rot, pg) in zip(c, [("🎯 Mercado", "mercado"), ("🥊 Concorrência", "concorrencia"), ("🧩 SWOT", "swot"),
+                                      ("🔀 SWOT cruzada", "swot_cruzada")]):
+            with col:
+                _botao_ir(rot, pg, "pm_ir_" + pg)
+        auto_unica("projeto", {"pm_situacao": st.text_area(
+            "Síntese do diagnóstico: as três conclusões mais importantes para o marketing", proj.get("pm_situacao") or "",
+            height=120, key=wk("pm_sit"))})
+    with abas[1]:
+        st.caption(ETAPAS_PLANO[1][1] + " Entram aqui os objetivos da perspectiva Clientes cadastrados em Missão, visão, valores e objetivos.")
+        if cont[1]["tabela"] is not None:
+            st.dataframe(cont[1]["tabela"], hide_index=True, width="stretch")
+        else:
+            st.info("Nenhum objetivo da perspectiva Clientes ainda. Exemplos: conquistar 300 clientes ativos até o mês 6; "
+                    "chegar a 40% de recompra em 30 dias até o mês 9.", icon="💡")
+        _botao_ir("🧭 Abrir os objetivos SMART", "identidade", "pm_ir_obj")
+    with abas[2]:
+        st.caption(ETAPAS_PLANO[2][1])
+        fp = frase_posicionamento(proj)
+        st.markdown("**Declaração de posicionamento:** " + (fp or "_ainda não preenchida_"))
+        _botao_ir("📌 Abrir o posicionamento", "posicionamento", "pm_ir_pos")
+        a, b = st.columns(2)
+        with a:
+            ans = _select("Direção de crescimento (matriz de Ansoff)", "pm_ansoff", ANSOFF,
+                          "Para um negócio novo, pense no principal movimento dos próximos anos depois da abertura.")
+            if ans:
+                st.caption(f"**{ANSOFF[ans][0]}.** {ANSOFF[ans][1]}")
+        with b:
+            gen = _select("Estratégia competitiva (Porter)", "pm_generica", GENERICAS)
+            if gen:
+                st.caption(GENERICAS[gen])
+        auto_unica("projeto", {"pm_ansoff": ans, "pm_generica": gen})
+        if gen.startswith("Liderança") and proj.get("mix_posicao_preco") == "Premium":
+            st.warning("Liderança em custo com preço premium: as duas escolhas puxam para lados opostos.", icon="⚠️")
+        if gen and "diferenciação" in gen.lower() and proj.get("mix_estrategia_preco") == "Penetração":
+            st.warning("Diferenciação com preço de penetração: se o diferencial existe, ele pode ser cobrado.", icon="⚠️")
+    with abas[3]:
+        st.caption(ETAPAS_PLANO[3][1])
+        if cont[3]["tabela"] is not None:
+            st.dataframe(cont[3]["tabela"], hide_index=True, width="stretch")
+        co = coerencia_mix(proj, d, res)
+        if not co.empty:
+            ok = int(co["Situação"].str.startswith("✅").sum())
+            (st.success if ok == len(co) else st.warning)(f"Coerência do mix: {ok} de {len(co)} combinações coerentes.")
+        _botao_ir("📣 Abrir o mix de marketing", "marketing", "pm_ir_mix")
+    with abas[4]:
+        st.caption(ETAPAS_PLANO[4][1])
+        if cont[4]["tabela"] is not None:
+            st.markdown(cont[4]["texto"])
+            st.dataframe(cont[4]["tabela"], hide_index=True, width="stretch")
+        else:
+            st.info("As ações ficam no calendário do orçamento de marketing.", icon="💡")
+        _botao_ir("🗓️ Abrir o calendário de marketing", "orcamento_mkt", "pm_ir_cal")
+    with abas[5]:
+        st.caption(ETAPAS_PLANO[5][1] + " McDonald (2007) lembra que o plano só fecha o ciclo quando os resultados "
+                   "voltam para a análise da situação seguinte.")
+        if d["kpis_mkt"].empty and st.button("✨ Sugerir indicadores", key=wk("pm_kpi_sug")):
+            recarregar_tabela("kpis_mkt", pd.DataFrame([{"indicador": i, "meta": "", "frequencia": f, "fonte": fo, "responsavel": ""}
+                                                        for i, f, fo in KPIS_SUGERIDOS]), "indicador")
+            st.rerun()
+        editor("kpis_mkt", {"indicador": T("Indicador", required=True, width="medium"), "meta": T("Meta"),
+                            "frequencia": S("Frequência", options=FREQUENCIAS), "fonte": T("De onde vem o dado", width="medium"),
+                            "responsavel": T("Responsável")}, "indicador")
+        sem_meta = [i for i, m in zip(d["kpis_mkt"]["indicador"], d["kpis_mkt"]["meta"]) if not str(m).strip()]
+        if sem_meta:
+            st.warning("Indicadores sem meta não servem para controle: " + ", ".join(sem_meta) + ".", icon="⚠️")
+        _botao_ir("📊 Abrir o acompanhamento do realizado", "realizado", "pm_ir_real")
+    with st.expander("📄 Ver o plano de marketing montado"):
+        for i, sec in enumerate(cont, 1):
+            st.markdown(f"**{i}. {sec['titulo']}**")
+            st.markdown(sec["texto"])
+            if sec["tabela"] is not None:
+                st.dataframe(sec["tabela"], hide_index=True, width="stretch")
+    proxima("plano_mkt")
+
 # ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
 # ##############################################################################
@@ -13281,7 +13680,7 @@ Você está usando a **versão on-line**. Os projetos ficam guardados **no armaz
 ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade, "canvas": pg_canvas, "porter": pg_porter,
          "ge": pg_ge, "bcg": pg_bcg, "bsc": pg_bsc, "reforma": pg_reforma, "segmentos": pg_segmentos, "personas": pg_personas,
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
-         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing,
+         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
          "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,
