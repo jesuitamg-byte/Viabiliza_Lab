@@ -8,3 +8,4 @@ v7.1 | 91cb58e | validação, marketing, incerteza e defesa
 v7.2 | a3c003b | novo visual das matrizes e modelo de serviços
 v7.2.1 | b8febfc | correção do sumário executivo
 v8.0 | a83049f | dados públicos, ABNT, financiamento e modo professor
+v8.1 | c096eb2 | mix de marketing integrado: Produto e Preço
