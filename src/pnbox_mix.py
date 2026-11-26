@@ -563,7 +563,9 @@ def regras_mix(proj: dict, d: dict) -> dict:
             "sazonalidade": (tem_saz, saz is not None and len(saz) > 0),
             "tornado": (len(d.get("mc_faixas", [])) > 0 and (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
                         len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
-            "taxas": ("bcb_selic" in set(d["dados_publicos"]["chave"]), "bcb_selic" in set(d["dados_publicos"]["chave"]))}
+            "taxas": ("bcb_selic" in set(d["dados_publicos"]["chave"]), "bcb_selic" in set(d["dados_publicos"]["chave"])),
+            "mapa": (len(d.get("mapa_pontos", [])) > 0 and float(proj.get("loc_lat") or 0) != 0, len(d.get("mapa_pontos", [])) > 0),
+            "arvore": (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0, len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0)}
 
 
 def frase_posicionamento(proj: dict) -> str:

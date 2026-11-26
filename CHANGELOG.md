@@ -7,6 +7,17 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.0 (25/11/2026): mapa de concorrentes, árvore de decisão e acessibilidade
+
+**Mapa de concorrentes, árvore de decisão e acessibilidade**
+- **Mapa de concorrentes** (OpenStreetMap, gratuito): busca no município do projeto os estabelecimentos do mesmo tipo (14 tipos, como cafeteria, padaria, salão, oficina e loja de roupas) e os lugares que geram movimento (escolas, faculdades, pontos de ônibus, hospitais e supermercados).
+- O mapa mostra o ponto do negócio e o raio de atendimento, a distância de cada concorrente e a densidade por mil habitantes, usando a população do IBGE. Os nomes encontrados podem ser levados para o cadastro de concorrentes. Os pontos ficam salvos no projeto.
+- **Árvore de decisão:** abrir ou não abrir em três cenários de demanda com probabilidades escolhidas pelo grupo. Inclui a **opção de abandono** (encerrar depois do Ano 1, vender os equipamentos e recuperar o capital de giro) e o **valor da informação perfeita**, que indica quanto vale, no máximo, uma pesquisa ou um piloto antes de decidir.
+- **Acessibilidade** (menu lateral): letra maior, alto contraste com foco visível no teclado e botão para ouvir a leitura dos resultados com a voz do próprio navegador.
+- Com esta versão, o programa chega a 73 ferramentas. Os projetos antigos continuam abrindo com os mesmos números da v8.0.
+
+---
+
 ## v8.9 (25/11/2026): pitch em PowerPoint e pontos de partida por setor
 
 **Pitch em PowerPoint e pontos de partida por setor**

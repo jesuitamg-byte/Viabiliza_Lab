@@ -568,3 +568,104 @@ def pg_taxas():
     mostrar_leitura("taxas", leitura_taxas(proj, d, res, selic, ipca, dg["tma"]))
     st.caption("Os prêmios são escolhas do grupo e precisam ser justificados no plano; não existe um valor oficial para eles.")
     proxima("taxas")
+
+
+# ------------------------------------------------------------------------------
+# MAPA DE CONCORRENTES (v9.0)
+# ------------------------------------------------------------------------------
+def pg_mapa():
+    cabecalho("mapa")
+    cod, nome = str(proj.get("municipio_ibge") or ""), str(proj.get("municipio_nome") or "")
+    st.caption("Estabelecimentos parecidos com o seu e lugares que geram movimento de pessoas, a partir do OpenStreetMap, "
+               "um mapa colaborativo e gratuito. © colaboradores do OpenStreetMap (licença ODbL).")
+    if not cod:
+        st.info("Escolha primeiro o município em Dados públicos do município.", icon="💡")
+        if st.button("🏙️ Abrir Dados públicos", key=wk("mapa_dp")):
+            ir("dados_publicos")
+            st.rerun()
+        return
+    st.markdown(f"**Município:** {nome} ({proj.get('uf_sigla') or ''})")
+    a, b = st.columns(2)
+    tipo = a.selectbox("Tipo de estabelecimento concorrente", list(TIPOS_OSM),
+                       index=list(TIPOS_OSM).index(proj["mapa_tipo"]) if proj.get("mapa_tipo") in TIPOS_OSM else 0, key=wk("mapa_tipo"))
+    mov = b.multiselect("Lugares que geram movimento", list(PONTOS_MOVIMENTO), ["Escolas", "Pontos de ônibus"], key=wk("mapa_mov"))
+    auto_unica("projeto", {"mapa_tipo": tipo})
+    if st.button("🗺️ Buscar no OpenStreetMap", key=wk("mapa_busca")):
+        try:
+            with st.spinner("Consultando o OpenStreetMap..."):
+                conc = buscar_osm(cod, nome, TIPOS_OSM[tipo]).assign(grupo="Concorrente", tipo=tipo)
+                filtros = [f for m in mov for f in PONTOS_MOVIMENTO[m]]
+                pts = buscar_osm(cod, nome, filtros).assign(grupo="Movimento", tipo=", ".join(mov)) if filtros else pd.DataFrame()
+            novo = pd.concat([conc, pts], ignore_index=True)
+            recarregar_tabela("mapa_pontos", novo[["grupo", "tipo", "nome", "lat", "lon", "endereco"]] if not novo.empty else
+                              pd.DataFrame(columns=["grupo", "tipo", "nome", "lat", "lon", "endereco"]), "nome")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Não foi possível consultar o OpenStreetMap agora ({type(e).__name__}). Tente de novo em alguns minutos.", icon="⛔")
+    mp = d["mapa_pontos"]
+    st.markdown("#### Seu ponto e o raio de atendimento")
+    st.caption("No Google Maps, clique com o botão direito no local pretendido e copie as coordenadas (latitude e longitude).")
+    c1, c2, c3 = st.columns(3)
+    lat = c1.number_input("Latitude", value=float(proj.get("loc_lat") or 0.0), format="%.6f", key=wk("mapa_lat"))
+    lon = c2.number_input("Longitude", value=float(proj.get("loc_lon") or 0.0), format="%.6f", key=wk("mapa_lon"))
+    raio = c3.number_input("Raio de atendimento (km)", 0.1, 50.0, float(proj.get("mapa_raio_km") or 1.0), 0.1, key=wk("mapa_raio"))
+    auto_unica("projeto", {"loc_lat": lat, "loc_lon": lon, "mapa_raio_km": raio})
+    if mp.empty:
+        st.info("Nenhum ponto buscado ainda.", icon="💡")
+        proxima("mapa")
+        return
+    cores = {"Concorrente": "#d62828", "Movimento": "#2f6fd0"}
+    vis = mp.assign(cor=mp["grupo"].map(cores).fillna("#888888"), tam=30.0)
+    if lat and lon:
+        vis = pd.concat([vis, pd.DataFrame([{"grupo": "Seu ponto", "nome": proj.get("nome_negocio"), "lat": lat, "lon": lon,
+                                             "cor": "#2a9d3c", "tam": 70.0}])], ignore_index=True)
+    st.map(vis, latitude="lat", longitude="lon", color="cor", size="tam")
+    st.caption("🔴 concorrentes · 🔵 lugares de movimento · 🟢 seu ponto")
+    conc = mp[mp["grupo"] == "Concorrente"].copy()
+    pts = mp[mp["grupo"] == "Movimento"]
+    if lat and lon and not conc.empty:
+        conc["Distância (km)"] = [round(distancia_km(lat, lon, x, y), 2) for x, y in zip(conc["lat"], conc["lon"])]
+        conc = conc.sort_values("Distância (km)")
+    st.dataframe(conc.drop(columns=["grupo", "lat", "lon"]).rename(columns={"tipo": "Tipo", "nome": "Nome", "endereco": "Endereço"}),
+                 hide_index=True, width="stretch")
+    dp = d["dados_publicos"]
+    pop = float(dp.loc[dp["chave"] == "populacao", "valor"].sum()) if not dp.empty else 0.0
+    mostrar_leitura("mapa", leitura_mapa(conc, pts, pop, lat, lon, raio))
+    nomes = [n for n in conc["nome"] if n != "(sem nome no mapa)"]
+    escolhidos = st.multiselect("Levar para o cadastro de concorrentes", nomes, key=wk("mapa_leva"))
+    if escolhidos and st.button("➕ Adicionar aos concorrentes", key=wk("mapa_add")):
+        atuais = set(d["concorrentes"]["nome"].astype(str))
+        novos = pd.DataFrame([{"nome": n, "observacoes": "Encontrado no OpenStreetMap"} for n in escolhidos if n not in atuais])
+        recarregar_tabela("concorrentes", pd.concat([d["concorrentes"], novos], ignore_index=True), "nome")
+        st.toast("Concorrentes adicionados.", icon="✅")
+        st.rerun()
+    proxima("mapa")
+
+
+# ------------------------------------------------------------------------------
+# ÁRVORE DE DECISÃO (v9.0)
+# ------------------------------------------------------------------------------
+def pg_arvore():
+    cabecalho("arvore")
+    res = R()
+    if res["anos"][1]["rec_bruta"] <= 0:
+        st.info("Cadastre produtos ou assinaturas para montar a árvore de decisão.", icon="💡")
+        return
+    st.caption("A árvore compara abrir e não abrir considerando três cenários de demanda (os mesmos da análise de cenários), "
+               "a possibilidade de encerrar depois do primeiro ano se o cenário for ruim e o valor de saber o cenário antes de decidir.")
+    a, b = st.columns(2)
+    pp_ = a.slider("Probabilidade do cenário pessimista (%)", 0, 100, int(proj.get("arv_p_pess") or 25), key=wk("arv_pp"))
+    po_ = b.slider("Probabilidade do cenário otimista (%)", 0, 100 - pp_, min(int(proj.get("arv_p_otim") or 25), 100 - pp_), key=wk("arv_po"))
+    auto_unica("projeto", {"arv_p_pess": float(pp_), "arv_p_otim": float(po_)})
+    st.caption(f"Provável: {100 - pp_ - po_}%. As variações de cada cenário ficam em Simulador e cenários.")
+    av = arvore_decisao(res, proj, pp_ / 100, po_ / 100)
+    st.graphviz_chart(dot_arvore(av), width="stretch")
+    k = st.columns(4)
+    k[0].metric("Valor esperado de abrir", brl(av["ev_com_opcao"]))
+    k[1].metric("VPL do abandono no pessimista", brl(av["abandono"]))
+    k[2].metric("Valor da opção de abandono", brl(av["valor_opcao"]))
+    k[3].metric("Valor máximo de uma pesquisa", brl(av["evpi"]), help="Valor esperado da informação perfeita (VEIP)")
+    mostrar_leitura("arvore", leitura_arvore(av))
+    st.caption("O abandono considera a venda dos equipamentos pelo percentual de revenda informado na perda aceitável dos sócios "
+               "e a recuperação do capital de giro ao fim do Ano 1.")
+    proxima("arvore")

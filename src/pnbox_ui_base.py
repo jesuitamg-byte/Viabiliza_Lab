@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.9"
+VERSAO_PROGRAMA = "9.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -193,6 +193,8 @@ PAGINAS = [
      "Compare o seu negócio com os concorrentes em notas de 0 a 10 por atributo."),
     ("oceano", "Problema e solução", "🌊", "Curva de valor e ERRC",
      "Compare a sua curva com a dos concorrentes e decida o que eliminar, reduzir, elevar e criar (oceano azul)."),
+    ("mapa", "Problema e solução", "🗺️", "Mapa de concorrentes",
+     "Concorrentes e lugares de movimento no mapa do município (OpenStreetMap), com raio de atendimento."),
     ("posicionamento", "Problema e solução", "📍", "Posicionamento e mapa perceptual",
      "A frase que diz para quem, o que e por que é diferente, e onde a marca fica frente aos concorrentes."),
     ("forcas", "Estratégia", "💪", "Forças e fraquezas",
@@ -265,6 +267,8 @@ PAGINAS = [
      "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
     ("tornado", "Ferramentas complementares", "🌪️", "Sensibilidade do VPL (tornado)",
      "Quais premissas mais mexem no VPL, quanto cada uma pode mudar até o VPL zerar e o mapa preço × volume."),
+    ("arvore", "Ferramentas complementares", "🌳", "Árvore de decisão",
+     "Abrir ou não abrir em três cenários, opção de abandono e quanto vale pesquisar antes de decidir."),
     ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
      "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
     ("valuation", "Ferramentas complementares", "💎", "Valuation e rodada de investimento",
@@ -624,6 +628,9 @@ def mostrar_leitura(chave_: str, frases: list):
                 return
             st.caption("Compare com a leitura do programa:")
         st.markdown("\n".join(f"- {f}" for f in frases))
+        if ss.get("tg_voz", False):
+            import streamlit.components.v1 as _cmp
+            _cmp.html(html_leitor(" ".join(frases)), height=48)
 
 
 def auto_unica(tabela: str, novos: dict):
@@ -724,7 +731,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado", "taxas")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado", "taxas", "mapa", "arvore")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -813,6 +820,14 @@ with st.sidebar:
         ss.tema = "escuro" if tema_escuro else "claro"
         st.rerun()
 
+    with st.expander("♿ Acessibilidade"):
+        st.toggle("Letra maior", value=False, key="tg_fonte")
+        st.toggle("Alto contraste", value=False, key="tg_contraste")
+        st.toggle("Botão para ouvir as leituras", value=False, key="tg_voz",
+                  help="Usa a voz do próprio navegador para ler em voz alta a leitura dos resultados.")
+    _css_ac = css_acessibilidade(ss.get("tg_fonte", False), ss.get("tg_contraste", False))
+    if _css_ac:
+        st.markdown(_css_ac, unsafe_allow_html=True)
     st.toggle("📌 Leitura automática das tabelas", value=True, key="tg_leit",
               help="Ao final de cada tabela, frases que dizem o que os números mostram.")
     st.toggle("✍️ Modo exercício", value=False, key="tg_exerc",

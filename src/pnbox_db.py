@@ -99,6 +99,9 @@ SCHEMA = {
         ("pm_situacao", "TEXT"), ("pm_ansoff", "TEXT"), ("pm_generica", "TEXT"),
         # v8.6: sazonalidade
         ("saz_mes_inicio", "REAL"), ("saz_perfil", "TEXT"),
+        # v9.0: mapa de concorrentes e árvore de decisão
+        ("loc_lat", "REAL"), ("loc_lon", "REAL"), ("mapa_raio_km", "REAL"), ("mapa_tipo", "TEXT"),
+        ("arv_p_pess", "REAL"), ("arv_p_otim", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -204,6 +207,7 @@ SCHEMA = {
     "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
     "kpis_mkt": [("indicador", "TEXT"), ("meta", "TEXT"), ("frequencia", "TEXT"), ("fonte", "TEXT"), ("responsavel", "TEXT")],
     "sazonalidade": [("mes", "REAL"), ("indice", "REAL")],
+    "mapa_pontos": [("grupo", "TEXT"), ("tipo", "TEXT"), ("nome", "TEXT"), ("lat", "REAL"), ("lon", "REAL"), ("endereco", "TEXT")],
     "leituras_aluno": [("tabela", "TEXT"), ("texto", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
@@ -228,6 +232,7 @@ PROJETO_PADRAO = {
     "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
     "val_crescimento_perp_pct": 3.0, "val_multiplo_ebitda": 4.0, "val_multiplo_receita": 1.0,
     "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0, "saz_mes_inicio": 1.0,
+    "mapa_raio_km": 1.0, "arv_p_pess": 25.0, "arv_p_otim": 25.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)

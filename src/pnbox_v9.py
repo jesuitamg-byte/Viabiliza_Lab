@@ -551,3 +551,182 @@ def criar_projeto_setor(caminho, nome: str, setor: str) -> None:
                          [(m + 1, float(v)) for m, v in enumerate(PERFIS_SAZONAIS[s["saz"]])])
     conn.commit()
     conn.close()
+
+
+# ------------------------------------------------------------------------------
+# MAPA DE CONCORRENTES E PONTOS DE MOVIMENTO (v9.0) - dados do OpenStreetMap (Overpass API, gratuita)
+# ------------------------------------------------------------------------------
+API_OVERPASS = "https://overpass-api.de/api/interpreter?data="
+TIPOS_OSM = {
+    "Cafeteria": ['"amenity"="cafe"'], "Padaria": ['"shop"="bakery"'], "Restaurante": ['"amenity"="restaurant"'],
+    "Lanchonete": ['"amenity"="fast_food"'], "Salão de beleza": ['"shop"="hairdresser"', '"shop"="beauty"'],
+    "Oficina mecânica": ['"shop"="car_repair"'], "Loja de roupas": ['"shop"="clothes"'], "Farmácia": ['"amenity"="pharmacy"'],
+    "Mercado e mercearia": ['"shop"="supermarket"', '"shop"="convenience"'], "Informática e eletrônicos": ['"shop"="computer"', '"shop"="electronics"', '"shop"="mobile_phone"'],
+    "Academia": ['"leisure"="fitness_centre"'], "Pet shop": ['"shop"="pet"'], "Sorveteria": ['"amenity"="ice_cream"'],
+    "Escola de idiomas e cursos": ['"amenity"="language_school"', '"amenity"="training"'],
+}
+PONTOS_MOVIMENTO = {"Escolas": ['"amenity"="school"'], "Faculdades": ['"amenity"="university"', '"amenity"="college"'],
+                    "Pontos de ônibus": ['"highway"="bus_stop"'], "Hospitais e clínicas": ['"amenity"="hospital"', '"amenity"="clinic"'],
+                    "Supermercados": ['"shop"="supermarket"']}
+
+
+def consulta_overpass(cod_ibge: str, nome: str, filtros: list, limite: int = 300) -> str:
+    """Consulta Overpass: área do município pelo código do IBGE (ou pelo nome) e os estabelecimentos com as etiquetas pedidas."""
+    nome = str(nome).replace('"', "")
+    partes = "".join(f"node[{f}](area.a);way[{f}](area.a);" for f in filtros)
+    return (f'[out:json][timeout:40];(area["IBGE:GEOCODIGO"="{cod_ibge}"];area["name"="{nome}"]["admin_level"="8"]["boundary"="administrative"];)->.a;'
+            f"({partes});out center {limite};")
+
+
+def ler_overpass(js: dict) -> pd.DataFrame:
+    linhas, vistos = [], set()
+    for e in js.get("elements", []):
+        if e["id"] in vistos:
+            continue
+        vistos.add(e["id"])
+        lat = e.get("lat", e.get("center", {}).get("lat"))
+        lon = e.get("lon", e.get("center", {}).get("lon"))
+        if lat is None or lon is None:
+            continue
+        t = e.get("tags", {})
+        end = ", ".join(x for x in [t.get("addr:street", ""), t.get("addr:housenumber", "")] if x)
+        linhas.append({"nome": t.get("name", "(sem nome no mapa)"), "lat": float(lat), "lon": float(lon), "endereco": end})
+    return pd.DataFrame(linhas, columns=["nome", "lat", "lon", "endereco"])
+
+
+def buscar_osm(cod_ibge: str, nome: str, filtros: list) -> pd.DataFrame:
+    from urllib.parse import quote
+    from pnbox_v8 import baixar_json
+    return ler_overpass(baixar_json(API_OVERPASS + quote(consulta_overpass(cod_ibge, nome, filtros))))
+
+
+def distancia_km(lat1, lon1, lat2, lon2) -> float:
+    import math
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def leitura_mapa(conc: pd.DataFrame, pontos: pd.DataFrame, populacao: float, lat: float, lon: float, raio: float) -> list[str]:
+    out = []
+    n = len(conc)
+    if populacao and populacao > 0:
+        out.append(f"{_n(n)} estabelecimentos do tipo escolhido aparecem no mapa do município: cerca de "
+                   f"{_n(n / populacao * 1000, 2)} por mil habitantes, ou um para cada {_n(populacao / n) if n else '-'} habitantes.")
+    else:
+        out.append(f"{_n(n)} estabelecimentos do tipo escolhido aparecem no mapa do município.")
+    if lat and lon and n:
+        perto = conc[[distancia_km(lat, lon, a, b) <= raio for a, b in zip(conc["lat"], conc["lon"])]]
+        out.append(f"No raio de {_n(raio, 1)} km do ponto escolhido há {_n(len(perto))} concorrente(s) mapeado(s)."
+                   .replace("concorrente(s) mapeado(s)", "concorrente mapeado" if len(perto) == 1 else "concorrentes mapeados"))
+        if not pontos.empty:
+            pp = pontos[[distancia_km(lat, lon, a, b) <= raio for a, b in zip(pontos["lat"], pontos["lon"])]]
+            out.append(f"No mesmo raio há {_n(len(pp))} ponto(s) que geram movimento de pessoas.".replace(
+                "ponto(s) que geram", "ponto que gera" if len(pp) == 1 else "pontos que geram"))
+    out.append("O OpenStreetMap é feito por voluntários e costuma estar incompleto no interior: confira em campo e complete a lista de concorrentes.")
+    return out
+
+
+# ------------------------------------------------------------------------------
+# ÁRVORE DE DECISÃO E OPÇÕES REAIS (v9.0)
+# ------------------------------------------------------------------------------
+def vpl_cenario(res: dict, proj: dict, qual: str) -> float:
+    if qual == "pess":
+        r, c = -float(proj.get("cen_pess_receita_pct") or 0) / 100, float(proj.get("cen_pess_custo_pct") or 0) / 100
+    elif qual == "otim":
+        r, c = float(proj.get("cen_otim_receita_pct") or 0) / 100, -float(proj.get("cen_otim_custo_pct") or 0) / 100
+    else:
+        r = c = 0.0
+    return vpl_variado(res, volume=r, materiais=c, salarios=c, fixos=c)
+
+
+def arvore_decisao(res: dict, proj: dict, p_pess: float, p_otim: float, custo_pesquisa: float = 0.0) -> dict:
+    """
+    Decisão de abrir com três cenários de demanda, opção de abandono no pessimista e valor da informação.
+    Abandono: depois do Ano 1, vende os ativos fixos (percentual de revenda do projeto) e recupera o capital de giro.
+    """
+    p_prov = max(0.0, 1 - p_pess - p_otim)
+    tma = res["tma"]
+    vp = {"pess": vpl_cenario(res, proj, "pess"), "prov": vpl_cenario(res, proj, "prov"), "otim": vpl_cenario(res, proj, "otim")}
+    # valor de abandonar no fim do Ano 1, no cenário pessimista
+    rp = -float(proj.get("cen_pess_receita_pct") or 0) / 100
+    cp = float(proj.get("cen_pess_custo_pct") or 0) / 100
+    a1 = res["anos"][1]
+    rec = a1["rec_bruta"] * (1 + rp)
+    var_ratio = (a1["impostos"] + a1["outras_var"]) / a1["rec_bruta"] if a1["rec_bruta"] else 0.0
+    ebitda1 = rec - a1["custo_dir"] * (1 + rp) * (1 + cp) - rec * var_ratio - (a1["pessoal"] + a1["fixos"]) * (1 + cp)
+    revenda = float(proj.get("revenda_ativos_pct") or 0) / 100 * res["inv_fixo"]
+    v_aband = -res["investimento_total"] + (ebitda1 + revenda + res["capital_giro"]) / (1 + tma)
+    v_pess_op = max(vp["pess"], v_aband)
+    ev_sem = p_pess * vp["pess"] + p_prov * vp["prov"] + p_otim * vp["otim"]
+    ev_com_op = p_pess * v_pess_op + p_prov * vp["prov"] + p_otim * vp["otim"]
+    # informação perfeita: só abre nos cenários de VPL positivo
+    ev_info = p_pess * max(v_pess_op, 0) + p_prov * max(vp["prov"], 0) + p_otim * max(vp["otim"], 0)
+    melhor_sem_info = max(ev_com_op, 0.0)
+    return {"p": {"pess": p_pess, "prov": p_prov, "otim": p_otim}, "vpl": vp, "abandono": v_aband, "pess_com_opcao": v_pess_op,
+            "abandona": v_aband > vp["pess"], "ev_sem_opcao": ev_sem, "ev_com_opcao": ev_com_op,
+            "valor_opcao": ev_com_op - ev_sem, "evpi": ev_info - melhor_sem_info, "custo_pesquisa": custo_pesquisa,
+            "decisao": "Abrir" if ev_com_op > 0 else "Não abrir"}
+
+
+def dot_arvore(av: dict) -> str:
+    f = lambda x: ("-R$ " if x < 0 else "R$ ") + _n(abs(x) / 1000, 0) + " mil"
+    p = av["p"]
+    cor = lambda x: "#d62828" if x < 0 else "#2f6fd0"
+    pess_txt = f"Pessimista\\nVPL {f(av['vpl']['pess'])}" + (f"\\nabandonar: {f(av['abandono'])}" if av["abandona"] else "")
+    return f'''digraph G {{ rankdir=LR; node [fontname="Helvetica", fontsize=11];
+  D [shape=box, style=filled, fillcolor="#e8f0fb", label="Decisão\\n{av['decisao']}"];
+  A [shape=circle, label="Abrir\\n{f(av['ev_com_opcao'])}"]; N [shape=box, label="Não abrir\\nR$ 0"];
+  P [shape=box, color="{cor(av['pess_com_opcao'])}", label="{pess_txt}"];
+  M [shape=box, color="{cor(av['vpl']['prov'])}", label="Provável\\nVPL {f(av['vpl']['prov'])}"];
+  O [shape=box, color="{cor(av['vpl']['otim'])}", label="Otimista\\nVPL {f(av['vpl']['otim'])}"];
+  D -> A; D -> N; A -> P [label="{_p(p['pess'], 0)}"]; A -> M [label="{_p(p['prov'], 0)}"]; A -> O [label="{_p(p['otim'], 0)}"]; }}'''
+
+
+def leitura_arvore(av: dict) -> list[str]:
+    out = [f"Com as probabilidades informadas, o valor esperado de abrir é de {('-R$ ' if av['ev_com_opcao'] < 0 else 'R$ ') + _n(abs(av['ev_com_opcao']), 0)}: "
+           + ("vale abrir." if av["ev_com_opcao"] > 0 else "na média, abrir destrói valor.")]
+    if av["abandona"]:
+        out.append(f"No cenário pessimista compensa encerrar depois do primeiro ano e vender os ativos. Ter essa saída planejada vale "
+                   f"R$ {_n(av['valor_opcao'], 0)} no valor esperado (opção de abandono).")
+    if av["evpi"] > 0:
+        out.append(f"Saber com certeza qual cenário vai acontecer valeria até R$ {_n(av['evpi'], 0)}. Uma pesquisa de mercado ou um "
+                   "piloto que custe menos do que isso e reduza a dúvida tende a valer a pena.")
+    else:
+        out.append("Mesmo sabendo o cenário com antecedência a decisão não mudaria: mais pesquisa antes de abrir acrescenta pouco.")
+    return out
+
+
+# ------------------------------------------------------------------------------
+# ACESSIBILIDADE (v9.0)
+# ------------------------------------------------------------------------------
+def css_acessibilidade(fonte_maior: bool, contraste: bool) -> str:
+    css = ""
+    if fonte_maior:
+        css += """
+      html, .stApp {font-size: 19px !important;}
+      .stApp p, .stApp li, .stApp label, .stApp span, [data-testid="stMarkdownContainer"] {font-size: 1.12rem !important; line-height: 1.6 !important;}
+      [data-testid="stMetricValue"] {font-size: 2.1rem !important;}
+      button p {font-size: 1.05rem !important;}"""
+    if contraste:
+        css += """
+      .stApp {background:#ffffff !important;}
+      .stApp p, .stApp li, .stApp label, .stApp span, .stApp h1, .stApp h2, .stApp h3, .stApp h4,
+      [data-testid="stMarkdownContainer"], [data-testid="stCaptionContainer"] {color:#000000 !important;}
+      a {color:#0000cc !important; text-decoration: underline !important;}
+      button {border: 2px solid #000000 !important;}
+      *:focus-visible {outline: 3px solid #ff8c00 !important; outline-offset: 2px !important;}"""
+    return f"<style>{css}</style>" if css else ""
+
+
+def html_leitor(texto: str) -> str:
+    """Botão que lê o texto em voz alta pela síntese de voz do próprio navegador (gratuita, sem servidor)."""
+    import json as _json
+    t = _json.dumps(texto)
+    return ("<button style='font-size:15px;padding:6px 12px;border-radius:8px;border:1px solid #2f6fd0;background:#fff;cursor:pointer' "
+            "onclick='var u=new SpeechSynthesisUtterance(" + t.replace("'", "&#39;") + ");u.lang=\"pt-BR\";u.rate=1;"
+            "window.speechSynthesis.cancel();window.speechSynthesis.speak(u);'>🔊 Ouvir esta leitura</button>"
+            "<button style='font-size:15px;padding:6px 12px;margin-left:6px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer' "
+            "onclick='window.speechSynthesis.cancel();'>⏹ Parar</button>")

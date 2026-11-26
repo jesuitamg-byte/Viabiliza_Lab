@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.9 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v9.0 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,17 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v9.0 (25/11/2026): mapa de concorrentes, árvore de decisão e acessibilidade
+
+**Mapa de concorrentes, árvore de decisão e acessibilidade**
+- **Mapa de concorrentes** (OpenStreetMap, gratuito): busca no município do projeto os estabelecimentos do mesmo tipo (14 tipos, como cafeteria, padaria, salão, oficina e loja de roupas) e os lugares que geram movimento (escolas, faculdades, pontos de ônibus, hospitais e supermercados).
+- O mapa mostra o ponto do negócio e o raio de atendimento, a distância de cada concorrente e a densidade por mil habitantes, usando a população do IBGE. Os nomes encontrados podem ser levados para o cadastro de concorrentes. Os pontos ficam salvos no projeto.
+- **Árvore de decisão:** abrir ou não abrir em três cenários de demanda com probabilidades escolhidas pelo grupo. Inclui a **opção de abandono** (encerrar depois do Ano 1, vender os equipamentos e recuperar o capital de giro) e o **valor da informação perfeita**, que indica quanto vale, no máximo, uma pesquisa ou um piloto antes de decidir.
+- **Acessibilidade** (menu lateral): letra maior, alto contraste com foco visível no teclado e botão para ouvir a leitura dos resultados com a voz do próprio navegador.
+- Com esta versão, o programa chega a 73 ferramentas. Os projetos antigos continuam abrindo com os mesmos números da v8.0.
 
 ---
 
@@ -386,6 +397,9 @@ SCHEMA = {
         ("pm_situacao", "TEXT"), ("pm_ansoff", "TEXT"), ("pm_generica", "TEXT"),
         # v8.6: sazonalidade
         ("saz_mes_inicio", "REAL"), ("saz_perfil", "TEXT"),
+        # v9.0: mapa de concorrentes e árvore de decisão
+        ("loc_lat", "REAL"), ("loc_lon", "REAL"), ("mapa_raio_km", "REAL"), ("mapa_tipo", "TEXT"),
+        ("arv_p_pess", "REAL"), ("arv_p_otim", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -491,6 +505,7 @@ SCHEMA = {
     "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
     "kpis_mkt": [("indicador", "TEXT"), ("meta", "TEXT"), ("frequencia", "TEXT"), ("fonte", "TEXT"), ("responsavel", "TEXT")],
     "sazonalidade": [("mes", "REAL"), ("indice", "REAL")],
+    "mapa_pontos": [("grupo", "TEXT"), ("tipo", "TEXT"), ("nome", "TEXT"), ("lat", "REAL"), ("lon", "REAL"), ("endereco", "TEXT")],
     "leituras_aluno": [("tabela", "TEXT"), ("texto", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
@@ -515,6 +530,7 @@ PROJETO_PADRAO = {
     "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
     "val_crescimento_perp_pct": 3.0, "val_multiplo_ebitda": 4.0, "val_multiplo_receita": 1.0,
     "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0, "saz_mes_inicio": 1.0,
+    "mapa_raio_km": 1.0, "arv_p_pess": 25.0, "arv_p_otim": 25.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -5356,7 +5372,9 @@ def regras_mix(proj: dict, d: dict) -> dict:
             "sazonalidade": (tem_saz, saz is not None and len(saz) > 0),
             "tornado": (len(d.get("mc_faixas", [])) > 0 and (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
                         len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
-            "taxas": ("bcb_selic" in set(d["dados_publicos"]["chave"]), "bcb_selic" in set(d["dados_publicos"]["chave"]))}
+            "taxas": ("bcb_selic" in set(d["dados_publicos"]["chave"]), "bcb_selic" in set(d["dados_publicos"]["chave"])),
+            "mapa": (len(d.get("mapa_pontos", [])) > 0 and float(proj.get("loc_lat") or 0) != 0, len(d.get("mapa_pontos", [])) > 0),
+            "arvore": (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0, len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0)}
 
 
 def frase_posicionamento(proj: dict) -> str:
@@ -6534,6 +6552,185 @@ def criar_projeto_setor(caminho, nome: str, setor: str) -> None:
                          [(m + 1, float(v)) for m, v in enumerate(PERFIS_SAZONAIS[s["saz"]])])
     conn.commit()
     conn.close()
+
+
+# ------------------------------------------------------------------------------
+# MAPA DE CONCORRENTES E PONTOS DE MOVIMENTO (v9.0) - dados do OpenStreetMap (Overpass API, gratuita)
+# ------------------------------------------------------------------------------
+API_OVERPASS = "https://overpass-api.de/api/interpreter?data="
+TIPOS_OSM = {
+    "Cafeteria": ['"amenity"="cafe"'], "Padaria": ['"shop"="bakery"'], "Restaurante": ['"amenity"="restaurant"'],
+    "Lanchonete": ['"amenity"="fast_food"'], "Salão de beleza": ['"shop"="hairdresser"', '"shop"="beauty"'],
+    "Oficina mecânica": ['"shop"="car_repair"'], "Loja de roupas": ['"shop"="clothes"'], "Farmácia": ['"amenity"="pharmacy"'],
+    "Mercado e mercearia": ['"shop"="supermarket"', '"shop"="convenience"'], "Informática e eletrônicos": ['"shop"="computer"', '"shop"="electronics"', '"shop"="mobile_phone"'],
+    "Academia": ['"leisure"="fitness_centre"'], "Pet shop": ['"shop"="pet"'], "Sorveteria": ['"amenity"="ice_cream"'],
+    "Escola de idiomas e cursos": ['"amenity"="language_school"', '"amenity"="training"'],
+}
+PONTOS_MOVIMENTO = {"Escolas": ['"amenity"="school"'], "Faculdades": ['"amenity"="university"', '"amenity"="college"'],
+                    "Pontos de ônibus": ['"highway"="bus_stop"'], "Hospitais e clínicas": ['"amenity"="hospital"', '"amenity"="clinic"'],
+                    "Supermercados": ['"shop"="supermarket"']}
+
+
+def consulta_overpass(cod_ibge: str, nome: str, filtros: list, limite: int = 300) -> str:
+    """Consulta Overpass: área do município pelo código do IBGE (ou pelo nome) e os estabelecimentos com as etiquetas pedidas."""
+    nome = str(nome).replace('"', "")
+    partes = "".join(f"node[{f}](area.a);way[{f}](area.a);" for f in filtros)
+    return (f'[out:json][timeout:40];(area["IBGE:GEOCODIGO"="{cod_ibge}"];area["name"="{nome}"]["admin_level"="8"]["boundary"="administrative"];)->.a;'
+            f"({partes});out center {limite};")
+
+
+def ler_overpass(js: dict) -> pd.DataFrame:
+    linhas, vistos = [], set()
+    for e in js.get("elements", []):
+        if e["id"] in vistos:
+            continue
+        vistos.add(e["id"])
+        lat = e.get("lat", e.get("center", {}).get("lat"))
+        lon = e.get("lon", e.get("center", {}).get("lon"))
+        if lat is None or lon is None:
+            continue
+        t = e.get("tags", {})
+        end = ", ".join(x for x in [t.get("addr:street", ""), t.get("addr:housenumber", "")] if x)
+        linhas.append({"nome": t.get("name", "(sem nome no mapa)"), "lat": float(lat), "lon": float(lon), "endereco": end})
+    return pd.DataFrame(linhas, columns=["nome", "lat", "lon", "endereco"])
+
+
+def buscar_osm(cod_ibge: str, nome: str, filtros: list) -> pd.DataFrame:
+    from urllib.parse import quote
+
+    return ler_overpass(baixar_json(API_OVERPASS + quote(consulta_overpass(cod_ibge, nome, filtros))))
+
+
+def distancia_km(lat1, lon1, lat2, lon2) -> float:
+    import math
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def leitura_mapa(conc: pd.DataFrame, pontos: pd.DataFrame, populacao: float, lat: float, lon: float, raio: float) -> list[str]:
+    out = []
+    n = len(conc)
+    if populacao and populacao > 0:
+        out.append(f"{_n(n)} estabelecimentos do tipo escolhido aparecem no mapa do município: cerca de "
+                   f"{_n(n / populacao * 1000, 2)} por mil habitantes, ou um para cada {_n(populacao / n) if n else '-'} habitantes.")
+    else:
+        out.append(f"{_n(n)} estabelecimentos do tipo escolhido aparecem no mapa do município.")
+    if lat and lon and n:
+        perto = conc[[distancia_km(lat, lon, a, b) <= raio for a, b in zip(conc["lat"], conc["lon"])]]
+        out.append(f"No raio de {_n(raio, 1)} km do ponto escolhido há {_n(len(perto))} concorrente(s) mapeado(s)."
+                   .replace("concorrente(s) mapeado(s)", "concorrente mapeado" if len(perto) == 1 else "concorrentes mapeados"))
+        if not pontos.empty:
+            pp = pontos[[distancia_km(lat, lon, a, b) <= raio for a, b in zip(pontos["lat"], pontos["lon"])]]
+            out.append(f"No mesmo raio há {_n(len(pp))} ponto(s) que geram movimento de pessoas.".replace(
+                "ponto(s) que geram", "ponto que gera" if len(pp) == 1 else "pontos que geram"))
+    out.append("O OpenStreetMap é feito por voluntários e costuma estar incompleto no interior: confira em campo e complete a lista de concorrentes.")
+    return out
+
+
+# ------------------------------------------------------------------------------
+# ÁRVORE DE DECISÃO E OPÇÕES REAIS (v9.0)
+# ------------------------------------------------------------------------------
+def vpl_cenario(res: dict, proj: dict, qual: str) -> float:
+    if qual == "pess":
+        r, c = -float(proj.get("cen_pess_receita_pct") or 0) / 100, float(proj.get("cen_pess_custo_pct") or 0) / 100
+    elif qual == "otim":
+        r, c = float(proj.get("cen_otim_receita_pct") or 0) / 100, -float(proj.get("cen_otim_custo_pct") or 0) / 100
+    else:
+        r = c = 0.0
+    return vpl_variado(res, volume=r, materiais=c, salarios=c, fixos=c)
+
+
+def arvore_decisao(res: dict, proj: dict, p_pess: float, p_otim: float, custo_pesquisa: float = 0.0) -> dict:
+    """
+    Decisão de abrir com três cenários de demanda, opção de abandono no pessimista e valor da informação.
+    Abandono: depois do Ano 1, vende os ativos fixos (percentual de revenda do projeto) e recupera o capital de giro.
+    """
+    p_prov = max(0.0, 1 - p_pess - p_otim)
+    tma = res["tma"]
+    vp = {"pess": vpl_cenario(res, proj, "pess"), "prov": vpl_cenario(res, proj, "prov"), "otim": vpl_cenario(res, proj, "otim")}
+    # valor de abandonar no fim do Ano 1, no cenário pessimista
+    rp = -float(proj.get("cen_pess_receita_pct") or 0) / 100
+    cp = float(proj.get("cen_pess_custo_pct") or 0) / 100
+    a1 = res["anos"][1]
+    rec = a1["rec_bruta"] * (1 + rp)
+    var_ratio = (a1["impostos"] + a1["outras_var"]) / a1["rec_bruta"] if a1["rec_bruta"] else 0.0
+    ebitda1 = rec - a1["custo_dir"] * (1 + rp) * (1 + cp) - rec * var_ratio - (a1["pessoal"] + a1["fixos"]) * (1 + cp)
+    revenda = float(proj.get("revenda_ativos_pct") or 0) / 100 * res["inv_fixo"]
+    v_aband = -res["investimento_total"] + (ebitda1 + revenda + res["capital_giro"]) / (1 + tma)
+    v_pess_op = max(vp["pess"], v_aband)
+    ev_sem = p_pess * vp["pess"] + p_prov * vp["prov"] + p_otim * vp["otim"]
+    ev_com_op = p_pess * v_pess_op + p_prov * vp["prov"] + p_otim * vp["otim"]
+    # informação perfeita: só abre nos cenários de VPL positivo
+    ev_info = p_pess * max(v_pess_op, 0) + p_prov * max(vp["prov"], 0) + p_otim * max(vp["otim"], 0)
+    melhor_sem_info = max(ev_com_op, 0.0)
+    return {"p": {"pess": p_pess, "prov": p_prov, "otim": p_otim}, "vpl": vp, "abandono": v_aband, "pess_com_opcao": v_pess_op,
+            "abandona": v_aband > vp["pess"], "ev_sem_opcao": ev_sem, "ev_com_opcao": ev_com_op,
+            "valor_opcao": ev_com_op - ev_sem, "evpi": ev_info - melhor_sem_info, "custo_pesquisa": custo_pesquisa,
+            "decisao": "Abrir" if ev_com_op > 0 else "Não abrir"}
+
+
+def dot_arvore(av: dict) -> str:
+    f = lambda x: ("-R$ " if x < 0 else "R$ ") + _n(abs(x) / 1000, 0) + " mil"
+    p = av["p"]
+    cor = lambda x: "#d62828" if x < 0 else "#2f6fd0"
+    pess_txt = f"Pessimista\\nVPL {f(av['vpl']['pess'])}" + (f"\\nabandonar: {f(av['abandono'])}" if av["abandona"] else "")
+    return f'''digraph G {{ rankdir=LR; node [fontname="Helvetica", fontsize=11];
+  D [shape=box, style=filled, fillcolor="#e8f0fb", label="Decisão\\n{av['decisao']}"];
+  A [shape=circle, label="Abrir\\n{f(av['ev_com_opcao'])}"]; N [shape=box, label="Não abrir\\nR$ 0"];
+  P [shape=box, color="{cor(av['pess_com_opcao'])}", label="{pess_txt}"];
+  M [shape=box, color="{cor(av['vpl']['prov'])}", label="Provável\\nVPL {f(av['vpl']['prov'])}"];
+  O [shape=box, color="{cor(av['vpl']['otim'])}", label="Otimista\\nVPL {f(av['vpl']['otim'])}"];
+  D -> A; D -> N; A -> P [label="{_p(p['pess'], 0)}"]; A -> M [label="{_p(p['prov'], 0)}"]; A -> O [label="{_p(p['otim'], 0)}"]; }}'''
+
+
+def leitura_arvore(av: dict) -> list[str]:
+    out = [f"Com as probabilidades informadas, o valor esperado de abrir é de {('-R$ ' if av['ev_com_opcao'] < 0 else 'R$ ') + _n(abs(av['ev_com_opcao']), 0)}: "
+           + ("vale abrir." if av["ev_com_opcao"] > 0 else "na média, abrir destrói valor.")]
+    if av["abandona"]:
+        out.append(f"No cenário pessimista compensa encerrar depois do primeiro ano e vender os ativos. Ter essa saída planejada vale "
+                   f"R$ {_n(av['valor_opcao'], 0)} no valor esperado (opção de abandono).")
+    if av["evpi"] > 0:
+        out.append(f"Saber com certeza qual cenário vai acontecer valeria até R$ {_n(av['evpi'], 0)}. Uma pesquisa de mercado ou um "
+                   "piloto que custe menos do que isso e reduza a dúvida tende a valer a pena.")
+    else:
+        out.append("Mesmo sabendo o cenário com antecedência a decisão não mudaria: mais pesquisa antes de abrir acrescenta pouco.")
+    return out
+
+
+# ------------------------------------------------------------------------------
+# ACESSIBILIDADE (v9.0)
+# ------------------------------------------------------------------------------
+def css_acessibilidade(fonte_maior: bool, contraste: bool) -> str:
+    css = ""
+    if fonte_maior:
+        css += """
+      html, .stApp {font-size: 19px !important;}
+      .stApp p, .stApp li, .stApp label, .stApp span, [data-testid="stMarkdownContainer"] {font-size: 1.12rem !important; line-height: 1.6 !important;}
+      [data-testid="stMetricValue"] {font-size: 2.1rem !important;}
+      button p {font-size: 1.05rem !important;}"""
+    if contraste:
+        css += """
+      .stApp {background:#ffffff !important;}
+      .stApp p, .stApp li, .stApp label, .stApp span, .stApp h1, .stApp h2, .stApp h3, .stApp h4,
+      [data-testid="stMarkdownContainer"], [data-testid="stCaptionContainer"] {color:#000000 !important;}
+      a {color:#0000cc !important; text-decoration: underline !important;}
+      button {border: 2px solid #000000 !important;}
+      *:focus-visible {outline: 3px solid #ff8c00 !important; outline-offset: 2px !important;}"""
+    return f"<style>{css}</style>" if css else ""
+
+
+def html_leitor(texto: str) -> str:
+    """Botão que lê o texto em voz alta pela síntese de voz do próprio navegador (gratuita, sem servidor)."""
+    import json as _json
+    t = _json.dumps(texto)
+    return ("<button style='font-size:15px;padding:6px 12px;border-radius:8px;border:1px solid #2f6fd0;background:#fff;cursor:pointer' "
+            "onclick='var u=new SpeechSynthesisUtterance(" + t.replace("'", "&#39;") + ");u.lang=\"pt-BR\";u.rate=1;"
+            "window.speechSynthesis.cancel();window.speechSynthesis.speak(u);'>🔊 Ouvir esta leitura</button>"
+            "<button style='font-size:15px;padding:6px 12px;margin-left:6px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer' "
+            "onclick='window.speechSynthesis.cancel();'>⏹ Parar</button>")
 
 # ##############################################################################
 # PARTE: pnbox_pdf.py
@@ -8057,7 +8254,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade", "tornado", "taxas"} | OPCIONAIS_V8
+    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade", "tornado", "taxas", "mapa", "arvore"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -9471,7 +9668,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.9"
+VERSAO_PROGRAMA = "9.0"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -9636,6 +9833,8 @@ PAGINAS = [
      "Compare o seu negócio com os concorrentes em notas de 0 a 10 por atributo."),
     ("oceano", "Problema e solução", "🌊", "Curva de valor e ERRC",
      "Compare a sua curva com a dos concorrentes e decida o que eliminar, reduzir, elevar e criar (oceano azul)."),
+    ("mapa", "Problema e solução", "🗺️", "Mapa de concorrentes",
+     "Concorrentes e lugares de movimento no mapa do município (OpenStreetMap), com raio de atendimento."),
     ("posicionamento", "Problema e solução", "📍", "Posicionamento e mapa perceptual",
      "A frase que diz para quem, o que e por que é diferente, e onde a marca fica frente aos concorrentes."),
     ("forcas", "Estratégia", "💪", "Forças e fraquezas",
@@ -9708,6 +9907,8 @@ PAGINAS = [
      "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
     ("tornado", "Ferramentas complementares", "🌪️", "Sensibilidade do VPL (tornado)",
      "Quais premissas mais mexem no VPL, quanto cada uma pode mudar até o VPL zerar e o mapa preço × volume."),
+    ("arvore", "Ferramentas complementares", "🌳", "Árvore de decisão",
+     "Abrir ou não abrir em três cenários, opção de abandono e quanto vale pesquisar antes de decidir."),
     ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
      "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
     ("valuation", "Ferramentas complementares", "💎", "Valuation e rodada de investimento",
@@ -10067,6 +10268,9 @@ def mostrar_leitura(chave_: str, frases: list):
                 return
             st.caption("Compare com a leitura do programa:")
         st.markdown("\n".join(f"- {f}" for f in frases))
+        if ss.get("tg_voz", False):
+            import streamlit.components.v1 as _cmp
+            _cmp.html(html_leitor(" ".join(frases)), height=48)
 
 
 def auto_unica(tabela: str, novos: dict):
@@ -10167,7 +10371,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado", "taxas")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado", "taxas", "mapa", "arvore")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -10256,6 +10460,14 @@ with st.sidebar:
         ss.tema = "escuro" if tema_escuro else "claro"
         st.rerun()
 
+    with st.expander("♿ Acessibilidade"):
+        st.toggle("Letra maior", value=False, key="tg_fonte")
+        st.toggle("Alto contraste", value=False, key="tg_contraste")
+        st.toggle("Botão para ouvir as leituras", value=False, key="tg_voz",
+                  help="Usa a voz do próprio navegador para ler em voz alta a leitura dos resultados.")
+    _css_ac = css_acessibilidade(ss.get("tg_fonte", False), ss.get("tg_contraste", False))
+    if _css_ac:
+        st.markdown(_css_ac, unsafe_allow_html=True)
     st.toggle("📌 Leitura automática das tabelas", value=True, key="tg_leit",
               help="Ao final de cada tabela, frases que dizem o que os números mostram.")
     st.toggle("✍️ Modo exercício", value=False, key="tg_exerc",
@@ -14514,6 +14726,107 @@ def pg_taxas():
     st.caption("Os prêmios são escolhas do grupo e precisam ser justificados no plano; não existe um valor oficial para eles.")
     proxima("taxas")
 
+
+# ------------------------------------------------------------------------------
+# MAPA DE CONCORRENTES (v9.0)
+# ------------------------------------------------------------------------------
+def pg_mapa():
+    cabecalho("mapa")
+    cod, nome = str(proj.get("municipio_ibge") or ""), str(proj.get("municipio_nome") or "")
+    st.caption("Estabelecimentos parecidos com o seu e lugares que geram movimento de pessoas, a partir do OpenStreetMap, "
+               "um mapa colaborativo e gratuito. © colaboradores do OpenStreetMap (licença ODbL).")
+    if not cod:
+        st.info("Escolha primeiro o município em Dados públicos do município.", icon="💡")
+        if st.button("🏙️ Abrir Dados públicos", key=wk("mapa_dp")):
+            ir("dados_publicos")
+            st.rerun()
+        return
+    st.markdown(f"**Município:** {nome} ({proj.get('uf_sigla') or ''})")
+    a, b = st.columns(2)
+    tipo = a.selectbox("Tipo de estabelecimento concorrente", list(TIPOS_OSM),
+                       index=list(TIPOS_OSM).index(proj["mapa_tipo"]) if proj.get("mapa_tipo") in TIPOS_OSM else 0, key=wk("mapa_tipo"))
+    mov = b.multiselect("Lugares que geram movimento", list(PONTOS_MOVIMENTO), ["Escolas", "Pontos de ônibus"], key=wk("mapa_mov"))
+    auto_unica("projeto", {"mapa_tipo": tipo})
+    if st.button("🗺️ Buscar no OpenStreetMap", key=wk("mapa_busca")):
+        try:
+            with st.spinner("Consultando o OpenStreetMap..."):
+                conc = buscar_osm(cod, nome, TIPOS_OSM[tipo]).assign(grupo="Concorrente", tipo=tipo)
+                filtros = [f for m in mov for f in PONTOS_MOVIMENTO[m]]
+                pts = buscar_osm(cod, nome, filtros).assign(grupo="Movimento", tipo=", ".join(mov)) if filtros else pd.DataFrame()
+            novo = pd.concat([conc, pts], ignore_index=True)
+            recarregar_tabela("mapa_pontos", novo[["grupo", "tipo", "nome", "lat", "lon", "endereco"]] if not novo.empty else
+                              pd.DataFrame(columns=["grupo", "tipo", "nome", "lat", "lon", "endereco"]), "nome")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Não foi possível consultar o OpenStreetMap agora ({type(e).__name__}). Tente de novo em alguns minutos.", icon="⛔")
+    mp = d["mapa_pontos"]
+    st.markdown("#### Seu ponto e o raio de atendimento")
+    st.caption("No Google Maps, clique com o botão direito no local pretendido e copie as coordenadas (latitude e longitude).")
+    c1, c2, c3 = st.columns(3)
+    lat = c1.number_input("Latitude", value=float(proj.get("loc_lat") or 0.0), format="%.6f", key=wk("mapa_lat"))
+    lon = c2.number_input("Longitude", value=float(proj.get("loc_lon") or 0.0), format="%.6f", key=wk("mapa_lon"))
+    raio = c3.number_input("Raio de atendimento (km)", 0.1, 50.0, float(proj.get("mapa_raio_km") or 1.0), 0.1, key=wk("mapa_raio"))
+    auto_unica("projeto", {"loc_lat": lat, "loc_lon": lon, "mapa_raio_km": raio})
+    if mp.empty:
+        st.info("Nenhum ponto buscado ainda.", icon="💡")
+        proxima("mapa")
+        return
+    cores = {"Concorrente": "#d62828", "Movimento": "#2f6fd0"}
+    vis = mp.assign(cor=mp["grupo"].map(cores).fillna("#888888"), tam=30.0)
+    if lat and lon:
+        vis = pd.concat([vis, pd.DataFrame([{"grupo": "Seu ponto", "nome": proj.get("nome_negocio"), "lat": lat, "lon": lon,
+                                             "cor": "#2a9d3c", "tam": 70.0}])], ignore_index=True)
+    st.map(vis, latitude="lat", longitude="lon", color="cor", size="tam")
+    st.caption("🔴 concorrentes · 🔵 lugares de movimento · 🟢 seu ponto")
+    conc = mp[mp["grupo"] == "Concorrente"].copy()
+    pts = mp[mp["grupo"] == "Movimento"]
+    if lat and lon and not conc.empty:
+        conc["Distância (km)"] = [round(distancia_km(lat, lon, x, y), 2) for x, y in zip(conc["lat"], conc["lon"])]
+        conc = conc.sort_values("Distância (km)")
+    st.dataframe(conc.drop(columns=["grupo", "lat", "lon"]).rename(columns={"tipo": "Tipo", "nome": "Nome", "endereco": "Endereço"}),
+                 hide_index=True, width="stretch")
+    dp = d["dados_publicos"]
+    pop = float(dp.loc[dp["chave"] == "populacao", "valor"].sum()) if not dp.empty else 0.0
+    mostrar_leitura("mapa", leitura_mapa(conc, pts, pop, lat, lon, raio))
+    nomes = [n for n in conc["nome"] if n != "(sem nome no mapa)"]
+    escolhidos = st.multiselect("Levar para o cadastro de concorrentes", nomes, key=wk("mapa_leva"))
+    if escolhidos and st.button("➕ Adicionar aos concorrentes", key=wk("mapa_add")):
+        atuais = set(d["concorrentes"]["nome"].astype(str))
+        novos = pd.DataFrame([{"nome": n, "observacoes": "Encontrado no OpenStreetMap"} for n in escolhidos if n not in atuais])
+        recarregar_tabela("concorrentes", pd.concat([d["concorrentes"], novos], ignore_index=True), "nome")
+        st.toast("Concorrentes adicionados.", icon="✅")
+        st.rerun()
+    proxima("mapa")
+
+
+# ------------------------------------------------------------------------------
+# ÁRVORE DE DECISÃO (v9.0)
+# ------------------------------------------------------------------------------
+def pg_arvore():
+    cabecalho("arvore")
+    res = R()
+    if res["anos"][1]["rec_bruta"] <= 0:
+        st.info("Cadastre produtos ou assinaturas para montar a árvore de decisão.", icon="💡")
+        return
+    st.caption("A árvore compara abrir e não abrir considerando três cenários de demanda (os mesmos da análise de cenários), "
+               "a possibilidade de encerrar depois do primeiro ano se o cenário for ruim e o valor de saber o cenário antes de decidir.")
+    a, b = st.columns(2)
+    pp_ = a.slider("Probabilidade do cenário pessimista (%)", 0, 100, int(proj.get("arv_p_pess") or 25), key=wk("arv_pp"))
+    po_ = b.slider("Probabilidade do cenário otimista (%)", 0, 100 - pp_, min(int(proj.get("arv_p_otim") or 25), 100 - pp_), key=wk("arv_po"))
+    auto_unica("projeto", {"arv_p_pess": float(pp_), "arv_p_otim": float(po_)})
+    st.caption(f"Provável: {100 - pp_ - po_}%. As variações de cada cenário ficam em Simulador e cenários.")
+    av = arvore_decisao(res, proj, pp_ / 100, po_ / 100)
+    st.graphviz_chart(dot_arvore(av), width="stretch")
+    k = st.columns(4)
+    k[0].metric("Valor esperado de abrir", brl(av["ev_com_opcao"]))
+    k[1].metric("VPL do abandono no pessimista", brl(av["abandono"]))
+    k[2].metric("Valor da opção de abandono", brl(av["valor_opcao"]))
+    k[3].metric("Valor máximo de uma pesquisa", brl(av["evpi"]), help="Valor esperado da informação perfeita (VEIP)")
+    mostrar_leitura("arvore", leitura_arvore(av))
+    st.caption("O abandono considera a venda dos equipamentos pelo percentual de revenda informado na perda aceitável dos sócios "
+               "e a recuperação do capital de giro ao fim do Ano 1.")
+    proxima("arvore")
+
 # ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
 # ##############################################################################
@@ -15074,7 +15387,7 @@ Você está usando a **versão on-line**. Os projetos ficam guardados **no armaz
 ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade, "canvas": pg_canvas, "porter": pg_porter,
          "ge": pg_ge, "bcg": pg_bcg, "bsc": pg_bsc, "reforma": pg_reforma, "segmentos": pg_segmentos, "personas": pg_personas,
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
-         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade, "tornado": pg_tornado, "taxas": pg_taxas,
+         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade, "tornado": pg_tornado, "taxas": pg_taxas, "mapa": pg_mapa, "arvore": pg_arvore,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
          "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,
