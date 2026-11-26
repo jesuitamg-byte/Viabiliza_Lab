@@ -146,6 +146,74 @@ def _aba_preco():
     auto_unica("projeto", v)
 
 
+def _aba_praca():
+    dist = _select("Intensidade da distribuição", "mix_distribuicao", DISTRIBUICAO)
+    if dist:
+        st.caption(DISTRIBUICAO[dist])
+    auto_unica("projeto", {"mix_distribuicao": dist})
+    st.markdown("#### Canais de venda")
+    st.caption("Onde o cliente compra, que parte das vendas passa por cada canal e quanto o canal cobra "
+               "(comissão do aplicativo ou do marketplace, margem do revendedor). Confira as taxas atuais de cada canal.")
+    editor("canais_venda", {"canal": S("Canal", options=opcoes("canal_venda", CANAIS_VENDA), required=True),
+                            "pct_vendas": N("% das vendas", min_value=0.0, max_value=100.0, format="%.1f"),
+                            "comissao_pct": N("Comissão ou taxa do canal (%)", min_value=0.0, max_value=60.0, format="%.1f"),
+                            "observacao": T("Observação", width="medium")}, "canal")
+    cv = d["canais_venda"]
+    if not cv.empty:
+        r = resumo_canais(cv)
+        a, b, c = st.columns(3)
+        a.metric("Soma dos canais", f"{num_br(r['soma'], 0)}%")
+        b.metric("Comissão média sobre a receita", f"{num_br(r['comissao'], 2)}%")
+        c.metric("Canal principal", r["maior"], f"{num_br(r['maior_pct'], 0)}% das vendas", delta_color="off")
+        if abs(r["soma"] - 100) <= 0.5:
+            st.caption(f"Ao aplicar, a comissão média entra nos custos variáveis como \"{_LINHA_COMISSAO}\" e a linha "
+                       "\"Comissões de aplicativos de delivery\" é zerada, para a comissão não ser contada duas vezes.")
+            if st.button("✅ Aplicar comissões ao plano financeiro", key=wk("mx_can_ap")):
+                recarregar_tabela("custos_variaveis", aplicar_canais(cv, d["custos_variaveis"]), "descricao")
+                st.toast("Comissões aplicadas.", icon="✅")
+                st.rerun()
+        else:
+            st.warning("Os canais precisam somar 100% das vendas.", icon="⚠️")
+    st.markdown("#### Localização")
+    st.caption((f"Endereço informado: {proj['loc_endereco']}. " if str(proj.get("loc_endereco") or "").strip() else
+                "A localização ainda não foi informada. ") + "Endereço, área e fluxo de pessoas ficam no plano operacional; "
+               "o aluguel entra nos custos fixos.")
+    if st.button("🏭 Abrir o plano operacional", key=wk("mx_op")):
+        ir("operacional")
+        st.rerun()
+    auto_unica("projeto", {"mkt_praca": st.text_area("📝 Justificativa e detalhes da praça", proj["mkt_praca"], height=110,
+                                                     key=wk("m3"))})
+
+
+def _aba_promocao():
+    res = R()
+    obj = _select("Objetivo principal da comunicação nesta fase", "mix_objetivo_com", OBJETIVOS_COMUNICACAO)
+    if obj:
+        st.caption("Ações que costumam servir a esse objetivo: " + OBJETIVOS_COMUNICACAO[obj])
+    st.markdown("#### O volume do plano e a promoção")
+    st.caption("O volume de vendas do plano precisa de clientes. Aqui o programa estima quantos clientes ativos o "
+               "primeiro mês exige e compara com os clientes novos que o orçamento de promoção promete trazer.")
+    a, b = st.columns(2)
+    tk = a.number_input("Gasto médio por compra (R$); deixe 0 para usar o preço médio do catálogo", min_value=0.0,
+                        value=float(proj.get("mix_ticket") or 0), step=1.0, key=wk("mx_tk"))
+    fr = b.number_input("Quantas vezes por mês o cliente típico compra", min_value=0.0,
+                        value=float(proj.get("mix_freq") or 0), step=0.5, key=wk("mx_fr"))
+    auto_unica("projeto", {"mix_objetivo_com": obj, "mix_ticket": tk, "mix_freq": fr})
+    pv = promocao_vs_volume(proj, d, res)
+    k = st.columns(4)
+    k[0].metric("Clientes ativos que o plano exige", num_br(pv["cn"]["clientes"], 0) if pv["cn"].get("ok") else "n.a.")
+    k[1].metric("Clientes novos por mês (promoção)", num_br(pv["novos"], 0) if pv["novos"] else "n.a.")
+    k[2].metric("Custo por cliente novo (CAC)", brl(pv["cac"]) if pv["cac"] == pv["cac"] else "n.a.")
+    k[3].metric("Verba de promoção ÷ receita", pct(pv["verba_receita"]) if pv["verba_receita"] == pv["verba_receita"] else "n.a.")
+    if pv["novos"] <= 0:
+        st.info("Os clientes novos por mês vêm do orçamento de marketing por canal.", icon="💡")
+    if st.button("💸 Abrir orçamento de marketing e calendário", key=wk("mx_orc")):
+        ir("orcamento_mkt")
+        st.rerun()
+    auto_unica("projeto", {"mkt_promocao": st.text_area("📝 Justificativa e detalhes da promoção", proj["mkt_promocao"],
+                                                        height=110, key=wk("m4"))})
+
+
 def pg_marketing():
     cabecalho("marketing")
     st.caption("Cada P tem escolhas que alimentam o restante do plano. Os campos de texto continuam "
@@ -156,18 +224,17 @@ def pg_marketing():
     with abas[1]:
         _aba_preco()
     with abas[2]:
-        auto_unica("projeto", {"mkt_praca": st.text_area(
-            "📍 Praça: onde e como o cliente compra (loja, delivery, site, apps, revendedores)",
-            proj["mkt_praca"], height=150, key=wk("m3"))})
+        _aba_praca()
     with abas[3]:
-        auto_unica("projeto", {"mkt_promocao": st.text_area(
-            "📣 Promoção: como o cliente vai conhecer o negócio (redes, anúncios, parcerias, eventos)",
-            proj["mkt_promocao"], height=150, key=wk("m4"))})
+        _aba_promocao()
     with abas[4]:
         vw = None
         try:
             vw = van_westendorp(d["precos_vw"])
         except Exception:
             pass
+        st.markdown("**Produto e preço**")
         mostrar_alertas(checar_produto_preco(proj, d, R(), vw))
+        st.markdown("**Praça e promoção**")
+        mostrar_alertas(checar_praca_promocao(proj, d, R()))
     proxima("marketing")

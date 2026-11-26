@@ -1163,6 +1163,18 @@ _MIX = {
 }
 
 
+_MIX2 = {   # distribuição, objetivo de comunicação, compras por mês, canais (canal, % vendas, comissão %)
+    "fitbox": ("Seletiva", "Fazer o cliente experimentar", 4.0,
+               [("Entrega própria", 60, 0), ("WhatsApp e redes sociais", 25, 0), ("Aplicativo de delivery", 15, 20)]),
+    "cafe": ("Seletiva", "Fidelizar e fazer voltar", 6.0,
+             [("Loja física", 85, 0), ("Aplicativo de delivery", 15, 20)]),
+    "assinatura": ("Intensiva", "Tornar a marca conhecida", 1.0,
+                   [("Site próprio", 70, 0), ("Venda direta a empresas", 30, 0)]),
+    "servico": ("Exclusiva", "Converter em venda", 1.0,
+                [("Loja física", 50, 0), ("Venda direta a empresas", 40, 0), ("WhatsApp e redes sociais", 10, 0)]),
+}
+
+
 def popular_mix(conn, qual: str) -> None:
     """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
     if qual not in _MIX:
@@ -1177,6 +1189,11 @@ def popular_mix(conn, qual: str) -> None:
         for prod, preco in prods:
             conn.execute("INSERT INTO precos_concorrentes (concorrente, produto, preco, fonte) VALUES (?,?,?,?)",
                          (c, prod, round(preco * f, 2), "Exemplo didático"))
+    if qual in _MIX2:
+        dist, obj, freq, canais = _MIX2[qual]
+        conn.execute("UPDATE projeto SET mix_distribuicao=?, mix_objetivo_com=?, mix_freq=? WHERE id=1", (dist, obj, freq))
+        conn.executemany("INSERT INTO canais_venda (canal, pct_vendas, comissao_pct, observacao) VALUES (?,?,?,?)",
+                         [(c, p, k, "Exemplo didático: confira a taxa real do canal") for c, p, k in canais])
 
 
 def popular_validacao(conn, qual: str) -> None:

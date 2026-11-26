@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.2 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,18 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.2 (25/11/2026): mix de marketing integrado: Praça e Promoção
+
+**Plano de marketing (4Ps): Praça e Promoção**
+- **Praça:** intensidade da distribuição (intensiva, seletiva ou exclusiva) e tabela de canais de venda com a parte das vendas e a comissão de cada canal. Um botão aplica a comissão média aos custos variáveis, sem contar duas vezes a comissão de aplicativos que já existia.
+- Ligação com o plano operacional para a localização.
+- **Promoção:** objetivo principal da comunicação (tornar conhecido, fazer experimentar, converter ou fidelizar) com as ações típicas de cada um.
+- **Volume do plano × promoção:** clientes ativos que o primeiro mês exige (receita ÷ gasto mensal por cliente) comparados aos clientes novos que o orçamento de marketing traz, com o tempo para formar a base.
+- **CAC e retorno:** custo por cliente novo, meses para recuperar esse custo em margem de contribuição e verba de promoção sobre a receita.
+- O diagnóstico do mix ganha alertas de canais que não somam 100%, comissão não aplicada, dependência de um canal de terceiros, posição premium em canais de comparação de preço e volume sem promoção que o sustente.
 
 ---
 
@@ -280,6 +292,8 @@ SCHEMA = {
         # v8.1: mix de marketing integrado (Produto e Preço)
         ("mix_nucleo", "TEXT"), ("mix_real", "TEXT"), ("mix_ampliado", "TEXT"), ("mix_ciclo", "TEXT"),
         ("mix_estrategia_preco", "TEXT"), ("mix_posicao_preco", "TEXT"),
+        # v8.2: Praça e Promoção
+        ("mix_distribuicao", "TEXT"), ("mix_objetivo_com", "TEXT"), ("mix_ticket", "REAL"), ("mix_freq", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -381,6 +395,7 @@ SCHEMA = {
     # --- v8.1: mix de marketing integrado ---
     "precos_concorrentes": [("concorrente", "TEXT"), ("produto", "TEXT"), ("preco", "REAL"), ("fonte", "TEXT")],
     "meios_pagamento": [("forma", "TEXT"), ("pct_vendas", "REAL"), ("taxa_pct", "REAL"), ("prazo_dias", "REAL")],
+    "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 
@@ -1794,6 +1809,18 @@ _MIX = {
 }
 
 
+_MIX2 = {   # distribuição, objetivo de comunicação, compras por mês, canais (canal, % vendas, comissão %)
+    "fitbox": ("Seletiva", "Fazer o cliente experimentar", 4.0,
+               [("Entrega própria", 60, 0), ("WhatsApp e redes sociais", 25, 0), ("Aplicativo de delivery", 15, 20)]),
+    "cafe": ("Seletiva", "Fidelizar e fazer voltar", 6.0,
+             [("Loja física", 85, 0), ("Aplicativo de delivery", 15, 20)]),
+    "assinatura": ("Intensiva", "Tornar a marca conhecida", 1.0,
+                   [("Site próprio", 70, 0), ("Venda direta a empresas", 30, 0)]),
+    "servico": ("Exclusiva", "Converter em venda", 1.0,
+                [("Loja física", 50, 0), ("Venda direta a empresas", 40, 0), ("WhatsApp e redes sociais", 10, 0)]),
+}
+
+
 def popular_mix(conn, qual: str) -> None:
     """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
     if qual not in _MIX:
@@ -1808,6 +1835,11 @@ def popular_mix(conn, qual: str) -> None:
         for prod, preco in prods:
             conn.execute("INSERT INTO precos_concorrentes (concorrente, produto, preco, fonte) VALUES (?,?,?,?)",
                          (c, prod, round(preco * f, 2), "Exemplo didático"))
+    if qual in _MIX2:
+        dist, obj, freq, canais = _MIX2[qual]
+        conn.execute("UPDATE projeto SET mix_distribuicao=?, mix_objetivo_com=?, mix_freq=? WHERE id=1", (dist, obj, freq))
+        conn.executemany("INSERT INTO canais_venda (canal, pct_vendas, comissao_pct, observacao) VALUES (?,?,?,?)",
+                         [(c, p, k, "Exemplo didático: confira a taxa real do canal") for c, p, k in canais])
 
 
 def popular_validacao(conn, qual: str) -> None:
@@ -4598,6 +4630,12 @@ def regras_v8(proj: dict, d: dict) -> dict:
 
 
 
+def _n(x: float, casas: int = 0) -> str:
+    """Número no formato brasileiro (1234,5 -> 1.234,5)."""
+    t = f"{x:,.{casas}f}"
+    return t.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _p(x: float, casas: int = 1) -> str:
     """Percentual no formato brasileiro (0,257 -> 25,7%)."""
     return f"{x * 100:.{casas}f}%".replace(".", ",")
@@ -4819,6 +4857,138 @@ def aplicar_pagamento(df_pag: pd.DataFrame, cv: pd.DataFrame, prazos: pd.DataFra
     novos = pd.DataFrame({"tipo": "Recebimento", "prazo_dias": g["prazo_dias"], "percentual": g["pct_vendas"]})
     prazos = pd.concat([prazos[prazos["tipo"] != "Recebimento"], novos], ignore_index=True)
     return cv, prazos
+
+
+# ------------------------------------------------------------------------------
+# PRAÇA (v8.2)
+# ------------------------------------------------------------------------------
+CANAIS_VENDA = ["Loja física", "Entrega própria", "Aplicativo de delivery", "Marketplace", "Site próprio",
+                "WhatsApp e redes sociais", "Revendedores", "Venda direta a empresas", "Feiras e eventos"]
+DISTRIBUICAO = {
+    "Intensiva": "Estar no maior número possível de pontos de venda. Combina com produtos de compra frequente e preço baixo.",
+    "Seletiva": "Poucos pontos ou canais escolhidos. Combina com produtos em que o cliente compara antes de comprar.",
+    "Exclusiva": "Um ou poucos pontos, com controle total da experiência. Combina com posicionamento premium.",
+}
+_LINHA_COMISSAO = "Comissões de canais de venda"
+TERCEIROS = {"Aplicativo de delivery", "Marketplace", "Revendedores"}
+
+
+def resumo_canais(df: pd.DataFrame) -> dict:
+    if df is None or df.empty:
+        return {"soma": 0.0, "comissao": 0.0, "maior": "", "maior_pct": 0.0}
+    w = df["pct_vendas"].astype(float)
+    soma = float(w.sum())
+    i = int(w.values.argmax())
+    return {"soma": soma, "comissao": float((w * df["comissao_pct"]).sum() / 100) if soma else 0.0,
+            "maior": str(df["canal"].iloc[i]), "maior_pct": float(w.iloc[i])}
+
+
+def aplicar_canais(df: pd.DataFrame, cv: pd.DataFrame) -> pd.DataFrame:
+    """Grava a comissão média ponderada nos custos variáveis, zerando a linha antiga de aplicativos para não contar duas vezes."""
+    r = resumo_canais(df)
+    cv = cv.copy()
+    antiga = cv["descricao"].astype(str).str.lower().str.startswith("comissões de aplicativos")
+    cv.loc[antiga, "percentual"] = 0.0
+    m = cv["descricao"] == _LINHA_COMISSAO
+    if m.any():
+        cv.loc[m, "percentual"] = round(r["comissao"], 4)
+    else:
+        cv = pd.concat([cv, pd.DataFrame([{"descricao": _LINHA_COMISSAO, "percentual": round(r["comissao"], 4)}])],
+                       ignore_index=True)
+    return cv
+
+
+# ------------------------------------------------------------------------------
+# PROMOÇÃO (v8.2)
+# ------------------------------------------------------------------------------
+OBJETIVOS_COMUNICACAO = {
+    "Tornar a marca conhecida": "Alcance e frequência: anúncios, parcerias, presença em eventos e conteúdo.",
+    "Fazer o cliente experimentar": "Amostras, degustação, primeira compra com vantagem e indicação.",
+    "Converter em venda": "Oferta clara, prova social, facilidade de pagamento e contato rápido.",
+    "Fidelizar e fazer voltar": "Programa de fidelidade, pós-venda, relacionamento por WhatsApp ou e-mail.",
+}
+
+
+def clientes_necessarios(proj: dict, res: dict) -> dict:
+    """Clientes ativos por mês que o volume do plano exige (receita do mês 1 ÷ gasto mensal por cliente)."""
+    cat = res.get("cat")
+    receita = float(res.get("receita_m1") or 0)
+    ticket = float(proj.get("mix_ticket") or 0)
+    if ticket <= 0 and cat is not None and not cat.empty and cat["qtd_mensal"].sum() > 0:
+        ticket = receita / float(cat["qtd_mensal"].sum())
+    freq = float(proj.get("mix_freq") or 0)
+    if receita <= 0 or ticket <= 0 or freq <= 0:
+        return {"ok": False, "ticket": ticket, "freq": freq}
+    return {"ok": True, "ticket": ticket, "freq": freq, "clientes": receita / (ticket * freq),
+            "gasto_cliente_mes": ticket * freq}
+
+
+def promocao_vs_volume(proj: dict, d: dict, res: dict) -> dict:
+    """Confronta os clientes que o plano exige com os clientes novos que a promoção promete trazer."""
+    cn = clientes_necessarios(proj, res)
+    oc = d.get("orcamento_canais")
+    novos = float(oc["clientes_mes"].sum()) if oc is not None and not oc.empty else 0.0
+    gasto = float(oc["gasto_mensal"].sum()) if oc is not None and not oc.empty else 0.0
+    out = {"cn": cn, "novos": novos, "gasto": gasto, "cac": div(gasto, novos) if novos > 0 else float("nan")}
+    if cn["ok"] and novos > 0:
+        out["meses_base"] = cn["clientes"] / novos
+    mm = mc_media(res)
+    if cn.get("ok") and mm == mm and mm > 0 and out["cac"] == out["cac"]:
+        margem_cliente = cn["gasto_cliente_mes"] * mm
+        out["payback_cac"] = div(out["cac"], margem_cliente)
+    receita = float(res.get("receita_m1") or 0)
+    out["verba_receita"] = div(gasto, receita) if receita > 0 else float("nan")
+    return out
+
+
+def checar_praca_promocao(proj: dict, d: dict, res: dict) -> list[tuple[str, str]]:
+    out = []
+    cv = d.get("canais_venda")
+    if cv is None or cv.empty:
+        out.append(("atencao", "Os canais de venda (onde o cliente compra e quanto cada canal cobra) ainda não foram informados."))
+    else:
+        r = resumo_canais(cv)
+        if abs(r["soma"] - 100) > 0.5:
+            out.append(("atencao", f"Os canais de venda somam {_n(r['soma'])}% das vendas; precisam somar 100%."))
+        mm = mc_media(res)
+        if r["comissao"] > 0 and mm == mm:
+            cvv = d["custos_variaveis"]
+            desc = cvv["descricao"].astype(str)
+            aplicado = float(cvv.loc[(desc == _LINHA_COMISSAO) | desc.str.lower().str.startswith("comissões de aplicativos"),
+                                     "percentual"].sum())
+            if abs(aplicado - r["comissao"]) > 0.01:
+                out.append(("atencao", f"A comissão média dos canais ({_p(r['comissao'] / 100, 2)} da receita) ainda não foi "
+                            "aplicada aos custos variáveis: a margem do plano está maior do que a real."))
+        if r["maior_pct"] >= 70 and r["maior"] in TERCEIROS:
+            out.append(("atencao", f"{r['maior']} concentra {_n(r['maior_pct'])}% das vendas. Se esse canal mudar as regras ou a taxa, "
+                        "o negócio sente direto."))
+        pos, dist = proj.get("mix_posicao_preco") or "", proj.get("mix_distribuicao") or ""
+        mkt = float(cv.loc[cv["canal"].isin(["Marketplace", "Aplicativo de delivery"]), "pct_vendas"].sum())
+        if pos == "Premium" and (dist == "Intensiva" or mkt >= 50):
+            out.append(("atencao", "Posição premium com distribuição intensiva ou vendas concentradas em marketplace e aplicativos: "
+                        "o cliente compara preço lado a lado e a diferenciação some."))
+    pv = promocao_vs_volume(proj, d, res)
+    if pv["novos"] <= 0:
+        out.append(("atencao", "Não há orçamento de promoção por canal com clientes novos por mês: não dá para saber de onde vem o volume do plano."))
+    elif not pv["cn"]["ok"]:
+        out.append(("atencao", "Informe quantas vezes por mês o cliente compra para comparar o volume do plano com a promoção."))
+    else:
+        mb = pv.get("meses_base", float("nan"))
+        nivel = "ok" if mb <= 3 else ("atencao" if mb <= 6 else "critico")
+        cvn = d.get("canais_venda")
+        loja = float(cvn.loc[cvn["canal"] == "Loja física", "pct_vendas"].sum()) if cvn is not None and not cvn.empty else 0.0
+        if nivel == "critico" and loja >= 50:
+            nivel = "atencao"
+        out.append((nivel, f"O plano precisa de cerca de {_n(pv['cn']['clientes'])} clientes ativos por mês, e a promoção traz "
+                    f"{_n(pv['novos'])} novos por mês: são uns {_n(mb, 1)} meses para formar essa base, sem contar quem deixa de comprar."
+                    + (" O volume do primeiro mês parece otimista." if nivel != "ok" else "")
+                    + (" Numa loja de rua parte dos clientes vem do fluxo de pessoas e não da promoção paga; "
+                       "estime esse fluxo no plano operacional para sustentar o volume." if loja >= 50 and nivel != "ok" else "")))
+        pb = pv.get("payback_cac", float("nan"))
+        if pb == pb:
+            nivel = "ok" if pb <= 3 else ("atencao" if pb <= 12 else "critico")
+            out.append((nivel, f"Cada cliente novo custa R$ {_n(pv['cac'], 2)} e devolve isso em margem de contribuição em cerca de {_n(pb, 1)} meses."))
+    return out
 
 # ##############################################################################
 # PARTE: pnbox_pdf.py
@@ -7699,7 +7869,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.1"
+VERSAO_PROGRAMA = "8.2"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -12269,6 +12439,74 @@ def _aba_preco():
     auto_unica("projeto", v)
 
 
+def _aba_praca():
+    dist = _select("Intensidade da distribuição", "mix_distribuicao", DISTRIBUICAO)
+    if dist:
+        st.caption(DISTRIBUICAO[dist])
+    auto_unica("projeto", {"mix_distribuicao": dist})
+    st.markdown("#### Canais de venda")
+    st.caption("Onde o cliente compra, que parte das vendas passa por cada canal e quanto o canal cobra "
+               "(comissão do aplicativo ou do marketplace, margem do revendedor). Confira as taxas atuais de cada canal.")
+    editor("canais_venda", {"canal": S("Canal", options=opcoes("canal_venda", CANAIS_VENDA), required=True),
+                            "pct_vendas": N("% das vendas", min_value=0.0, max_value=100.0, format="%.1f"),
+                            "comissao_pct": N("Comissão ou taxa do canal (%)", min_value=0.0, max_value=60.0, format="%.1f"),
+                            "observacao": T("Observação", width="medium")}, "canal")
+    cv = d["canais_venda"]
+    if not cv.empty:
+        r = resumo_canais(cv)
+        a, b, c = st.columns(3)
+        a.metric("Soma dos canais", f"{num_br(r['soma'], 0)}%")
+        b.metric("Comissão média sobre a receita", f"{num_br(r['comissao'], 2)}%")
+        c.metric("Canal principal", r["maior"], f"{num_br(r['maior_pct'], 0)}% das vendas", delta_color="off")
+        if abs(r["soma"] - 100) <= 0.5:
+            st.caption(f"Ao aplicar, a comissão média entra nos custos variáveis como \"{_LINHA_COMISSAO}\" e a linha "
+                       "\"Comissões de aplicativos de delivery\" é zerada, para a comissão não ser contada duas vezes.")
+            if st.button("✅ Aplicar comissões ao plano financeiro", key=wk("mx_can_ap")):
+                recarregar_tabela("custos_variaveis", aplicar_canais(cv, d["custos_variaveis"]), "descricao")
+                st.toast("Comissões aplicadas.", icon="✅")
+                st.rerun()
+        else:
+            st.warning("Os canais precisam somar 100% das vendas.", icon="⚠️")
+    st.markdown("#### Localização")
+    st.caption((f"Endereço informado: {proj['loc_endereco']}. " if str(proj.get("loc_endereco") or "").strip() else
+                "A localização ainda não foi informada. ") + "Endereço, área e fluxo de pessoas ficam no plano operacional; "
+               "o aluguel entra nos custos fixos.")
+    if st.button("🏭 Abrir o plano operacional", key=wk("mx_op")):
+        ir("operacional")
+        st.rerun()
+    auto_unica("projeto", {"mkt_praca": st.text_area("📝 Justificativa e detalhes da praça", proj["mkt_praca"], height=110,
+                                                     key=wk("m3"))})
+
+
+def _aba_promocao():
+    res = R()
+    obj = _select("Objetivo principal da comunicação nesta fase", "mix_objetivo_com", OBJETIVOS_COMUNICACAO)
+    if obj:
+        st.caption("Ações que costumam servir a esse objetivo: " + OBJETIVOS_COMUNICACAO[obj])
+    st.markdown("#### O volume do plano e a promoção")
+    st.caption("O volume de vendas do plano precisa de clientes. Aqui o programa estima quantos clientes ativos o "
+               "primeiro mês exige e compara com os clientes novos que o orçamento de promoção promete trazer.")
+    a, b = st.columns(2)
+    tk = a.number_input("Gasto médio por compra (R$); deixe 0 para usar o preço médio do catálogo", min_value=0.0,
+                        value=float(proj.get("mix_ticket") or 0), step=1.0, key=wk("mx_tk"))
+    fr = b.number_input("Quantas vezes por mês o cliente típico compra", min_value=0.0,
+                        value=float(proj.get("mix_freq") or 0), step=0.5, key=wk("mx_fr"))
+    auto_unica("projeto", {"mix_objetivo_com": obj, "mix_ticket": tk, "mix_freq": fr})
+    pv = promocao_vs_volume(proj, d, res)
+    k = st.columns(4)
+    k[0].metric("Clientes ativos que o plano exige", num_br(pv["cn"]["clientes"], 0) if pv["cn"].get("ok") else "n.a.")
+    k[1].metric("Clientes novos por mês (promoção)", num_br(pv["novos"], 0) if pv["novos"] else "n.a.")
+    k[2].metric("Custo por cliente novo (CAC)", brl(pv["cac"]) if pv["cac"] == pv["cac"] else "n.a.")
+    k[3].metric("Verba de promoção ÷ receita", pct(pv["verba_receita"]) if pv["verba_receita"] == pv["verba_receita"] else "n.a.")
+    if pv["novos"] <= 0:
+        st.info("Os clientes novos por mês vêm do orçamento de marketing por canal.", icon="💡")
+    if st.button("💸 Abrir orçamento de marketing e calendário", key=wk("mx_orc")):
+        ir("orcamento_mkt")
+        st.rerun()
+    auto_unica("projeto", {"mkt_promocao": st.text_area("📝 Justificativa e detalhes da promoção", proj["mkt_promocao"],
+                                                        height=110, key=wk("m4"))})
+
+
 def pg_marketing():
     cabecalho("marketing")
     st.caption("Cada P tem escolhas que alimentam o restante do plano. Os campos de texto continuam "
@@ -12279,20 +12517,19 @@ def pg_marketing():
     with abas[1]:
         _aba_preco()
     with abas[2]:
-        auto_unica("projeto", {"mkt_praca": st.text_area(
-            "📍 Praça: onde e como o cliente compra (loja, delivery, site, apps, revendedores)",
-            proj["mkt_praca"], height=150, key=wk("m3"))})
+        _aba_praca()
     with abas[3]:
-        auto_unica("projeto", {"mkt_promocao": st.text_area(
-            "📣 Promoção: como o cliente vai conhecer o negócio (redes, anúncios, parcerias, eventos)",
-            proj["mkt_promocao"], height=150, key=wk("m4"))})
+        _aba_promocao()
     with abas[4]:
         vw = None
         try:
             vw = van_westendorp(d["precos_vw"])
         except Exception:
             pass
+        st.markdown("**Produto e preço**")
         mostrar_alertas(checar_produto_preco(proj, d, R(), vw))
+        st.markdown("**Praça e promoção**")
+        mostrar_alertas(checar_praca_promocao(proj, d, R()))
     proxima("marketing")
 
 # ##############################################################################

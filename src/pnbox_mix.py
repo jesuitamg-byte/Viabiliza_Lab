@@ -17,6 +17,12 @@ import pandas as pd
 from pnbox_motor import div
 
 
+def _n(x: float, casas: int = 0) -> str:
+    """Número no formato brasileiro (1234,5 -> 1.234,5)."""
+    t = f"{x:,.{casas}f}"
+    return t.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _p(x: float, casas: int = 1) -> str:
     """Percentual no formato brasileiro (0,257 -> 25,7%)."""
     return f"{x * 100:.{casas}f}%".replace(".", ",")
@@ -238,3 +244,136 @@ def aplicar_pagamento(df_pag: pd.DataFrame, cv: pd.DataFrame, prazos: pd.DataFra
     novos = pd.DataFrame({"tipo": "Recebimento", "prazo_dias": g["prazo_dias"], "percentual": g["pct_vendas"]})
     prazos = pd.concat([prazos[prazos["tipo"] != "Recebimento"], novos], ignore_index=True)
     return cv, prazos
+
+
+# ------------------------------------------------------------------------------
+# PRAÇA (v8.2)
+# ------------------------------------------------------------------------------
+CANAIS_VENDA = ["Loja física", "Entrega própria", "Aplicativo de delivery", "Marketplace", "Site próprio",
+                "WhatsApp e redes sociais", "Revendedores", "Venda direta a empresas", "Feiras e eventos"]
+DISTRIBUICAO = {
+    "Intensiva": "Estar no maior número possível de pontos de venda. Combina com produtos de compra frequente e preço baixo.",
+    "Seletiva": "Poucos pontos ou canais escolhidos. Combina com produtos em que o cliente compara antes de comprar.",
+    "Exclusiva": "Um ou poucos pontos, com controle total da experiência. Combina com posicionamento premium.",
+}
+_LINHA_COMISSAO = "Comissões de canais de venda"
+TERCEIROS = {"Aplicativo de delivery", "Marketplace", "Revendedores"}
+
+
+def resumo_canais(df: pd.DataFrame) -> dict:
+    if df is None or df.empty:
+        return {"soma": 0.0, "comissao": 0.0, "maior": "", "maior_pct": 0.0}
+    w = df["pct_vendas"].astype(float)
+    soma = float(w.sum())
+    i = int(w.values.argmax())
+    return {"soma": soma, "comissao": float((w * df["comissao_pct"]).sum() / 100) if soma else 0.0,
+            "maior": str(df["canal"].iloc[i]), "maior_pct": float(w.iloc[i])}
+
+
+def aplicar_canais(df: pd.DataFrame, cv: pd.DataFrame) -> pd.DataFrame:
+    """Grava a comissão média ponderada nos custos variáveis, zerando a linha antiga de aplicativos para não contar duas vezes."""
+    r = resumo_canais(df)
+    cv = cv.copy()
+    antiga = cv["descricao"].astype(str).str.lower().str.startswith("comissões de aplicativos")
+    cv.loc[antiga, "percentual"] = 0.0
+    m = cv["descricao"] == _LINHA_COMISSAO
+    if m.any():
+        cv.loc[m, "percentual"] = round(r["comissao"], 4)
+    else:
+        cv = pd.concat([cv, pd.DataFrame([{"descricao": _LINHA_COMISSAO, "percentual": round(r["comissao"], 4)}])],
+                       ignore_index=True)
+    return cv
+
+
+# ------------------------------------------------------------------------------
+# PROMOÇÃO (v8.2)
+# ------------------------------------------------------------------------------
+OBJETIVOS_COMUNICACAO = {
+    "Tornar a marca conhecida": "Alcance e frequência: anúncios, parcerias, presença em eventos e conteúdo.",
+    "Fazer o cliente experimentar": "Amostras, degustação, primeira compra com vantagem e indicação.",
+    "Converter em venda": "Oferta clara, prova social, facilidade de pagamento e contato rápido.",
+    "Fidelizar e fazer voltar": "Programa de fidelidade, pós-venda, relacionamento por WhatsApp ou e-mail.",
+}
+
+
+def clientes_necessarios(proj: dict, res: dict) -> dict:
+    """Clientes ativos por mês que o volume do plano exige (receita do mês 1 ÷ gasto mensal por cliente)."""
+    cat = res.get("cat")
+    receita = float(res.get("receita_m1") or 0)
+    ticket = float(proj.get("mix_ticket") or 0)
+    if ticket <= 0 and cat is not None and not cat.empty and cat["qtd_mensal"].sum() > 0:
+        ticket = receita / float(cat["qtd_mensal"].sum())
+    freq = float(proj.get("mix_freq") or 0)
+    if receita <= 0 or ticket <= 0 or freq <= 0:
+        return {"ok": False, "ticket": ticket, "freq": freq}
+    return {"ok": True, "ticket": ticket, "freq": freq, "clientes": receita / (ticket * freq),
+            "gasto_cliente_mes": ticket * freq}
+
+
+def promocao_vs_volume(proj: dict, d: dict, res: dict) -> dict:
+    """Confronta os clientes que o plano exige com os clientes novos que a promoção promete trazer."""
+    cn = clientes_necessarios(proj, res)
+    oc = d.get("orcamento_canais")
+    novos = float(oc["clientes_mes"].sum()) if oc is not None and not oc.empty else 0.0
+    gasto = float(oc["gasto_mensal"].sum()) if oc is not None and not oc.empty else 0.0
+    out = {"cn": cn, "novos": novos, "gasto": gasto, "cac": div(gasto, novos) if novos > 0 else float("nan")}
+    if cn["ok"] and novos > 0:
+        out["meses_base"] = cn["clientes"] / novos
+    mm = mc_media(res)
+    if cn.get("ok") and mm == mm and mm > 0 and out["cac"] == out["cac"]:
+        margem_cliente = cn["gasto_cliente_mes"] * mm
+        out["payback_cac"] = div(out["cac"], margem_cliente)
+    receita = float(res.get("receita_m1") or 0)
+    out["verba_receita"] = div(gasto, receita) if receita > 0 else float("nan")
+    return out
+
+
+def checar_praca_promocao(proj: dict, d: dict, res: dict) -> list[tuple[str, str]]:
+    out = []
+    cv = d.get("canais_venda")
+    if cv is None or cv.empty:
+        out.append(("atencao", "Os canais de venda (onde o cliente compra e quanto cada canal cobra) ainda não foram informados."))
+    else:
+        r = resumo_canais(cv)
+        if abs(r["soma"] - 100) > 0.5:
+            out.append(("atencao", f"Os canais de venda somam {_n(r['soma'])}% das vendas; precisam somar 100%."))
+        mm = mc_media(res)
+        if r["comissao"] > 0 and mm == mm:
+            cvv = d["custos_variaveis"]
+            desc = cvv["descricao"].astype(str)
+            aplicado = float(cvv.loc[(desc == _LINHA_COMISSAO) | desc.str.lower().str.startswith("comissões de aplicativos"),
+                                     "percentual"].sum())
+            if abs(aplicado - r["comissao"]) > 0.01:
+                out.append(("atencao", f"A comissão média dos canais ({_p(r['comissao'] / 100, 2)} da receita) ainda não foi "
+                            "aplicada aos custos variáveis: a margem do plano está maior do que a real."))
+        if r["maior_pct"] >= 70 and r["maior"] in TERCEIROS:
+            out.append(("atencao", f"{r['maior']} concentra {_n(r['maior_pct'])}% das vendas. Se esse canal mudar as regras ou a taxa, "
+                        "o negócio sente direto."))
+        pos, dist = proj.get("mix_posicao_preco") or "", proj.get("mix_distribuicao") or ""
+        mkt = float(cv.loc[cv["canal"].isin(["Marketplace", "Aplicativo de delivery"]), "pct_vendas"].sum())
+        if pos == "Premium" and (dist == "Intensiva" or mkt >= 50):
+            out.append(("atencao", "Posição premium com distribuição intensiva ou vendas concentradas em marketplace e aplicativos: "
+                        "o cliente compara preço lado a lado e a diferenciação some."))
+    pv = promocao_vs_volume(proj, d, res)
+    if pv["novos"] <= 0:
+        out.append(("atencao", "Não há orçamento de promoção por canal com clientes novos por mês: não dá para saber de onde vem o volume do plano."))
+    elif not pv["cn"]["ok"]:
+        out.append(("atencao", "Informe quantas vezes por mês o cliente compra para comparar o volume do plano com a promoção."))
+    else:
+        mb = pv.get("meses_base", float("nan"))
+        nivel = "ok" if mb <= 3 else ("atencao" if mb <= 6 else "critico")
+        cvn = d.get("canais_venda")
+        loja = float(cvn.loc[cvn["canal"] == "Loja física", "pct_vendas"].sum()) if cvn is not None and not cvn.empty else 0.0
+        if nivel == "critico" and loja >= 50:
+            nivel = "atencao"
+        out.append((nivel, f"O plano precisa de cerca de {_n(pv['cn']['clientes'])} clientes ativos por mês, e a promoção traz "
+                    f"{_n(pv['novos'])} novos por mês: são uns {_n(mb, 1)} meses para formar essa base, sem contar quem deixa de comprar."
+                    + (" O volume do primeiro mês parece otimista." if nivel != "ok" else "")
+                    + (" Numa loja de rua parte dos clientes vem do fluxo de pessoas e não da promoção paga; "
+                       "estime esse fluxo no plano operacional para sustentar o volume." if loja >= 50 and nivel != "ok" else "")))
+        pb = pv.get("payback_cac", float("nan"))
+        if pb == pb:
+            nivel = "ok" if pb <= 3 else ("atencao" if pb <= 12 else "critico")
+            out.append((nivel, f"Cada cliente novo custa R$ {_n(pv['cac'], 2)} e devolve isso em margem de contribuição em cerca de {_n(pb, 1)} meses."))
+    return out
+

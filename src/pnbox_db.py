@@ -89,6 +89,8 @@ SCHEMA = {
         # v8.1: mix de marketing integrado (Produto e Preço)
         ("mix_nucleo", "TEXT"), ("mix_real", "TEXT"), ("mix_ampliado", "TEXT"), ("mix_ciclo", "TEXT"),
         ("mix_estrategia_preco", "TEXT"), ("mix_posicao_preco", "TEXT"),
+        # v8.2: Praça e Promoção
+        ("mix_distribuicao", "TEXT"), ("mix_objetivo_com", "TEXT"), ("mix_ticket", "REAL"), ("mix_freq", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -190,6 +192,7 @@ SCHEMA = {
     # --- v8.1: mix de marketing integrado ---
     "precos_concorrentes": [("concorrente", "TEXT"), ("produto", "TEXT"), ("preco", "REAL"), ("fonte", "TEXT")],
     "meios_pagamento": [("forma", "TEXT"), ("pct_vendas", "REAL"), ("taxa_pct", "REAL"), ("prazo_dias", "REAL")],
+    "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 

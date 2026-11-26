@@ -7,6 +7,18 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.2 (25/11/2026): mix de marketing integrado: Praça e Promoção
+
+**Plano de marketing (4Ps): Praça e Promoção**
+- **Praça:** intensidade da distribuição (intensiva, seletiva ou exclusiva) e tabela de canais de venda com a parte das vendas e a comissão de cada canal. Um botão aplica a comissão média aos custos variáveis, sem contar duas vezes a comissão de aplicativos que já existia.
+- Ligação com o plano operacional para a localização.
+- **Promoção:** objetivo principal da comunicação (tornar conhecido, fazer experimentar, converter ou fidelizar) com as ações típicas de cada um.
+- **Volume do plano × promoção:** clientes ativos que o primeiro mês exige (receita ÷ gasto mensal por cliente) comparados aos clientes novos que o orçamento de marketing traz, com o tempo para formar a base.
+- **CAC e retorno:** custo por cliente novo, meses para recuperar esse custo em margem de contribuição e verba de promoção sobre a receita.
+- O diagnóstico do mix ganha alertas de canais que não somam 100%, comissão não aplicada, dependência de um canal de terceiros, posição premium em canais de comparação de preço e volume sem promoção que o sustente.
+
+---
+
 ## v8.1 (25/11/2026): mix de marketing integrado: Produto e Preço
 
 **Plano de marketing (4Ps): Produto e Preço**
