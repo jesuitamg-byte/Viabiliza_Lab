@@ -9,3 +9,4 @@ v7.2 | a3c003b | novo visual das matrizes e modelo de serviços
 v7.2.1 | b8febfc | correção do sumário executivo
 v8.0 | a83049f | dados públicos, ABNT, financiamento e modo professor
 v8.1 | c096eb2 | mix de marketing integrado: Produto e Preço
+v8.2 | a49f4dd | mix de marketing integrado: Praça e Promoção
