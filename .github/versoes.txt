@@ -15,3 +15,4 @@ v8.4 | c0bf83d | plano de marketing estruturado
 v8.5 | 9ce1b94 | leitura automática dos resultados e modo exercício
 v8.6 | d2c3d44 | sazonalidade das vendas
 v8.7 | 2ab7b03 | sensibilidade do VPL (tornado e ponto de ruptura)
+v8.8 | 6c668e2 | Selic, inflação e TMA em degraus
