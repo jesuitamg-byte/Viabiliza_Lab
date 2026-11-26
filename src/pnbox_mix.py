@@ -557,7 +557,10 @@ def etapas_plano_mkt(proj: dict, d: dict) -> list[tuple[str, int, str]]:
 def regras_mix(proj: dict, d: dict) -> dict:
     et = etapas_plano_mkt(proj, d)
     completas = sum(1 for _, s, _ in et if s == 2)
-    return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et))}
+    saz = d.get("sazonalidade")
+    tem_saz = saz is not None and len(saz) >= 12 and float(saz["indice"].max() - saz["indice"].min()) > 0
+    return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et)),
+            "sazonalidade": (tem_saz, saz is not None and len(saz) > 0)}
 
 
 def frase_posicionamento(proj: dict) -> str:

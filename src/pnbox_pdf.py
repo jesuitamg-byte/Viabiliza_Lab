@@ -596,6 +596,16 @@ def secoes_v71(pdf, proj, d, res):
 
 def secoes_v8(pdf, proj, d, res):
     """Seções da versão 8 no relatório completo."""
+    if any(abs(x - 1) > 1e-9 for x in res.get("saz", [1.0] * 12)):
+        pdf.secao("SAZONALIDADE DAS VENDAS", nova_pagina=True)
+        ini = int(proj.get("saz_mes_inicio") or 1)
+        nomes = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+        mm = res["meses"]
+        pdf.tabela(pd.DataFrame({"Mês do plano": [f"{i + 1} ({nomes[(ini - 1 + i) % 12]})" for i in range(12)],
+                                 "Fator": [num_br(x, 2) for x in res["saz"]], "Receita": mm["Receita"].map(brl),
+                                 "Resultado operacional": mm["Resultado operacional"].map(brl),
+                                 "Saldo de caixa": res["fluxo_mensal"]["Saldo final"].map(brl)}),
+                   larguras=(35, 20, 40, 45, 40), alinhar=("LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"), tam=7.8)
     la = d.get("leituras_aluno", pd.DataFrame())
     if la is not None and not la.empty and (la["texto"].astype(str).str.strip() != "").any():
         pdf.secao("LEITURAS DOS RESULTADOS ESCRITAS PELO GRUPO", nova_pagina=True)

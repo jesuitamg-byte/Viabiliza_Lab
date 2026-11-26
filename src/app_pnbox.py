@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.5 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.6 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,18 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.6 (25/11/2026): sazonalidade das vendas
+
+**Sazonalidade das vendas**
+- Nova ferramenta **Sazonalidade das vendas**: índice de cada mês do calendário (100 = mês médio) e o mês em que o negócio abre.
+- **Perfis de partida ilustrativos** para ajustar: varejo de presentes, alimentação, sorvetes e bebidas geladas, cursos, serviços a empresas e turismo.
+- O motor financeiro distribui a receita e os custos diretos do Ano 1 pelos meses conforme os índices. O total do ano é preservado: a DRE anual, o VPL e a TIR não mudam; mudam a projeção mensal e o **fluxo de caixa**, que passa a mostrar os meses apertados.
+- Gráfico de receita e resultado mês a mês e leitura dos resultados com o mês mais forte, o mais fraco, os meses com prejuízo operacional e o ponto mais baixo do caixa.
+- Nova seção no relatório PDF com fator, receita, resultado e saldo de caixa de cada mês.
+- Projetos sem sazonalidade informada continuam com os mesmos números.
 
 ---
 
@@ -338,6 +350,8 @@ SCHEMA = {
         ("mix_4c_n1", "REAL"), ("mix_4c_n2", "REAL"), ("mix_4c_n3", "REAL"), ("mix_4c_n4", "REAL"),
         # v8.4: plano de marketing
         ("pm_situacao", "TEXT"), ("pm_ansoff", "TEXT"), ("pm_generica", "TEXT"),
+        # v8.6: sazonalidade
+        ("saz_mes_inicio", "REAL"), ("saz_perfil", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -442,6 +456,7 @@ SCHEMA = {
     "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
     "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
     "kpis_mkt": [("indicador", "TEXT"), ("meta", "TEXT"), ("frequencia", "TEXT"), ("fonte", "TEXT"), ("responsavel", "TEXT")],
+    "sazonalidade": [("mes", "REAL"), ("indice", "REAL")],
     "leituras_aluno": [("tabela", "TEXT"), ("texto", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
@@ -465,7 +480,7 @@ PROJETO_PADRAO = {
     "nps_meta": 50.0, "bass_mercado": 0.0, "bass_p": 0.03, "bass_q": 0.38, "revenda_ativos_pct": 40.0,
     "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
     "val_crescimento_perp_pct": 3.0, "val_multiplo_ebitda": 4.0, "val_multiplo_receita": 1.0,
-    "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0,
+    "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0, "saz_mes_inicio": 1.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)
@@ -2261,6 +2276,25 @@ def fator_r(res: dict, d: dict) -> dict:
 # ------------------------------------------------------------------------------
 # 4. MOTOR PRINCIPAL
 # ------------------------------------------------------------------------------
+def fatores_sazonais(tab, mes_inicio, g_m: float = 0.0) -> list:
+    """
+    Fatores de sazonalidade dos 12 meses do Ano 1 (v8.6). A tabela traz um índice por mês do calendário
+    (100 = mês médio); o plano começa no mês de abertura. Os fatores são ajustados para que a soma do
+    ano, já com o crescimento mensal, seja igual à de um ano sem sazonalidade: a DRE anual não muda,
+    só a distribuição dos meses e o fluxo de caixa.
+    """
+    if tab is None or len(tab) == 0:
+        return [1.0] * 12
+    idx = {int(m): float(v) for m, v in zip(tab["mes"], tab["indice"]) if 1 <= int(m or 0) <= 12 and float(v or 0) > 0}
+    if len(idx) < 12 or max(idx.values()) - min(idx.values()) < 1e-9:
+        return [1.0] * 12
+    ini = int(mes_inicio or 1) if 1 <= int(mes_inicio or 1) <= 12 else 1
+    bruto = [idx[(ini - 1 + m) % 12 + 1] for m in range(12)]
+    cresc = [(1 + g_m) ** m for m in range(12)]
+    k = sum(cresc) / sum(c * b for c, b in zip(cresc, bruto))
+    return [b * k for b in bruto]
+
+
 def executar_motor(proj: dict, d: dict) -> dict:
     """d = dicionário com os DataFrames do projeto (nomes das tabelas)."""
     cat = custos_unitarios(d["catalogo"], d["materiais"], d["ficha_tecnica"])
@@ -2358,11 +2392,12 @@ def executar_motor(proj: dict, d: dict) -> dict:
     fontes = capital_proprio + capital_terceiros
     crono = cronograma_emprestimos(d["emprestimos"], anos=N + 1)
 
-    # --- Projeção mensal do Ano 1
+    # --- Projeção mensal do Ano 1 (com sazonalidade, se informada; o total do ano não muda)
     tma = proj["tma_anual_pct"] / 100
+    saz = fatores_sazonais(d.get("sazonalidade"), proj.get("saz_mes_inicio"), g_m)
     meses = []
     for m in range(12):
-        f = (1 + g_m) ** m
+        f = (1 + g_m) ** m * saz[m]
         rec = receita_m1 * f + s_rec[m]
         cv = cdir_m1 * f + rec * (aliq + var_pct) + s_custo[m] + s_taxa[m]
         cf = pes_serie[m] + fixos_m + dep_m
@@ -2512,8 +2547,8 @@ def executar_motor(proj: dict, d: dict) -> dict:
                     saida[m + lag + 1] += v * frac * resto
         return saida[:12]
 
-    rec_mes = [receita_m1 * (1 + g_m) ** m for m in range(12)]
-    cdir_mes = [cdir_m1 * (1 + g_m) ** m for m in range(12)]
+    rec_mes = [receita_m1 * (1 + g_m) ** m * saz[m] for m in range(12)]
+    cdir_mes = [cdir_m1 * (1 + g_m) ** m * saz[m] for m in range(12)]
     entradas = [e + c for e, c in zip(distribuir(rec_mes, rec_pz), s_cob[:12])]   # assinaturas: caixa na cobrança
     pag_forn = distribuir(cdir_mes, pag_pz)
     saldo = fontes - inv_fixo - inv_pre - inv_estoque
@@ -2552,7 +2587,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         payback_simples=payback_simples, payback_desc=payback_desc, resumo=resumo, tma=tma,
         ass=ass_df, ass_planos=ass_planos, recorrencia=rec_ind, g_a=g_a, inf=inf,
         N=N, ANOS=ANOS, MESES=MESES, pes_serie=pes_serie, folha_ano1=sum(sal_enc_serie[:12]),
-        recupera_giro=bool(proj.get("recuperar_giro")),
+        recupera_giro=bool(proj.get("recuperar_giro")), saz=saz,
     )
 
 
@@ -5278,7 +5313,10 @@ def etapas_plano_mkt(proj: dict, d: dict) -> list[tuple[str, int, str]]:
 def regras_mix(proj: dict, d: dict) -> dict:
     et = etapas_plano_mkt(proj, d)
     completas = sum(1 for _, s, _ in et if s == 2)
-    return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et))}
+    saz = d.get("sazonalidade")
+    tem_saz = saz is not None and len(saz) >= 12 and float(saz["indice"].max() - saz["indice"].min()) > 0
+    return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et)),
+            "sazonalidade": (tem_saz, saz is not None and len(saz) > 0)}
 
 
 def frase_posicionamento(proj: dict) -> str:
@@ -5907,6 +5945,63 @@ def leitura_fluxo(res: dict) -> list[str]:
     return out
 
 # ##############################################################################
+# PARTE: pnbox_v9.py
+# ##############################################################################
+
+
+
+
+MESES_NOME = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro",
+              "Novembro", "Dezembro"]
+
+# ------------------------------------------------------------------------------
+# SAZONALIDADE (v8.6)
+# ------------------------------------------------------------------------------
+# Perfis ILUSTRATIVOS (100 = mês médio). Servem de ponto de partida: o grupo deve ajustar com dados do
+# próprio negócio, de concorrentes, de fornecedores ou de pesquisas do IBGE.
+PERFIS_SAZONAIS = {
+    "Sem sazonalidade": [100] * 12,
+    "Varejo de presentes e vestuário (pico no Natal)": [80, 78, 92, 90, 105, 95, 98, 100, 92, 98, 105, 167],
+    "Alimentação e cafeteria (mais fraco nas férias)": [92, 95, 102, 100, 103, 98, 95, 102, 100, 103, 102, 108],
+    "Sorvetes e bebidas geladas (verão)": [140, 130, 115, 95, 80, 70, 70, 75, 90, 105, 120, 110],
+    "Cursos e educação (fraco nas férias escolares)": [70, 115, 120, 110, 105, 85, 75, 110, 110, 105, 100, 95],
+    "Serviços a empresas (fraco em janeiro e dezembro)": [80, 95, 105, 105, 105, 100, 100, 105, 105, 105, 105, 90],
+    "Turismo e lazer (férias e feriados)": [150, 115, 85, 90, 80, 90, 130, 85, 85, 95, 90, 105],
+}
+
+
+def tabela_perfil(nome: str) -> pd.DataFrame:
+    return pd.DataFrame({"mes": list(range(1, 13)), "indice": [float(x) for x in PERFIS_SAZONAIS[nome]]})
+
+
+def resumo_sazonal(proj: dict, res: dict) -> dict:
+    """Meses do plano mais fortes e mais fracos, amplitude e o mês de caixa mais apertado."""
+    mm = res["meses"]
+    fm = res["fluxo_mensal"]
+    ini = int(proj.get("saz_mes_inicio") or 1)
+    nome = lambda m: f"mês {m + 1} ({MESES_NOME[(ini - 1 + m) % 12].lower()})"
+    rec = mm["Receita"].tolist()
+    i_max, i_min = rec.index(max(rec)), rec.index(min(rec))
+    j = int(fm["Saldo final"].idxmin()) if not fm.empty else 0
+    return {"forte": nome(i_max), "fraco": nome(i_min), "amplitude": (max(rec) / min(rec) - 1) if min(rec) > 0 else float("nan"),
+            "caixa_min": float(fm["Saldo final"].min()) if not fm.empty else float("nan"), "mes_caixa": nome(j),
+            "neg": [nome(m) for m in range(12) if mm["Resultado operacional"].iloc[m] < 0]}
+
+
+def leitura_sazonalidade(proj: dict, res: dict) -> list[str]:
+    if all(abs(x - 1) < 1e-9 for x in res.get("saz", [1.0] * 12)):
+        return ["Sem sazonalidade: as vendas crescem de forma regular mês a mês."]
+    r = resumo_sazonal(proj, res)
+    out = [f"O mês mais forte é o {r['forte']} e o mais fraco, o {r['fraco']}: a receita do melhor mês supera a do pior em "
+           f"{_p(r['amplitude'], 0)}."]
+    if r["neg"]:
+        out.append("Dá prejuízo operacional em: " + ", ".join(r["neg"]) + ". É nesses meses que a reserva de caixa é usada.")
+    out.append(f"O caixa fica mais apertado no {r['mes_caixa']}, com saldo de R$ {_n(r['caixa_min'], 2)}"
+               + (": falta dinheiro e o capital de giro precisa aumentar." if r["caixa_min"] < 0 else "."))
+    out.append("O total do ano não muda com a sazonalidade; muda quando o dinheiro entra.")
+    return out
+
+# ##############################################################################
 # PARTE: pnbox_pdf.py
 # ##############################################################################
 
@@ -6492,6 +6587,16 @@ def secoes_v71(pdf, proj, d, res):
 
 def secoes_v8(pdf, proj, d, res):
     """Seções da versão 8 no relatório completo."""
+    if any(abs(x - 1) > 1e-9 for x in res.get("saz", [1.0] * 12)):
+        pdf.secao("SAZONALIDADE DAS VENDAS", nova_pagina=True)
+        ini = int(proj.get("saz_mes_inicio") or 1)
+        nomes = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+        mm = res["meses"]
+        pdf.tabela(pd.DataFrame({"Mês do plano": [f"{i + 1} ({nomes[(ini - 1 + i) % 12]})" for i in range(12)],
+                                 "Fator": [num_br(x, 2) for x in res["saz"]], "Receita": mm["Receita"].map(brl),
+                                 "Resultado operacional": mm["Resultado operacional"].map(brl),
+                                 "Saldo de caixa": res["fluxo_mensal"]["Saldo final"].map(brl)}),
+                   larguras=(35, 20, 40, 45, 40), alinhar=("LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"), tam=7.8)
     la = d.get("leituras_aluno", pd.DataFrame())
     if la is not None and not la.empty and (la["texto"].astype(str).str.strip() != "").any():
         pdf.secao("LEITURAS DOS RESULTADOS ESCRITAS PELO GRUPO", nova_pagina=True)
@@ -7418,7 +7523,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao", "plano_mkt"} | OPCIONAIS_V8
+    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -8832,7 +8937,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.5"
+VERSAO_PROGRAMA = "8.6"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -9037,6 +9142,8 @@ PAGINAS = [
      "Parcelas, juros e custo efetivo de cada empréstimo, e comparação entre propostas de crédito."),
     ("produtos", "Finanças", "📦", "Produtos e materiais",
      "Materiais, produtos e serviços, ficha técnica e custo de cada item."),
+    ("sazonalidade", "Finanças", "📅", "Sazonalidade das vendas",
+     "Peso de cada mês nas vendas: meses fortes e fracos, e o efeito no fluxo de caixa."),
     ("servicos", "Finanças", "🧑‍💻", "Serviços e custo da hora",
      "Para quem vende tempo e conhecimento: custo da hora produtiva, horas da equipe e preço de cada serviço."),
     ("assinaturas", "Finanças", "💳", "Assinaturas e receita recorrente",
@@ -9522,7 +9629,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p == "plano_mkt"
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -13303,6 +13410,7 @@ def professor_extras(projetos: list):
 
 
 
+
 ICONE_NIVEL = {"ok": "✅", "atencao": "⚠️", "critico": "⛔"}
 
 
@@ -13709,6 +13817,40 @@ def pg_plano_mkt():
             if sec["tabela"] is not None:
                 st.dataframe(sec["tabela"], hide_index=True, width="stretch")
     proxima("plano_mkt")
+
+
+# ------------------------------------------------------------------------------
+# SAZONALIDADE (v8.6)
+# ------------------------------------------------------------------------------
+def pg_sazonalidade():
+    cabecalho("sazonalidade")
+    st.caption("Poucos negócios vendem igual o ano todo. Aqui o grupo informa o peso de cada mês (100 = mês médio). "
+               "O total do ano continua o mesmo; muda a distribuição dos meses e, com ela, o fluxo de caixa.")
+    a, b = st.columns(2)
+    ini = a.selectbox("Mês do calendário em que o negócio abre", list(range(1, 13)),
+                      index=int(proj.get("saz_mes_inicio") or 1) - 1, format_func=lambda m: MESES_NOME[m - 1], key=wk("saz_ini"))
+    perfil = b.selectbox("Perfil de partida (ilustrativo)", list(PERFIS_SAZONAIS), key=wk("saz_perfil"),
+                         index=list(PERFIS_SAZONAIS).index(proj["saz_perfil"]) if proj.get("saz_perfil") in PERFIS_SAZONAIS else 0)
+    auto_unica("projeto", {"saz_mes_inicio": float(ini)})
+    if st.button("Usar este perfil", key=wk("saz_usar")):
+        auto_unica("projeto", {"saz_perfil": perfil})
+        recarregar_tabela("sazonalidade", tabela_perfil(perfil), "mes")
+        st.rerun()
+    st.caption("Os perfis são ilustrativos. Ajuste os índices com o que o grupo sabe do negócio: vendas de concorrentes, "
+               "conversa com fornecedores, datas comemorativas e o clima da cidade.")
+    editor("sazonalidade", {"mes": N("Mês do calendário", min_value=1, max_value=12, step=1, required=True),
+                            "indice": N("Índice (100 = mês médio)", min_value=0.0, step=5.0)}, "mes")
+    res = R()
+    mm = res["meses"]
+    graf = pd.DataFrame({"Mês do plano": [f"{i + 1:02d}" for i in range(12)], "Receita": mm["Receita"],
+                         "Resultado operacional": mm["Resultado operacional"]})
+    st.altair_chart(alt.Chart(graf.melt("Mês do plano", var_name="Série", value_name="R$")).mark_line(point=True).encode(
+        x="Mês do plano:N", y="R$:Q", color="Série:N"), width="stretch")
+    mostrar_leitura("sazonalidade_resultado", leitura_sazonalidade(proj, res))
+    if st.button("💵 Ver o fluxo de caixa", key=wk("saz_fluxo")):
+        ir("fluxo")
+        st.rerun()
+    proxima("sazonalidade")
 
 # ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
@@ -14248,7 +14390,7 @@ Você está usando a **versão on-line**. Os projetos ficam guardados **no armaz
 ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade, "canvas": pg_canvas, "porter": pg_porter,
          "ge": pg_ge, "bcg": pg_bcg, "bsc": pg_bsc, "reforma": pg_reforma, "segmentos": pg_segmentos, "personas": pg_personas,
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
-         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt,
+         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
          "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,

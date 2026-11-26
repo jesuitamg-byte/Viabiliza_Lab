@@ -7,6 +7,18 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.6 (25/11/2026): sazonalidade das vendas
+
+**Sazonalidade das vendas**
+- Nova ferramenta **Sazonalidade das vendas**: índice de cada mês do calendário (100 = mês médio) e o mês em que o negócio abre.
+- **Perfis de partida ilustrativos** para ajustar: varejo de presentes, alimentação, sorvetes e bebidas geladas, cursos, serviços a empresas e turismo.
+- O motor financeiro distribui a receita e os custos diretos do Ano 1 pelos meses conforme os índices. O total do ano é preservado: a DRE anual, o VPL e a TIR não mudam; mudam a projeção mensal e o **fluxo de caixa**, que passa a mostrar os meses apertados.
+- Gráfico de receita e resultado mês a mês e leitura dos resultados com o mês mais forte, o mais fraco, os meses com prejuízo operacional e o ponto mais baixo do caixa.
+- Nova seção no relatório PDF com fator, receita, resultado e saldo de caixa de cada mês.
+- Projetos sem sazonalidade informada continuam com os mesmos números.
+
+---
+
 ## v8.5 (25/11/2026): leitura automática dos resultados e modo exercício
 
 **Leitura automática dos resultados**

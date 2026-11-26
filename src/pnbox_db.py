@@ -97,6 +97,8 @@ SCHEMA = {
         ("mix_4c_n1", "REAL"), ("mix_4c_n2", "REAL"), ("mix_4c_n3", "REAL"), ("mix_4c_n4", "REAL"),
         # v8.4: plano de marketing
         ("pm_situacao", "TEXT"), ("pm_ansoff", "TEXT"), ("pm_generica", "TEXT"),
+        # v8.6: sazonalidade
+        ("saz_mes_inicio", "REAL"), ("saz_perfil", "TEXT"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -201,6 +203,7 @@ SCHEMA = {
     "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
     "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
     "kpis_mkt": [("indicador", "TEXT"), ("meta", "TEXT"), ("frequencia", "TEXT"), ("fonte", "TEXT"), ("responsavel", "TEXT")],
+    "sazonalidade": [("mes", "REAL"), ("indice", "REAL")],
     "leituras_aluno": [("tabela", "TEXT"), ("texto", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
@@ -224,7 +227,7 @@ PROJETO_PADRAO = {
     "nps_meta": 50.0, "bass_mercado": 0.0, "bass_p": 0.03, "bass_q": 0.38, "revenda_ativos_pct": 40.0,
     "mapa_eixo_x": "Preço (baixo → alto)", "mapa_eixo_y": "Conveniência (baixa → alta)",
     "val_crescimento_perp_pct": 3.0, "val_multiplo_ebitda": 4.0, "val_multiplo_receita": 1.0,
-    "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0,
+    "rodada_investimento": 0.0, "rodada_pre_money": 0.0, "edital_trl": 3.0, "saz_mes_inicio": 1.0,
 }
 
 # Custos variáveis sugeridos para um projeto em branco (percentuais zerados)

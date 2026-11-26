@@ -6,6 +6,7 @@ continuam valendo como justificativa de cada P.
 """
 from pnbox_ui_base import *
 from pnbox_mix import *
+from pnbox_v9 import *
 
 ICONE_NIVEL = {"ok": "✅", "atencao": "⚠️", "critico": "⛔"}
 
@@ -413,3 +414,37 @@ def pg_plano_mkt():
             if sec["tabela"] is not None:
                 st.dataframe(sec["tabela"], hide_index=True, width="stretch")
     proxima("plano_mkt")
+
+
+# ------------------------------------------------------------------------------
+# SAZONALIDADE (v8.6)
+# ------------------------------------------------------------------------------
+def pg_sazonalidade():
+    cabecalho("sazonalidade")
+    st.caption("Poucos negócios vendem igual o ano todo. Aqui o grupo informa o peso de cada mês (100 = mês médio). "
+               "O total do ano continua o mesmo; muda a distribuição dos meses e, com ela, o fluxo de caixa.")
+    a, b = st.columns(2)
+    ini = a.selectbox("Mês do calendário em que o negócio abre", list(range(1, 13)),
+                      index=int(proj.get("saz_mes_inicio") or 1) - 1, format_func=lambda m: MESES_NOME[m - 1], key=wk("saz_ini"))
+    perfil = b.selectbox("Perfil de partida (ilustrativo)", list(PERFIS_SAZONAIS), key=wk("saz_perfil"),
+                         index=list(PERFIS_SAZONAIS).index(proj["saz_perfil"]) if proj.get("saz_perfil") in PERFIS_SAZONAIS else 0)
+    auto_unica("projeto", {"saz_mes_inicio": float(ini)})
+    if st.button("Usar este perfil", key=wk("saz_usar")):
+        auto_unica("projeto", {"saz_perfil": perfil})
+        recarregar_tabela("sazonalidade", tabela_perfil(perfil), "mes")
+        st.rerun()
+    st.caption("Os perfis são ilustrativos. Ajuste os índices com o que o grupo sabe do negócio: vendas de concorrentes, "
+               "conversa com fornecedores, datas comemorativas e o clima da cidade.")
+    editor("sazonalidade", {"mes": N("Mês do calendário", min_value=1, max_value=12, step=1, required=True),
+                            "indice": N("Índice (100 = mês médio)", min_value=0.0, step=5.0)}, "mes")
+    res = R()
+    mm = res["meses"]
+    graf = pd.DataFrame({"Mês do plano": [f"{i + 1:02d}" for i in range(12)], "Receita": mm["Receita"],
+                         "Resultado operacional": mm["Resultado operacional"]})
+    st.altair_chart(alt.Chart(graf.melt("Mês do plano", var_name="Série", value_name="R$")).mark_line(point=True).encode(
+        x="Mês do plano:N", y="R$:Q", color="Série:N"), width="stretch")
+    mostrar_leitura("sazonalidade_resultado", leitura_sazonalidade(proj, res))
+    if st.button("💵 Ver o fluxo de caixa", key=wk("saz_fluxo")):
+        ir("fluxo")
+        st.rerun()
+    proxima("sazonalidade")

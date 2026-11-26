@@ -290,6 +290,25 @@ def fator_r(res: dict, d: dict) -> dict:
 # ------------------------------------------------------------------------------
 # 4. MOTOR PRINCIPAL
 # ------------------------------------------------------------------------------
+def fatores_sazonais(tab, mes_inicio, g_m: float = 0.0) -> list:
+    """
+    Fatores de sazonalidade dos 12 meses do Ano 1 (v8.6). A tabela traz um índice por mês do calendário
+    (100 = mês médio); o plano começa no mês de abertura. Os fatores são ajustados para que a soma do
+    ano, já com o crescimento mensal, seja igual à de um ano sem sazonalidade: a DRE anual não muda,
+    só a distribuição dos meses e o fluxo de caixa.
+    """
+    if tab is None or len(tab) == 0:
+        return [1.0] * 12
+    idx = {int(m): float(v) for m, v in zip(tab["mes"], tab["indice"]) if 1 <= int(m or 0) <= 12 and float(v or 0) > 0}
+    if len(idx) < 12 or max(idx.values()) - min(idx.values()) < 1e-9:
+        return [1.0] * 12
+    ini = int(mes_inicio or 1) if 1 <= int(mes_inicio or 1) <= 12 else 1
+    bruto = [idx[(ini - 1 + m) % 12 + 1] for m in range(12)]
+    cresc = [(1 + g_m) ** m for m in range(12)]
+    k = sum(cresc) / sum(c * b for c, b in zip(cresc, bruto))
+    return [b * k for b in bruto]
+
+
 def executar_motor(proj: dict, d: dict) -> dict:
     """d = dicionário com os DataFrames do projeto (nomes das tabelas)."""
     cat = custos_unitarios(d["catalogo"], d["materiais"], d["ficha_tecnica"])
@@ -387,11 +406,12 @@ def executar_motor(proj: dict, d: dict) -> dict:
     fontes = capital_proprio + capital_terceiros
     crono = cronograma_emprestimos(d["emprestimos"], anos=N + 1)
 
-    # --- Projeção mensal do Ano 1
+    # --- Projeção mensal do Ano 1 (com sazonalidade, se informada; o total do ano não muda)
     tma = proj["tma_anual_pct"] / 100
+    saz = fatores_sazonais(d.get("sazonalidade"), proj.get("saz_mes_inicio"), g_m)
     meses = []
     for m in range(12):
-        f = (1 + g_m) ** m
+        f = (1 + g_m) ** m * saz[m]
         rec = receita_m1 * f + s_rec[m]
         cv = cdir_m1 * f + rec * (aliq + var_pct) + s_custo[m] + s_taxa[m]
         cf = pes_serie[m] + fixos_m + dep_m
@@ -541,8 +561,8 @@ def executar_motor(proj: dict, d: dict) -> dict:
                     saida[m + lag + 1] += v * frac * resto
         return saida[:12]
 
-    rec_mes = [receita_m1 * (1 + g_m) ** m for m in range(12)]
-    cdir_mes = [cdir_m1 * (1 + g_m) ** m for m in range(12)]
+    rec_mes = [receita_m1 * (1 + g_m) ** m * saz[m] for m in range(12)]
+    cdir_mes = [cdir_m1 * (1 + g_m) ** m * saz[m] for m in range(12)]
     entradas = [e + c for e, c in zip(distribuir(rec_mes, rec_pz), s_cob[:12])]   # assinaturas: caixa na cobrança
     pag_forn = distribuir(cdir_mes, pag_pz)
     saldo = fontes - inv_fixo - inv_pre - inv_estoque
@@ -581,7 +601,7 @@ def executar_motor(proj: dict, d: dict) -> dict:
         payback_simples=payback_simples, payback_desc=payback_desc, resumo=resumo, tma=tma,
         ass=ass_df, ass_planos=ass_planos, recorrencia=rec_ind, g_a=g_a, inf=inf,
         N=N, ANOS=ANOS, MESES=MESES, pes_serie=pes_serie, folha_ano1=sum(sal_enc_serie[:12]),
-        recupera_giro=bool(proj.get("recuperar_giro")),
+        recupera_giro=bool(proj.get("recuperar_giro")), saz=saz,
     )
 
 
