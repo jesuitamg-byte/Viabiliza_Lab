@@ -7,6 +7,14 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.0.3 (26/11/2026): instalador com a versão correta
+
+**Instalador mostra a versão certa**
+- O instalador para Windows exibia "versão 7.0" na tela de instalação e na lista de programas do Windows, porque esse número estava fixo no arquivo do instalador. O programa instalado já era o atual. Agora a versão é lida do próprio programa a cada geração, e a página dos instaladores também informa a versão.
+- Endereços do README atualizados para o novo nome do repositório (Viabiliza_Lab).
+
+---
+
 ## v9.0.2 (26/11/2026): correção do botão Voltar do navegador
 
 **Correção: botão Voltar do navegador**

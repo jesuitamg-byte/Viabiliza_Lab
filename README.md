@@ -31,10 +31,10 @@ Também tem: **leitura automática dos resultados** ao final das tabelas, com **
 
 | Versão | Link |
 |---|---|
-| Com o exemplo FitBox preenchido | **https://jesuitamg-byte.github.io/gabriel_jesuita/** |
-| Em branco, para começar do zero | **https://jesuitamg-byte.github.io/gabriel_jesuita/?versao=branco** |
-| Com o exemplo de assinatura (Conecta Vale) | **https://jesuitamg-byte.github.io/gabriel_jesuita/?versao=assinatura** |
-| Com o exemplo de serviços (TecVale Soluções) | **https://jesuitamg-byte.github.io/gabriel_jesuita/?versao=servico** |
+| Com o exemplo FitBox preenchido | **https://jesuitamg-byte.github.io/Viabiliza_Lab/** |
+| Em branco, para começar do zero | **https://jesuitamg-byte.github.io/Viabiliza_Lab/?versao=branco** |
+| Com o exemplo de assinatura (Conecta Vale) | **https://jesuitamg-byte.github.io/Viabiliza_Lab/?versao=assinatura** |
+| Com o exemplo de serviços (TecVale Soluções) | **https://jesuitamg-byte.github.io/Viabiliza_Lab/?versao=servico** |
 
 - O programa roda **dentro do navegador** (Chrome, Edge ou Firefox). Nada é instalado e **os dados não saem do seu computador**.
 - A primeira abertura leva de 30 segundos a 1 minuto.
@@ -44,7 +44,7 @@ Também tem: **leitura automática dos resultados** ao final das tabelas, com **
 
 ### 2. Instalador para Windows (.exe)
 
-Na página **[Releases](https://github.com/jesuitamg-byte/gabriel_jesuita/releases/latest)** há dois instaladores:
+Na página **[Releases](https://github.com/jesuitamg-byte/Viabiliza_Lab/releases/latest)** há dois instaladores:
 
 - `ViabilizaLab-Setup-Modelo-FitBox.exe`: abre com o exemplo preenchido;
 - `ViabilizaLab-Setup-Em-Branco.exe`: abre com um projeto vazio.

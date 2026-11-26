@@ -1,4 +1,7 @@
 ﻿; Instalador do ViabilizaLab (gerado automaticamente pelo GitHub Actions)
+#ifndef ProgVersao
+  #define ProgVersao "0"
+#endif
 #ifndef Versao
   #define Versao "modelo"
 #endif
@@ -19,7 +22,8 @@
 [Setup]
 AppId={#Id}
 AppName={#Nome}
-AppVersion=7.0
+AppVersion={#ProgVersao}
+AppVerName={#Nome} {#ProgVersao}
 AppPublisher=ViabilizaLab - UFVJM
 DefaultDirName={localappdata}\{#Pasta}
 DisableProgramGroupPage=yes

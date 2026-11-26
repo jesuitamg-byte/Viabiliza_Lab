@@ -51,7 +51,9 @@ jobs:
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (!(Test-Path $iscc)) { choco install innosetup -y --no-progress }
-          & $iscc "/DVersao=${{ matrix.versao }}" installer\pnbox.iss
+          $ver = (Select-String -Path app_pnbox.py -Pattern 'VERSAO_PROGRAMA = "([0-9.]+)"').Matches[0].Groups[1].Value
+          Write-Host "Versão do programa: $ver"
+          & $iscc "/DVersao=${{ matrix.versao }}" "/DProgVersao=$ver" installer\pnbox.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
@@ -63,6 +65,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Ler a versão do programa
+        id: ver
+        run: echo "v=$(grep -oP 'VERSAO_PROGRAMA = "\K[0-9.]+' app_pnbox.py | head -1)" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: saida
@@ -78,9 +84,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: instaladores
-          name: "ViabilizaLab - instaladores para Windows"
+          name: "ViabilizaLab ${{ steps.ver.outputs.v }} - instaladores para Windows"
           make_latest: true
           body: |
+            **Versão do programa: ${{ steps.ver.outputs.v }}** ([novidades](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)).
+            Quem já tem uma versão anterior instalada pode instalar por cima: os projetos em Documentos\ViabilizaLab são mantidos.
+
             **Como instalar:** baixe um dos arquivos abaixo, dê dois cliques e siga as telas.
             - `ViabilizaLab-Setup-Modelo-FitBox.exe`: abre com o estudo de caso FitBox preenchido.
             - `ViabilizaLab-Setup-Em-Branco.exe`: abre com um projeto vazio para começar do zero.

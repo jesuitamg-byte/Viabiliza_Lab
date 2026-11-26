@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v9.0.2 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v9.0.3 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,14 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v9.0.3 (26/11/2026): instalador com a versão correta
+
+**Instalador mostra a versão certa**
+- O instalador para Windows exibia "versão 7.0" na tela de instalação e na lista de programas do Windows, porque esse número estava fixo no arquivo do instalador. O programa instalado já era o atual. Agora a versão é lida do próprio programa a cada geração, e a página dos instaladores também informa a versão.
+- Endereços do README atualizados para o novo nome do repositório (Viabiliza_Lab).
 
 ---
 
@@ -9684,7 +9692,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.0.2"
+VERSAO_PROGRAMA = "9.0.3"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
