@@ -295,6 +295,28 @@ def pg_relatorio():
                 ss[f"pdf_{PID}"] = gerar_pdf(proj, d, res, extras)
         if ss.get(f"pdf_{PID}"):
             st.download_button("⬇️ Baixar PDF", ss[f"pdf_{PID}"], f"Plano_{Path(ss.db).stem}.pdf", "application/pdf", width="stretch")
+    with st.container(border=True):
+        st.markdown("#### 🎤 Pitch em PowerPoint (editável)")
+        st.caption("Slides 16:9 que abrem no PowerPoint, LibreOffice e Google Apresentações, com gráficos editáveis, notas do "
+                   "apresentador com o roteiro de fala e o tempo de cada slide, e um slide de reserva com as perguntas prováveis da banca.")
+        cpp = st.columns([2, 1])
+        rot = cpp[0].radio("Roteiro", list(ROTEIROS_PITCH), horizontal=True, key=wk("pptx_rot"))
+        if cpp[1].button("Gerar PowerPoint", width="stretch", key="b_pptx"):
+            with st.spinner("Montando os slides..."):
+                try:
+                    pq = perguntas_banca(proj, d, res, None, preco_referencia(proj, res))
+                except Exception:
+                    pq = []
+                try:
+                    ss[f"pptx_{PID}"] = gerar_pitch_pptx(proj, d, res, rot, pq)
+                except ImportError:
+                    ss[f"pptx_{PID}"] = b""
+        if f"pptx_{PID}" in ss:
+            if ss[f"pptx_{PID}"]:
+                st.download_button("⬇️ Baixar .pptx", ss[f"pptx_{PID}"], f"Pitch_{Path(ss.db).stem}.pptx",
+                                   "application/vnd.openxmlformats-officedocument.presentationml.presentation", width="stretch")
+            else:
+                st.warning("A biblioteca python-pptx não está instalada neste computador.")
     with k[1].container(border=True):
         st.markdown("#### 🎤 Pitch deck (PDF 16:9)")
         st.caption("12 slides prontos para a apresentação oral.")

@@ -5,7 +5,7 @@ taxas do Banco Central, pitch em PowerPoint, modelos por setor, mapa de concorre
 """
 import pandas as pd
 
-from pnbox_mix import _n, _p
+from pnbox_mix import _n, _p, comparar_concorrentes, indice_preco_medio, resumo_mix_linhas
 from pnbox_motor import executar_motor, fatores_sazonais
 
 MESES_NOME = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro",
@@ -242,3 +242,312 @@ def leitura_taxas(proj: dict, d: dict, res: dict, selic: float, ipca: float, tma
             out.append(f"Os empréstimos estão com taxa média de {_n(tx, 1)}% ao ano, abaixo da Selic: só é realista em linhas "
                        "subsidiadas (como Pronampe ou fundos públicos). Confira a condição real.")
     return out
+
+
+# ------------------------------------------------------------------------------
+# PITCH EM POWERPOINT (v8.9)
+# ------------------------------------------------------------------------------
+ROTEIROS_PITCH = {
+    "Banca acadêmica": ["capa", "problema", "solucao", "mercado", "concorrencia", "marketing", "operacao", "numeros",
+                        "sensibilidade", "riscos", "fechamento"],
+    "Investidor": ["capa", "problema", "solucao", "mercado", "tracao", "concorrencia", "numeros", "investimento", "equipe",
+                   "fechamento"],
+    "Edital de fomento": ["capa", "problema", "solucao", "impacto", "mercado", "equipe", "investimento", "numeros", "fechamento"],
+}
+TEMPO_SLIDE = {"capa": 20, "problema": 60, "solucao": 60, "mercado": 50, "concorrencia": 50, "marketing": 60, "operacao": 40,
+               "numeros": 70, "sensibilidade": 50, "riscos": 40, "tracao": 50, "investimento": 50, "equipe": 40, "impacto": 60,
+               "fechamento": 30}
+
+
+def _rs2(x):
+    return ("-R$ " if x < 0 else "R$ ") + _n(abs(x), 0)
+
+
+def conteudo_pitch(proj: dict, d: dict, res: dict) -> dict:
+    """Texto de cada slide (título, tópicos e notas do apresentador), independente do formato."""
+    from pnbox_validacao import mercado
+    a1 = res["anos"][1]
+    N = res["N"]
+    pers, props = d["personas"], d.get("propostas")
+    c = {}
+    c["capa"] = (proj.get("nome_negocio") or "Plano de negócio",
+                 [x for x in [proj.get("cidade_uf"), proj.get("turma"), str(proj.get("autores") or "").replace("\n", ", ")] if x],
+                 "Apresente o grupo e diga em uma frase o que o negócio faz e para quem.")
+    itens = []
+    for _, p_ in pers.head(2).iterrows():
+        itens.append(f"{p_['nome']}, {_n(p_['idade'])} anos: {p_['desafios'] or p_['citacao']}")
+    c["problema"] = ("O problema", itens or ["Descreva quem é o cliente e que dor ele sente."],
+                     "Conte uma situação concreta vivida pela persona. A banca precisa sentir o problema antes de ouvir a solução.")
+    itens = []
+    if str(proj.get("mix_nucleo") or "").strip():
+        itens.append(f"O que o cliente compra: {proj['mix_nucleo']}")
+    if props is not None and not props.empty:
+        itens.append(f"Oferecemos {props['oferecem'].iloc[0]}")
+    top = res["cat"].sort_values("receita_mensal", ascending=False)["descricao"].head(4).tolist() if not res["cat"].empty else []
+    if top:
+        itens.append("Principais itens: " + ", ".join(top))
+    c["solucao"] = ("A solução", itens or ["Descreva a proposta de valor."],
+                    "Mostre como a solução alivia exatamente a dor apresentada no slide anterior.")
+    mk = mercado(proj, res)
+    c["mercado"] = ("O mercado", [f"Mercado total: {_rs2(mk['tam'])}", f"Mercado alcançável: {_rs2(mk['sam'])}",
+                                  f"Meta de participação: {_rs2(mk['som'])}",
+                                  f"A receita do Ano 1 equivale a {_p(mk['pct_som'], 0) if mk['pct_som'] == mk['pct_som'] else '-'} da meta"]
+                    if mk["preenchido"] else ["Preencha o tamanho do mercado."],
+                    "Diga de onde vieram os números (IBGE, pesquisa, concorrentes). Número sem fonte é a primeira pergunta da banca.")
+    comp = comparar_concorrentes(res["cat"], d.get("precos_concorrentes")) if "precos_concorrentes" in d else pd.DataFrame()
+    itens = [f"Concorrentes analisados: {', '.join(d['concorrentes']['nome'].head(4))}"] if not d["concorrentes"].empty else []
+    if not comp.empty:
+        idx = indice_preco_medio(res["cat"], comp)
+        itens.append(f"Nossos preços: {_p(abs(idx - 1), 0)} {'acima' if idx >= 1 else 'abaixo'} da média")
+    if str(proj.get("posic_diferencial") or "").strip():
+        itens.append(f"Diferencial: {proj['posic_diferencial']}")
+    c["concorrencia"] = ("Concorrência e diferencial", itens or ["Cadastre os concorrentes."],
+                         "Não diga que não há concorrentes: mostre que conhece as alternativas e por que o cliente trocaria.")
+    lm = resumo_mix_linhas(proj, d, res)
+    c["marketing"] = ("Como vamos vender", [f"{r}: {t}" for r, t in lm[:5]] or ["Preencha o mix de marketing."],
+                      "Explique o caminho do cliente: como conhece, como compra, como paga e por que volta.")
+    c["operacao"] = ("Operação", [x for x in [proj.get("loc_endereco"), proj.get("op_processos")] if str(x or "").strip()][:3]
+                     or ["Descreva a localização e os processos."], "Mostre que o grupo sabe como o serviço ou produto é entregue no dia a dia.")
+    c["numeros"] = ("Os números", [f"Investimento total: {_rs2(res['investimento_total'])}", f"Receita no Ano 1: {_rs2(a1['rec_bruta'])}",
+                                   f"Resultado no Ano 1: {_rs2(a1['resultado'])}", f"VPL em {N} anos: {_rs2(res['vpl'])}",
+                                   f"TIR: {_p(res['tir'], 1) if res['tir'] is not None and res['tir'] == res['tir'] else 'n.a.'}",
+                                   f"Payback descontado: {_n(res['payback_desc'], 1) + ' meses' if res['payback_desc'] == res['payback_desc'] else 'acima do horizonte'}"],
+                    "Leia os três números principais em voz alta (investimento, VPL e payback) e diga o que significam.")
+    try:
+        from pnbox_validacao import faixas_mc
+        tor = tornado(res, faixas_mc(d))
+        t = tor.iloc[0]
+        c["sensibilidade"] = ("E se der errado?", [f"Variável mais sensível: {t['Variável'].lower()}",
+                                                  f"VPL entre {_rs2(t['VPL no mínimo'])} e {_rs2(t['VPL no máximo'])} na faixa testada"]
+                              + [f"{r['Variável']}: zera o VPL com {_p(r['Variação que zera o VPL'], 0)}"
+                                 for _, r in tabela_rupturas(res).dropna().head(2).iterrows()],
+                              "Mostrar o pior caso transmite segurança. Diga o que o grupo fará se essa variável vier abaixo do esperado.")
+    except Exception:
+        c["sensibilidade"] = ("E se der errado?", ["Veja a ferramenta Sensibilidade do VPL."], "")
+    rk = d["riscos"]
+    itens = []
+    if not rk.empty:
+        rk2 = rk.assign(sev=rk["probabilidade"] * rk["impacto"]).sort_values("sev", ascending=False).head(3)
+        itens = [f"{r['risco']}: {r['mitigacao'] or 'mitigação a definir'}" for _, r in rk2.iterrows()]
+    c["riscos"] = ("Riscos e como lidamos com eles", itens or ["Cadastre os riscos."], "Escolha os dois riscos mais graves e a resposta para cada um.")
+    ev = d.get("entrevistas")
+    itens = [f"{len(ev)} entrevistas com clientes"] if ev is not None and not ev.empty else []
+    if d.get("precos_vw") is not None and not d["precos_vw"].empty:
+        itens.append(f"{len(d['precos_vw'])} respostas na pesquisa de preço")
+    c["tracao"] = ("Validação e tração", itens or ["Mostre as evidências: entrevistas, pré-vendas, pilotos."],
+                   "Investidor compra evidência. Mostre o que já foi testado com clientes reais.")
+    c["investimento"] = ("Quanto precisamos e para quê", [f"Investimento fixo: {_rs2(res['inv_fixo'])}", f"Pré-operacional: {_rs2(res['inv_pre'])}",
+                                                         f"Capital de giro: {_rs2(res['capital_giro'])}",
+                                                         f"Capital próprio: {_rs2(res['capital_proprio'])}; terceiros: {_rs2(res['capital_terceiros'])}"],
+                         "Diga exatamente o valor pedido e em que ele será usado.")
+    soc = d["socios"]
+    c["equipe"] = ("Equipe", [f"{r['nome']}: {r['funcao']}" for _, r in soc.head(5).iterrows()] or ["Apresente os sócios."],
+                   "Diga por que este grupo é capaz de executar o plano.")
+    imp = [proj.get(k) for k in ("imp_problema", "imp_resultados", "imp_impacto")]
+    c["impacto"] = ("Impacto", [x for x in imp if str(x or "").strip()] + ([f"ODS: {proj['ods']}"] if proj.get("ods") else [])
+                    or ["Preencha a ferramenta Impacto social e ODS."], "Editais valorizam o impacto: diga quem é beneficiado e como medir.")
+    c["fechamento"] = ("Obrigado", [proj.get("contatos") or "Contato do grupo"],
+                       "Termine repetindo em uma frase o que o negócio faz e o principal número do plano.")
+    return c
+
+
+def gerar_pitch_pptx(proj: dict, d: dict, res: dict, roteiro: str = "Banca acadêmica", perguntas: list | None = None) -> bytes:
+    """Apresentação 16:9 editável no PowerPoint, LibreOffice ou Google Apresentações, com notas do apresentador."""
+    import io
+    from pptx import Presentation
+    from pptx.chart.data import CategoryChartData
+    from pptx.dml.color import RGBColor
+    from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+    from pptx.util import Inches, Pt
+
+    AZUL, CINZA = RGBColor(0x1F, 0x4F, 0x8F), RGBColor(0x44, 0x4B, 0x55)
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    branco = prs.slide_layouts[6]
+    cont = conteudo_pitch(proj, d, res)
+
+    def caixa(sl, x, y, w, h, texto, tam=20, cor=CINZA, negrito=False):
+        tf = sl.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h)).text_frame
+        tf.word_wrap = True
+        p = tf.paragraphs[0]
+        p.text = texto
+        p.font.size, p.font.bold, p.font.color.rgb = Pt(tam), negrito, cor
+        return tf
+
+    def faixa(sl):
+        sh = sl.shapes.add_shape(1, 0, 0, prs.slide_width, Inches(0.25))
+        sh.fill.solid()
+        sh.fill.fore_color.rgb = AZUL
+        sh.line.fill.background()
+
+    def grafico_anos(sl):
+        cd = CategoryChartData()
+        cd.categories = [f"Ano {k}" for k in res["ANOS"]]
+        cd.add_series("Receita", [round(res["anos"][k]["rec_bruta"], 2) for k in res["ANOS"]])
+        cd.add_series("Resultado líquido", [round(res["anos"][k]["resultado"], 2) for k in res["ANOS"]])
+        ch = sl.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(7.0), Inches(1.6), Inches(5.8), Inches(5.2), cd).chart
+        ch.has_legend, ch.legend.position, ch.legend.include_in_layout = True, XL_LEGEND_POSITION.BOTTOM, False
+        ch.value_axis.tick_labels.font.size = Pt(11)
+        ch.category_axis.tick_labels.font.size = Pt(12)
+
+    def grafico_investimento(sl):
+        cd = CategoryChartData()
+        cd.categories = ["Fixo", "Pré-operacional", "Estoque", "Capital de giro"]
+        cd.add_series("Investimento", [round(res["inv_fixo"], 2), round(res["inv_pre"], 2), round(res["inv_estoque"], 2),
+                                       round(res["capital_giro"], 2)])
+        ch = sl.shapes.add_chart(XL_CHART_TYPE.PIE, Inches(7.3), Inches(1.6), Inches(5.5), Inches(5.2), cd).chart
+        ch.has_legend, ch.legend.position = True, XL_LEGEND_POSITION.RIGHT
+        ch.plots[0].has_data_labels = True
+        ch.plots[0].data_labels.number_format, ch.plots[0].data_labels.number_format_is_linked = "0%", False
+        ch.plots[0].data_labels.show_percentage, ch.plots[0].data_labels.show_value = True, False
+
+    for i, chave_ in enumerate(ROTEIROS_PITCH.get(roteiro, ROTEIROS_PITCH["Banca acadêmica"])):
+        titulo, itens, nota = cont[chave_]
+        sl = prs.slides.add_slide(branco)
+        if chave_ in ("capa", "fechamento"):
+            bg = sl.background.fill
+            bg.solid()
+            bg.fore_color.rgb = AZUL
+            caixa(sl, 0.8, 2.4, 11.7, 1.4, titulo, 48, RGBColor(255, 255, 255), True)
+            caixa(sl, 0.8, 4.0, 11.7, 2.0, " · ".join(str(x) for x in itens if x), 20, RGBColor(0xDD, 0xE6, 0xF3))
+        else:
+            faixa(sl)
+            caixa(sl, 0.6, 0.45, 12, 0.9, titulo, 34, AZUL, True)
+            larg = 6.2 if chave_ in ("numeros", "investimento") else 12.0
+            tf = caixa(sl, 0.7, 1.6, larg, 5.4, "", 20)
+            for j, it in enumerate(x for x in itens if str(x).strip()):
+                p = tf.paragraphs[0] if j == 0 else tf.add_paragraph()
+                p.text = "• " + str(it)
+                p.font.size, p.font.color.rgb = Pt(20 if len(itens) <= 5 else 17), CINZA
+                p.space_after = Pt(10)
+            if chave_ == "numeros":
+                grafico_anos(sl)
+            if chave_ == "investimento":
+                grafico_investimento(sl)
+            caixa(sl, 11.6, 6.9, 1.5, 0.4, str(i + 1), 12, CINZA)
+        sl.notes_slide.notes_text_frame.text = f"Tempo sugerido: {TEMPO_SLIDE.get(chave_, 45)} segundos.\n{nota}"
+    if perguntas:
+        sl = prs.slides.add_slide(branco)
+        faixa(sl)
+        caixa(sl, 0.6, 0.45, 12, 0.9, "Reserva: perguntas prováveis da banca", 30, AZUL, True)
+        tf = caixa(sl, 0.7, 1.5, 12, 5.6, "", 16)
+        for j, q in enumerate(perguntas[:7]):
+            p = tf.paragraphs[0] if j == 0 else tf.add_paragraph()
+            p.text = f"• {q['pergunta']}"
+            p.font.size, p.font.color.rgb = Pt(16), CINZA
+            p.space_after = Pt(8)
+        sl.notes_slide.notes_text_frame.text = "Slide de reserva: use só se a pergunta aparecer. " + " | ".join(
+            f"{q['tema']}: {q['motivo']}" for q in perguntas[:7])
+    total = sum(TEMPO_SLIDE.get(k, 45) for k in ROTEIROS_PITCH.get(roteiro, []))
+    prs.core_properties.title = f"{proj.get('nome_negocio') or 'Plano'} - pitch ({roteiro}, cerca de {total // 60} min)"
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+# ------------------------------------------------------------------------------
+# PONTOS DE PARTIDA POR SETOR (v8.9)
+# Estruturas típicas, SEM valores: o grupo preenche preços, custos e quantidades com orçamentos reais.
+# ------------------------------------------------------------------------------
+SETORES = {
+    "Padaria e lanchonete": {
+        "tipo": "Produtos", "ref": "Serviços · Serviços de alimentação (restaurantes, lanchonetes)",
+        "saz": "Alimentação e cafeteria (mais fraco nas férias)",
+        "catalogo": [("Fabricação Própria", "Pão francês (kg)"), ("Fabricação Própria", "Salgado assado"),
+                     ("Fabricação Própria", "Bolo (fatia)"), ("Revenda", "Refrigerante lata"), ("Revenda", "Leite (litro)")],
+        "inv": ["Forno turbo", "Masseira", "Cilindro", "Vitrine refrigerada", "Balcão e prateleiras", "Freezer", "Computador e sistema de caixa"],
+        "fixos": [("Aluguel", "Despesa administrativa"), ("Energia elétrica", "Custo indireto de produção"), ("Gás", "Custo indireto de produção"),
+                  ("Água", "Custo indireto de produção"), ("Contador", "Despesa administrativa"), ("Internet e telefone", "Despesa administrativa")],
+        "formal": ["Alvará de funcionamento", "Licença da vigilância sanitária", "Auto de vistoria do Corpo de Bombeiros",
+                   "Curso de boas práticas de manipulação de alimentos"],
+        "riscos": [("Alta do preço da farinha e do trigo", 4, 3, "Contrato com dois fornecedores e revisão mensal de preços"),
+                   ("Perdas de produção no fim do dia", 4, 2, "Produção em lotes menores e promoção no fim da tarde")],
+        "erros": ["Esquecer as perdas e sobras do dia no custo do produto.", "Calcular o preço do pão sem a energia e o gás do forno.",
+                  "Prever o mesmo movimento todos os dias da semana."],
+    },
+    "Salão de beleza": {
+        "tipo": "Serviços", "ref": "Serviços · Serviços pessoais (beleza, lavanderia etc.)", "saz": "Alimentação e cafeteria (mais fraco nas férias)",
+        "catalogo": [("Serviço", "Corte"), ("Serviço", "Escova"), ("Serviço", "Coloração"), ("Serviço", "Manicure e pedicure"),
+                     ("Revenda", "Produto de cuidado capilar")],
+        "inv": ["Cadeiras de corte", "Lavatório", "Secadores e chapinhas", "Espelhos e bancadas", "Esterilizador", "Recepção e sofá"],
+        "fixos": [("Aluguel", "Despesa administrativa"), ("Energia elétrica", "Custo indireto de produção"), ("Água", "Custo indireto de produção"),
+                  ("Sistema de agendamento", "Despesa comercial"), ("Contador", "Despesa administrativa")],
+        "formal": ["Alvará de funcionamento", "Licença da vigilância sanitária", "Contrato de parceria com profissionais (Lei do Salão-Parceiro)"],
+        "riscos": [("Saída de profissional com a carteira de clientes", 3, 4, "Contrato de parceria e relacionamento direto com o cliente"),
+                   ("Agenda vazia em dias de semana", 4, 3, "Pacotes e preço diferenciado de segunda a quarta")],
+        "erros": ["Esquecer a comissão ou parceria do profissional no custo do serviço.", "Ignorar o tempo de cada serviço na capacidade do salão.",
+                  "Não contar produtos usados em cada atendimento (custo por aplicação)."],
+    },
+    "Oficina mecânica": {
+        "tipo": "Serviços", "ref": "Serviços · Manutenção e reparação de veículos", "saz": "Sem sazonalidade",
+        "catalogo": [("Serviço", "Troca de óleo"), ("Serviço", "Revisão de freios"), ("Serviço", "Alinhamento e balanceamento"),
+                     ("Revenda", "Peças de reposição")],
+        "inv": ["Elevador automotivo", "Compressor", "Ferramentas manuais", "Scanner de diagnóstico", "Bancada e armários"],
+        "fixos": [("Aluguel do galpão", "Despesa administrativa"), ("Energia elétrica", "Custo indireto de produção"),
+                  ("Descarte de óleo e resíduos", "Custo indireto de produção"), ("Contador", "Despesa administrativa")],
+        "formal": ["Alvará de funcionamento", "Licença ambiental municipal", "Auto de vistoria do Corpo de Bombeiros"],
+        "riscos": [("Garantia de serviço mal executado", 2, 4, "Checklist de qualidade e teste final"),
+                   ("Inadimplência de clientes", 3, 3, "Pagamento na retirada do veículo")],
+        "erros": ["Somar a margem sobre peças e mão de obra como se fossem a mesma coisa.", "Esquecer o descarte correto de óleo e peças."],
+    },
+    "Loja de roupas": {
+        "tipo": "Produtos", "ref": "Comércio · Vestuário e complementos (varejo)", "saz": "Varejo de presentes e vestuário (pico no Natal)",
+        "catalogo": [("Revenda", "Blusa"), ("Revenda", "Calça"), ("Revenda", "Vestido"), ("Revenda", "Acessórios")],
+        "inv": ["Araras e manequins", "Provadores", "Balcão e caixa", "Iluminação da vitrine", "Computador e sistema de caixa"],
+        "fixos": [("Aluguel", "Despesa administrativa"), ("Energia elétrica", "Despesa administrativa"), ("Marketing digital", "Despesa comercial"),
+                  ("Contador", "Despesa administrativa")],
+        "formal": ["Alvará de funcionamento", "Auto de vistoria do Corpo de Bombeiros"],
+        "riscos": [("Estoque parado de coleções passadas", 4, 3, "Compras menores e liquidação ao fim de cada estação"),
+                   ("Vendas parceladas sem juros apertando o caixa", 4, 3, "Limite de parcelas e capital de giro para o prazo")],
+        "erros": ["Comprar estoque demais na abertura.", "Ignorar o prazo do cartão parcelado no capital de giro.",
+                  "Prever vendas iguais em todos os meses."],
+    },
+    "Produção rural e agricultura familiar": {
+        "tipo": "Produtos", "ref": "Comércio · Produtos alimentícios, bebidas e fumo (varejo)", "saz": "Sem sazonalidade",
+        "catalogo": [("Fabricação Própria", "Hortaliças (maço)"), ("Fabricação Própria", "Queijo artesanal (kg)"),
+                     ("Fabricação Própria", "Doces e conservas (pote)")],
+        "inv": ["Sistema de irrigação", "Estufa", "Câmara fria ou freezer", "Utensílios de produção", "Embalagens e rotulagem"],
+        "fixos": [("Energia elétrica", "Custo indireto de produção"), ("Transporte até a feira", "Despesa comercial"),
+                  ("Taxa da cooperativa ou associação", "Despesa administrativa")],
+        "formal": ["Inscrição de produtor rural", "Cadastro da Agricultura Familiar (CAF)", "Registro sanitário dos produtos de origem animal",
+                   "Habilitação para vender ao PNAE e ao PAA"],
+        "riscos": [("Perda da safra por clima", 3, 5, "Diversificação de culturas e irrigação"),
+                   ("Dependência de um único comprador", 3, 4, "Vender em feiras, cooperativa e compras públicas")],
+        "erros": ["Não contar o trabalho da família como custo.", "Esquecer as perdas entre a colheita e a venda.",
+                  "Ignorar as compras públicas (PNAE e PAA) como canal de venda."],
+    },
+    "Aplicativo ou serviço digital": {
+        "tipo": "Assinatura", "ref": "Serviços · Tecnologia da informação", "saz": "Sem sazonalidade",
+        "catalogo": [("Serviço", "Implantação para cliente empresarial")],
+        "inv": ["Computadores da equipe", "Desenvolvimento da primeira versão", "Identidade visual"],
+        "fixos": [("Servidores e nuvem", "Custo indireto de produção"), ("Ferramentas de software", "Despesa administrativa"),
+                  ("Marketing digital", "Despesa comercial"), ("Contador", "Despesa administrativa")],
+        "formal": ["Termos de uso e política de privacidade (LGPD)", "Registro da marca no INPI"],
+        "riscos": [("Cancelamento alto nos primeiros meses", 4, 4, "Acompanhar uso e conversar com quem cancela"),
+                   ("Custo de aquisição maior que o valor do cliente", 3, 4, "Testar canais pequenos antes de escalar")],
+        "erros": ["Supor crescimento sem custo de aquisição.", "Esquecer o cancelamento mensal (churn) na receita.",
+                  "Ignorar o custo de nuvem que cresce com os usuários."],
+    },
+}
+
+
+def criar_projeto_setor(caminho, nome: str, setor: str) -> None:
+    """Projeto em branco com a estrutura típica do setor (sem valores)."""
+    from pnbox_db import conectar, criar_projeto_em_branco, salvar_unica
+    criar_projeto_em_branco(caminho, nome)
+    s = SETORES[setor]
+    conn = conectar(caminho)
+    salvar_unica(conn, "projeto", {"tipo_negocio": s["tipo"], "setor_referencia": s["ref"], "setor_atuacao": setor,
+                                   "saz_perfil": s["saz"] if s["saz"] != "Sem sazonalidade" else ""})
+    conn.executemany("INSERT INTO catalogo (categoria, descricao, preco_venda, custo_aquisicao, qtd_mensal, qtd_estoque_inicial, horas_unit) "
+                     "VALUES (?,?,0,0,0,0,0)", s["catalogo"])
+    conn.executemany("INSERT INTO inv_fixos (descricao, quantidade, valor_unitario, vida_util_anos, valor_residual_pct) VALUES (?,1,0,10,0)",
+                     [(x,) for x in s["inv"]])
+    conn.executemany("INSERT INTO custos_fixos (descricao, classificacao, valor_mensal) VALUES (?,?,0)", s["fixos"])
+    conn.executemany("INSERT INTO formalizacao (item, status, observacao) VALUES (?, 'Pendente', '')", [(x,) for x in s["formal"]])
+    conn.executemany("INSERT INTO riscos (risco, probabilidade, impacto, mitigacao, responsavel) VALUES (?,?,?,?,'')", s["riscos"])
+    if s["saz"] != "Sem sazonalidade":
+        conn.executemany("INSERT INTO sazonalidade (mes, indice) VALUES (?,?)",
+                         [(m + 1, float(v)) for m, v in enumerate(PERFIS_SAZONAIS[s["saz"]])])
+    conn.commit()
+    conn.close()

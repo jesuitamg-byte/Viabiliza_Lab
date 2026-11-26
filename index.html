@@ -24,7 +24,7 @@
     const versao = new URLSearchParams(location.search).get("versao") || "modelo";
     mount(
       {
-        requirements: ["pandas", "openpyxl", "fpdf2", "matplotlib", "altair", "python-docx"],
+        requirements: ["pandas", "openpyxl", "fpdf2", "matplotlib", "altair", "python-docx", "python-pptx"],
         entrypoint: "app_pnbox.py",
         files: {
           "app_pnbox.py": { url: "./app_pnbox.py" },

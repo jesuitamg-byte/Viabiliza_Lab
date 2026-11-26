@@ -7,6 +7,18 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.9 (25/11/2026): pitch em PowerPoint e pontos de partida por setor
+
+**Pitch em PowerPoint e pontos de partida por setor**
+- **Pitch em PowerPoint (.pptx) editável**, que abre no PowerPoint, no LibreOffice e no Google Apresentações. Tem gráficos nativos (receita e resultado por ano; composição do investimento) e **notas do apresentador** com o roteiro de fala e o tempo sugerido de cada slide.
+- **Três roteiros:** banca acadêmica (com sensibilidade e riscos), investidor (com validação, uso do dinheiro e equipe) e edital de fomento (com impacto). Os slides são montados com os dados do plano.
+- **Slide de reserva** com as perguntas prováveis da banca, geradas a partir das fragilidades do próprio plano.
+- **Ponto de partida por setor**, uma nova opção ao criar um projeto. Há seis setores: padaria e lanchonete, salão de beleza, oficina mecânica, loja de roupas, produção rural e agricultura familiar, e aplicativo ou serviço digital.
+- Cada setor traz itens de venda, investimentos, custos fixos, licenças, riscos típicos, referência do setor e perfil de sazonalidade, **sem valores**: preços e custos são preenchidos pelo grupo com orçamentos reais.
+- A biblioteca gratuita python-pptx entra na lista de instalação do programa e da versão online.
+
+---
+
 ## v8.8 (25/11/2026): Selic, inflação e TMA em degraus
 
 **Selic, inflação e TMA**

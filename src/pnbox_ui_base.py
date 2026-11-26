@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.8"
+VERSAO_PROGRAMA = "8.9"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -757,7 +757,9 @@ with st.sidebar:
         tipo = st.radio("Começar a partir de", ["Em branco (do zero)", "Modelo FitBox (alimentação saudável)",
                                                 "Modelo Café Mucuri (cafeteria e padaria)",
                                                 "Modelo TecVale Soluções (serviços de TI)",
-                                                "Modelo Conecta Vale (aplicativo por assinatura)", "Cópia do projeto atual"])
+                                                "Modelo Conecta Vale (aplicativo por assinatura)", "Ponto de partida por setor (sem valores)",
+                                                "Cópia do projeto atual"])
+        setor_esc = st.selectbox("Setor", list(SETORES), key="novo_setor") if tipo.startswith("Ponto de partida") else ""
         if st.button("Criar projeto", type="primary", width="stretch"):
             if not novo_nome.strip():
                 st.error("Informe um nome.")
@@ -773,6 +775,8 @@ with st.sidebar:
                     criar_projeto_assinatura(destino)
                 elif tipo.startswith("Modelo TecVale"):
                     criar_projeto_servico(destino)
+                elif tipo.startswith("Ponto de partida"):
+                    criar_projeto_setor(destino, novo_nome.strip(), setor_esc)
                 else:
                     conn.commit()
                     shutil.copy(ss.db, destino)

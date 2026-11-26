@@ -20,7 +20,7 @@ def _no_streamlit() -> bool:
 
 def _preparar_ambiente() -> None:
     pacotes = {"streamlit": "streamlit", "pandas": "pandas", "openpyxl": "openpyxl",
-               "matplotlib": "matplotlib", "altair": "altair", "docx": "python-docx"}
+               "matplotlib": "matplotlib", "altair": "altair", "docx": "python-docx", "pptx": "python-pptx"}
     faltando = [pip for mod, pip in pacotes.items() if _ilu.find_spec(mod) is None]
     try:
         import fpdf
