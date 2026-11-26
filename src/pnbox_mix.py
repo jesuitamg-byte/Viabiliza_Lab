@@ -560,7 +560,9 @@ def regras_mix(proj: dict, d: dict) -> dict:
     saz = d.get("sazonalidade")
     tem_saz = saz is not None and len(saz) >= 12 and float(saz["indice"].max() - saz["indice"].min()) > 0
     return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et)),
-            "sazonalidade": (tem_saz, saz is not None and len(saz) > 0)}
+            "sazonalidade": (tem_saz, saz is not None and len(saz) > 0),
+            "tornado": (len(d.get("mc_faixas", [])) > 0 and (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
+                        len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0)}
 
 
 def frase_posicionamento(proj: dict) -> str:

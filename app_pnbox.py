@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.6 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.7 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,18 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.7 (25/11/2026): sensibilidade do VPL (tornado e ponto de ruptura)
+
+**Sensibilidade do VPL (tornado)**
+- Nova ferramenta **Sensibilidade do VPL**: gráfico de tornado com o VPL no pior e no melhor valor de cada variável (preço, volume, custo de materiais, salários, demais custos fixos e crescimento), usando as faixas definidas no Monte Carlo. As barras mais compridas mostram as premissas que mais merecem pesquisa.
+- **Ponto de ruptura:** quanto cada variável pode mudar, sozinha, até o VPL chegar a zero.
+- **Valide isto primeiro:** cruza as três variáveis que mais mexem no VPL com o placar de evidências. Premissa decisiva que ainda é só estimativa recebe alerta vermelho.
+- **Mapa preço × volume:** VPL para combinações de variação de preço e de volume, com as combinações em que o projeto não se paga em vermelho.
+- Leitura dos resultados com a variável mais sensível e a margem de segurança mais estreita.
+- O cálculo usa a mesma lógica do Monte Carlo: sem variação, o VPL é exatamente o do plano.
 
 ---
 
@@ -5316,7 +5328,9 @@ def regras_mix(proj: dict, d: dict) -> dict:
     saz = d.get("sazonalidade")
     tem_saz = saz is not None and len(saz) >= 12 and float(saz["indice"].max() - saz["indice"].min()) > 0
     return {"plano_mkt": (completas >= 5, any(s for _, s, _ in et)),
-            "sazonalidade": (tem_saz, saz is not None and len(saz) > 0)}
+            "sazonalidade": (tem_saz, saz is not None and len(saz) > 0),
+            "tornado": (len(d.get("mc_faixas", [])) > 0 and (len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0),
+                        len(d["catalogo"]) > 0 or len(d["assinaturas"]) > 0)}
 
 
 def frase_posicionamento(proj: dict) -> str:
@@ -5999,6 +6013,123 @@ def leitura_sazonalidade(proj: dict, res: dict) -> list[str]:
     out.append(f"O caixa fica mais apertado no {r['mes_caixa']}, com saldo de R$ {_n(r['caixa_min'], 2)}"
                + (": falta dinheiro e o capital de giro precisa aumentar." if r["caixa_min"] < 0 else "."))
     out.append("O total do ano não muda com a sazonalidade; muda quando o dinheiro entra.")
+    return out
+
+
+# ------------------------------------------------------------------------------
+# SENSIBILIDADE DO VPL: TORNADO, PONTO DE RUPTURA E MAPA PREÇO × VOLUME (v8.7)
+# ------------------------------------------------------------------------------
+VARS_TORNADO = [("Preço de venda", "preco"), ("Volume de vendas", "volume"), ("Custo de materiais e mercadorias", "materiais"),
+                ("Salários e encargos", "salarios"), ("Demais custos fixos", "fixos"),
+                ("Crescimento anual (pontos percentuais)", "cresc")]
+# premissa do placar de evidências correspondente a cada variável
+PREMISSA_DE = {"Preço de venda": "Preço de venda", "Volume de vendas": "Volume de vendas do Ano 1",
+               "Custo de materiais e mercadorias": "Custo de materiais e mercadorias", "Salários e encargos": "Salários e encargos",
+               "Demais custos fixos": "Demais custos fixos", "Crescimento anual (pontos percentuais)": "Crescimento das vendas"}
+
+
+def _rs(x: float) -> str:
+    return ("-R$ " if x < 0 else "R$ ") + _n(abs(x), 0)
+
+
+def vpl_variado(res: dict, preco=0.0, volume=0.0, materiais=0.0, salarios=0.0, fixos=0.0, cresc=0.0) -> float:
+    """VPL com variações (0,10 = +10%), pela mesma lógica do Monte Carlo (fluxo do projeto = EBITDA)."""
+    fp, fv, fm, fs, ff = 1 + preco, 1 + volume, 1 + materiais, 1 + salarios, 1 + fixos
+    g_a, tma, N = res["g_a"], res["tma"], res["N"]
+    adj = (1 + g_a + cresc) / (1 + g_a) if (1 + g_a) else 1.0
+    vpl = -res["investimento_total"]
+    for k in res["ANOS"]:
+        a = res["anos"][k]
+        gk = adj ** (k - 1)
+        rec = a["rec_bruta"] * fp * fv * gk
+        var_ratio = (a["impostos"] + a["outras_var"]) / a["rec_bruta"] if a["rec_bruta"] else 0.0
+        ebitda = rec - a["custo_dir"] * fv * fm * gk - rec * var_ratio - a["pessoal"] * fs - a["fixos"] * ff
+        if k == N and res.get("recupera_giro"):
+            ebitda += res.get("capital_giro", 0.0)
+        vpl += ebitda / (1 + tma) ** k
+    return float(vpl)
+
+
+def tornado(res: dict, faixas: pd.DataFrame) -> pd.DataFrame:
+    """VPL no pior e no melhor valor de cada variável (faixas do Monte Carlo), do maior para o menor efeito."""
+    fx = {r["variavel"]: (float(r["minimo_pct"]) / 100, float(r["maximo_pct"]) / 100) for _, r in faixas.iterrows()}
+    base = vpl_variado(res)
+    linhas = []
+    for nome, ch in VARS_TORNADO:
+        lo, hi = fx.get(nome, (-0.10, 0.10))
+        v_lo, v_hi = vpl_variado(res, **{ch: lo}), vpl_variado(res, **{ch: hi})
+        linhas.append({"Variável": nome, "Variação mínima": lo, "Variação máxima": hi, "VPL no mínimo": v_lo,
+                       "VPL no máximo": v_hi, "Amplitude": abs(v_hi - v_lo), "VPL base": base})
+    return pd.DataFrame(linhas).sort_values("Amplitude", ascending=False).reset_index(drop=True)
+
+
+def ponto_ruptura(res: dict, ch: str) -> float:
+    """Variação (fração) da variável que zera o VPL; nan se não houver dentro de -100% a +500%."""
+    base = vpl_variado(res)
+    sinal_bom = vpl_variado(res, **{ch: 0.01}) - base       # efeito de aumentar 1%
+    if abs(sinal_bom) < 1e-9:
+        return float("nan")
+    lo, hi = (-1.0, 0.0) if (base > 0) == (sinal_bom > 0) else (0.0, 5.0)
+    f = lambda x: vpl_variado(res, **{ch: x})
+    if f(lo) * f(hi) > 0:
+        return float("nan")
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if f(lo) * f(mid) <= 0:
+            hi = mid
+        else:
+            lo = mid
+    return (lo + hi) / 2
+
+
+def tabela_rupturas(res: dict) -> pd.DataFrame:
+    linhas = []
+    for nome, ch in VARS_TORNADO[:5]:
+        x = ponto_ruptura(res, ch)
+        linhas.append({"Variável": nome, "Variação que zera o VPL": x})
+    return pd.DataFrame(linhas)
+
+
+def mapa_preco_volume(res: dict, passos=(-0.20, -0.15, -0.10, -0.05, 0.0, 0.05, 0.10, 0.15, 0.20)) -> pd.DataFrame:
+    linhas = []
+    for p in passos:
+        for v in passos:
+            linhas.append({"Preço": p, "Volume": v, "VPL": vpl_variado(res, preco=p, volume=v)})
+    return pd.DataFrame(linhas)
+
+
+def valide_primeiro(tor: pd.DataFrame, placar_tab: pd.DataFrame) -> list[tuple[str, str]]:
+    """Cruza as variáveis que mais mexem no VPL com o grau de evidência de cada premissa."""
+    st_ = dict(zip(placar_tab["premissa"], placar_tab["status"])) if placar_tab is not None and not placar_tab.empty else {}
+    out = []
+    for _, r in tor.head(3).iterrows():
+        prem = PREMISSA_DE.get(r["Variável"], r["Variável"])
+        status = st_.get(prem, "Estimada (sem fonte)")
+        if status.startswith("Estimada"):
+            out.append(("critico", f"{r['Variável']} está entre as variáveis que mais mexem no VPL e ainda é só estimativa: "
+                        "valide isto primeiro (entrevista, pré-venda, orçamento ou dado de fonte confiável)."))
+        elif status.startswith("Pesquisa"):
+            out.append(("atencao", f"{r['Variável']} mexe muito no VPL e se apoia em pesquisa secundária; um teste com clientes "
+                        "ou fornecedores daria mais segurança."))
+        else:
+            out.append(("ok", f"{r['Variável']} mexe muito no VPL, mas essa premissa já foi testada com clientes."))
+    return out
+
+
+def leitura_tornado(tor: pd.DataFrame, rup: pd.DataFrame) -> list[str]:
+    if tor.empty:
+        return []
+    t = tor.iloc[0]
+    out = [f"A variável que mais mexe no VPL é {t['Variável'].lower()}: entre o pior e o melhor caso o VPL vai de "
+           f"{_rs(t['VPL no mínimo'])} a {_rs(t['VPL no máximo'])}."]
+    neg = tor[(tor["VPL no mínimo"] < 0) | (tor["VPL no máximo"] < 0)]["Variável"].tolist()
+    if neg:
+        out.append("Na faixa informada, o VPL fica negativo por conta de: " + ", ".join(x.lower() for x in neg) + ".")
+    ok = rup.dropna()
+    if not ok.empty:
+        r = ok.iloc[ok["Variação que zera o VPL"].abs().argmin()]
+        out.append(f"A margem de segurança mais estreita está em {r['Variável'].lower()}: uma variação de "
+                   f"{_p(r['Variação que zera o VPL'], 0)} já zera o VPL.")
     return out
 
 # ##############################################################################
@@ -7523,7 +7654,7 @@ def completude_de(proj, d) -> float:
     r = regras_situacao(proj, d)
     # "Orçado x realizado" só faz sentido depois da abertura: não entra no cálculo
     tipo = str(proj.get("tipo_negocio") or "Produtos")
-    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade"} | OPCIONAIS_V8
+    fora = {"realizado", "adocao", "plano_mkt", "sazonalidade", "tornado"} | OPCIONAIS_V8
     if not tipo.startswith(("Serviço", "Misto")):
         fora.add("servicos")
     if not tipo.startswith(("Assinatura", "Misto")):
@@ -8937,7 +9068,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.6"
+VERSAO_PROGRAMA = "8.7"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -9170,6 +9301,8 @@ PAGINAS = [
      "Cenários otimista e pessimista, simulador “e se?” e análise de sensibilidade."),
     ("montecarlo", "Ferramentas complementares", "🎲", "Monte Carlo e perda aceitável",
      "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
+    ("tornado", "Ferramentas complementares", "🌪️", "Sensibilidade do VPL (tornado)",
+     "Quais premissas mais mexem no VPL, quanto cada uma pode mudar até o VPL zerar e o mapa preço × volume."),
     ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
      "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
     ("valuation", "Ferramentas complementares", "💎", "Valuation e rodada de investimento",
@@ -9629,7 +9762,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")
@@ -13852,6 +13985,64 @@ def pg_sazonalidade():
         st.rerun()
     proxima("sazonalidade")
 
+
+# ------------------------------------------------------------------------------
+# SENSIBILIDADE (v8.7)
+# ------------------------------------------------------------------------------
+def pg_tornado():
+    cabecalho("tornado")
+    res = R()
+    if res["anos"][1]["rec_bruta"] <= 0:
+        st.info("Cadastre produtos ou assinaturas para analisar a sensibilidade.", icon="💡")
+        return
+    st.caption("O gráfico de tornado mostra quanto o VPL muda quando cada variável vai do pior ao melhor valor da faixa "
+               "informada no Monte Carlo, uma de cada vez. As barras mais compridas são as premissas que mais merecem pesquisa.")
+    fx = faixas_mc(d)
+    tor = tornado(res, fx)
+    base = float(tor["VPL base"].iloc[0])
+    g = []
+    for _, r in tor.iterrows():
+        g.append({"Variável": r["Variável"], "Caso": "Pior valor da faixa" if r["VPL no mínimo"] <= r["VPL no máximo"] else "Melhor valor da faixa",
+                  "ini": base, "fim": min(r["VPL no mínimo"], r["VPL no máximo"])})
+        g.append({"Variável": r["Variável"], "Caso": "Melhor valor da faixa" if r["VPL no mínimo"] <= r["VPL no máximo"] else "Pior valor da faixa",
+                  "ini": base, "fim": max(r["VPL no mínimo"], r["VPL no máximo"])})
+    gd = pd.DataFrame(g)
+    ordem = tor["Variável"].tolist()
+    barras = alt.Chart(gd).mark_bar().encode(
+        y=alt.Y("Variável:N", sort=ordem, title=None), x=alt.X("ini:Q", title="VPL (R$)"), x2="fim:Q",
+        color=alt.Color("Caso:N", scale=alt.Scale(domain=["Pior valor da faixa", "Melhor valor da faixa"], range=["#d62828", "#2f6fd0"])))
+    linha = alt.Chart(pd.DataFrame({"x": [base]})).mark_rule(strokeDash=[4, 3], color="#333").encode(x="x:Q")
+    st.altair_chart(barras + linha, width="stretch")
+    st.caption(f"Linha tracejada: VPL do plano ({brl(base)}). As faixas de variação são editadas em Monte Carlo.")
+    vis = tor[["Variável", "Variação mínima", "Variação máxima", "VPL no mínimo", "VPL no máximo"]].copy()
+    vis["Variação mínima"], vis["Variação máxima"] = vis["Variação mínima"].map(pct), vis["Variação máxima"].map(pct)
+    vis["VPL no mínimo"], vis["VPL no máximo"] = vis["VPL no mínimo"].map(brl), vis["VPL no máximo"].map(brl)
+    st.dataframe(vis, hide_index=True, width="stretch")
+    st.markdown("#### Ponto de ruptura")
+    st.caption("Quanto cada variável pode mudar, sozinha, até o VPL chegar a zero.")
+    rup = tabela_rupturas(res)
+    st.dataframe(rup.assign(**{"Variação que zera o VPL": rup["Variação que zera o VPL"].map(
+        lambda x: pct(x) if x == x else "não zera entre -100% e +500%")}), hide_index=True, width="stretch")
+    mostrar_leitura("tornado", leitura_tornado(tor, rup))
+    st.markdown("#### Valide isto primeiro")
+    try:
+        mostrar_alertas(valide_primeiro(tor, placar_evidencias(proj, d, res)["tabela"]))
+    except Exception:
+        mostrar_alertas(valide_primeiro(tor, None))
+    if st.button("🔬 Abrir o placar de evidências", key=wk("tor_ev")):
+        ir("evidencias")
+        st.rerun()
+    st.markdown("#### Preço × volume")
+    st.caption("VPL para combinações de variação de preço e de volume. Em vermelho, as combinações em que o projeto não se paga.")
+    mp = mapa_preco_volume(res)
+    mp["Preço"], mp["Volume"] = mp["Preço"].map(lambda x: f"{x * 100:+.0f}%"), mp["Volume"].map(lambda x: f"{x * 100:+.0f}%")
+    ordem_ = [f"{x:+.0f}%" for x in range(-20, 25, 5)]
+    st.altair_chart(alt.Chart(mp).mark_rect().encode(
+        x=alt.X("Preço:N", sort=ordem_, title="Variação do preço"), y=alt.Y("Volume:N", sort=ordem_[::-1], title="Variação do volume"),
+        color=alt.Color("VPL:Q", scale=alt.Scale(scheme="redblue", domainMid=0)), tooltip=["Preço", "Volume", alt.Tooltip("VPL:Q", format=",.0f")]),
+        width="stretch")
+    proxima("tornado")
+
 # ##############################################################################
 # PARTE: pnbox_ui_paginas3.py
 # ##############################################################################
@@ -14390,7 +14581,7 @@ Você está usando a **versão on-line**. Os projetos ficam guardados **no armaz
 ROTAS = {"inicio": pg_inicio, "projeto": pg_projeto, "identidade": pg_identidade, "canvas": pg_canvas, "porter": pg_porter,
          "ge": pg_ge, "bcg": pg_bcg, "bsc": pg_bsc, "reforma": pg_reforma, "segmentos": pg_segmentos, "personas": pg_personas,
          "jornada": pg_jornada, "mercado": pg_mercado, "proposta": pg_proposta, "concorrencia": pg_concorrencia,
-         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade,
+         "forcas": pg_forcas, "oportunidades": pg_oportunidades, "swot": pg_swot, "marketing": pg_marketing, "plano_mkt": pg_plano_mkt, "sazonalidade": pg_sazonalidade, "tornado": pg_tornado,
          "canais": pg_canais, "operacional": pg_operacional, "fornecedores": pg_fornecedores,
          "investimentos": pg_investimentos, "produtos": pg_produtos, "servicos": pg_servicos, "assinaturas": pg_assinaturas, "custos": pg_custos, "preco": pg_preco,
          "dre": pg_dre, "fluxo": pg_fluxo, "indicadores": pg_indicadores, "graficos": pg_graficos,

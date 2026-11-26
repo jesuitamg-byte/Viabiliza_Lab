@@ -448,3 +448,61 @@ def pg_sazonalidade():
         ir("fluxo")
         st.rerun()
     proxima("sazonalidade")
+
+
+# ------------------------------------------------------------------------------
+# SENSIBILIDADE (v8.7)
+# ------------------------------------------------------------------------------
+def pg_tornado():
+    cabecalho("tornado")
+    res = R()
+    if res["anos"][1]["rec_bruta"] <= 0:
+        st.info("Cadastre produtos ou assinaturas para analisar a sensibilidade.", icon="💡")
+        return
+    st.caption("O gráfico de tornado mostra quanto o VPL muda quando cada variável vai do pior ao melhor valor da faixa "
+               "informada no Monte Carlo, uma de cada vez. As barras mais compridas são as premissas que mais merecem pesquisa.")
+    fx = faixas_mc(d)
+    tor = tornado(res, fx)
+    base = float(tor["VPL base"].iloc[0])
+    g = []
+    for _, r in tor.iterrows():
+        g.append({"Variável": r["Variável"], "Caso": "Pior valor da faixa" if r["VPL no mínimo"] <= r["VPL no máximo"] else "Melhor valor da faixa",
+                  "ini": base, "fim": min(r["VPL no mínimo"], r["VPL no máximo"])})
+        g.append({"Variável": r["Variável"], "Caso": "Melhor valor da faixa" if r["VPL no mínimo"] <= r["VPL no máximo"] else "Pior valor da faixa",
+                  "ini": base, "fim": max(r["VPL no mínimo"], r["VPL no máximo"])})
+    gd = pd.DataFrame(g)
+    ordem = tor["Variável"].tolist()
+    barras = alt.Chart(gd).mark_bar().encode(
+        y=alt.Y("Variável:N", sort=ordem, title=None), x=alt.X("ini:Q", title="VPL (R$)"), x2="fim:Q",
+        color=alt.Color("Caso:N", scale=alt.Scale(domain=["Pior valor da faixa", "Melhor valor da faixa"], range=["#d62828", "#2f6fd0"])))
+    linha = alt.Chart(pd.DataFrame({"x": [base]})).mark_rule(strokeDash=[4, 3], color="#333").encode(x="x:Q")
+    st.altair_chart(barras + linha, width="stretch")
+    st.caption(f"Linha tracejada: VPL do plano ({brl(base)}). As faixas de variação são editadas em Monte Carlo.")
+    vis = tor[["Variável", "Variação mínima", "Variação máxima", "VPL no mínimo", "VPL no máximo"]].copy()
+    vis["Variação mínima"], vis["Variação máxima"] = vis["Variação mínima"].map(pct), vis["Variação máxima"].map(pct)
+    vis["VPL no mínimo"], vis["VPL no máximo"] = vis["VPL no mínimo"].map(brl), vis["VPL no máximo"].map(brl)
+    st.dataframe(vis, hide_index=True, width="stretch")
+    st.markdown("#### Ponto de ruptura")
+    st.caption("Quanto cada variável pode mudar, sozinha, até o VPL chegar a zero.")
+    rup = tabela_rupturas(res)
+    st.dataframe(rup.assign(**{"Variação que zera o VPL": rup["Variação que zera o VPL"].map(
+        lambda x: pct(x) if x == x else "não zera entre -100% e +500%")}), hide_index=True, width="stretch")
+    mostrar_leitura("tornado", leitura_tornado(tor, rup))
+    st.markdown("#### Valide isto primeiro")
+    try:
+        mostrar_alertas(valide_primeiro(tor, placar_evidencias(proj, d, res)["tabela"]))
+    except Exception:
+        mostrar_alertas(valide_primeiro(tor, None))
+    if st.button("🔬 Abrir o placar de evidências", key=wk("tor_ev")):
+        ir("evidencias")
+        st.rerun()
+    st.markdown("#### Preço × volume")
+    st.caption("VPL para combinações de variação de preço e de volume. Em vermelho, as combinações em que o projeto não se paga.")
+    mp = mapa_preco_volume(res)
+    mp["Preço"], mp["Volume"] = mp["Preço"].map(lambda x: f"{x * 100:+.0f}%"), mp["Volume"].map(lambda x: f"{x * 100:+.0f}%")
+    ordem_ = [f"{x:+.0f}%" for x in range(-20, 25, 5)]
+    st.altair_chart(alt.Chart(mp).mark_rect().encode(
+        x=alt.X("Preço:N", sort=ordem_, title="Variação do preço"), y=alt.Y("Volume:N", sort=ordem_[::-1], title="Variação do volume"),
+        color=alt.Color("VPL:Q", scale=alt.Scale(scheme="redblue", domainMid=0)), tooltip=["Preço", "Volume", alt.Tooltip("VPL:Q", format=",.0f")]),
+        width="stretch")
+    proxima("tornado")

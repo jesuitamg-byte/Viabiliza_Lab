@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.6"
+VERSAO_PROGRAMA = "8.7"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -261,6 +261,8 @@ PAGINAS = [
      "Cenários otimista e pessimista, simulador “e se?” e análise de sensibilidade."),
     ("montecarlo", "Ferramentas complementares", "🎲", "Monte Carlo e perda aceitável",
      "Milhares de cenários sorteados: a chance de o projeto dar certo e quanto os sócios podem perder."),
+    ("tornado", "Ferramentas complementares", "🌪️", "Sensibilidade do VPL (tornado)",
+     "Quais premissas mais mexem no VPL, quanto cada uma pode mudar até o VPL zerar e o mapa preço × volume."),
     ("adocao", "Ferramentas complementares", "🌱", "Curva de adoção (Bass)",
      "Teste se o crescimento de clientes do plano é plausível pela difusão de produtos novos."),
     ("valuation", "Ferramentas complementares", "💎", "Valuation e rodada de investimento",
@@ -720,7 +722,7 @@ def situacao(p: str) -> str:
     completo, iniciado = regras[p]
     tipo = str(proj.get("tipo_negocio") or "Produtos")
     opcional = (p == "servicos" and not tipo.startswith(("Serviço", "Misto"))) or \
-               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade")
+               (p == "assinaturas" and not tipo.startswith(("Assinatura", "Misto"))) or p in ("reforma", "adocao") or p in OPCIONAIS_V8 or p in ("plano_mkt", "sazonalidade", "tornado")
     if opcional and not iniciado:
         return ""            # ferramenta não se aplica ao tipo de negócio escolhido
     return "✅" if completo else ("◐" if iniciado else "○")

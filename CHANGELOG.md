@@ -7,6 +7,18 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.7 (25/11/2026): sensibilidade do VPL (tornado e ponto de ruptura)
+
+**Sensibilidade do VPL (tornado)**
+- Nova ferramenta **Sensibilidade do VPL**: gráfico de tornado com o VPL no pior e no melhor valor de cada variável (preço, volume, custo de materiais, salários, demais custos fixos e crescimento), usando as faixas definidas no Monte Carlo. As barras mais compridas mostram as premissas que mais merecem pesquisa.
+- **Ponto de ruptura:** quanto cada variável pode mudar, sozinha, até o VPL chegar a zero.
+- **Valide isto primeiro:** cruza as três variáveis que mais mexem no VPL com o placar de evidências. Premissa decisiva que ainda é só estimativa recebe alerta vermelho.
+- **Mapa preço × volume:** VPL para combinações de variação de preço e de volume, com as combinações em que o projeto não se paga em vermelho.
+- Leitura dos resultados com a variável mais sensível e a margem de segurança mais estreita.
+- O cálculo usa a mesma lógica do Monte Carlo: sem variação, o VPL é exatamente o do plano.
+
+---
+
 ## v8.6 (25/11/2026): sazonalidade das vendas
 
 **Sazonalidade das vendas**
