@@ -7,6 +7,16 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v8.3 (25/11/2026): 7Ps de serviços, coerência do mix e 4Cs
+
+**Mix de marketing: 7Ps de serviços, coerência do mix e 4Cs**
+- **Pessoas, processos e evidência física** (Booms; Bitner, 1981), nova aba do mix: quem atende e como o atendimento é padronizado, o que o cliente vê e toca, e o **mapa do serviço** (Shostack, 1984), com etapas visíveis ao cliente, bastidores e apoio, tempo de cada etapa e pontos de falha.
+- **Coerência entre os Ps:** tabela de combinações que se reforçam ou se contradizem (preço premium com produto ampliado e distribuição seletiva, penetração com comunicação de alcance, desnatação no lançamento, objetivo da comunicação conforme a fase do ciclo de vida, canais cadastrados conforme a intensidade de distribuição).
+- **Autoavaliação pelos 4Cs** (Lauterborn, 1990): cliente, custo para o cliente, conveniência e comunicação, com nota, evidência e indicação do ponto mais fraco.
+- Os modelos TecVale e Café Mucuri trazem exemplos do mapa do serviço.
+
+---
+
 ## v8.2 (25/11/2026): mix de marketing integrado: Praça e Promoção
 
 **Plano de marketing (4Ps): Praça e Promoção**

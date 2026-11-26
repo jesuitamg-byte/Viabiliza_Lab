@@ -1175,6 +1175,25 @@ _MIX2 = {   # distribuição, objetivo de comunicação, compras por mês, canai
 }
 
 
+_MIX3 = {   # pessoas, evidência física, etapas do mapa do serviço (etapa, onde, minutos, ponto de falha)
+    "servico": ("Dois técnicos com certificação e roteiro padrão de atendimento; o sócio faz o contato comercial",
+                "Ordem de serviço impressa, relatório do que foi feito, etiqueta de garantia no equipamento, avaliações no Google",
+                [("Cliente pede atendimento pelo WhatsApp", "Visível ao cliente", 5, "Demora em responder"),
+                 ("Agendamento e coleta do equipamento", "Visível ao cliente", 30, "Atraso na coleta"),
+                 ("Diagnóstico na bancada", "Bastidores", 60, ""),
+                 ("Orçamento enviado e aprovado", "Visível ao cliente", 15, "Orçamento sem detalhes"),
+                 ("Compra de peças", "Apoio (sistemas e fornecedores)", 120, "Peça em falta no fornecedor"),
+                 ("Reparo e testes", "Bastidores", 90, ""),
+                 ("Entrega com relatório e garantia", "Visível ao cliente", 20, "")]),
+    "cafe": ("Atendentes treinadas em preparo de café e no cardápio regional", "Ambiente com madeira e fotos dos produtores, "
+             "xícaras com a marca, cardápio com a origem dos grãos",
+             [("Cliente chega e escolhe no balcão", "Visível ao cliente", 3, "Fila no horário de pico"),
+              ("Pedido e pagamento", "Visível ao cliente", 2, "Maquininha sem sinal"),
+              ("Preparo do café", "Bastidores", 4, "Moagem errada"),
+              ("Entrega na mesa", "Visível ao cliente", 1, "")]),
+}
+
+
 def popular_mix(conn, qual: str) -> None:
     """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
     if qual not in _MIX:
@@ -1194,6 +1213,10 @@ def popular_mix(conn, qual: str) -> None:
         conn.execute("UPDATE projeto SET mix_distribuicao=?, mix_objetivo_com=?, mix_freq=? WHERE id=1", (dist, obj, freq))
         conn.executemany("INSERT INTO canais_venda (canal, pct_vendas, comissao_pct, observacao) VALUES (?,?,?,?)",
                          [(c, p, k, "Exemplo didático: confira a taxa real do canal") for c, p, k in canais])
+    if qual in _MIX3:
+        pessoas, evid, etapas = _MIX3[qual]
+        conn.execute("UPDATE projeto SET mix_pessoas=?, mix_evidencia=? WHERE id=1", (pessoas, evid))
+        conn.executemany("INSERT INTO blueprint (etapa, linha, tempo_min, ponto_falha) VALUES (?,?,?,?)", etapas)
 
 
 def popular_validacao(conn, qual: str) -> None:

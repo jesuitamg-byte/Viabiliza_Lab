@@ -377,3 +377,105 @@ def checar_praca_promocao(proj: dict, d: dict, res: dict) -> list[tuple[str, str
             out.append((nivel, f"Cada cliente novo custa R$ {_n(pv['cac'], 2)} e devolve isso em margem de contribuição em cerca de {_n(pb, 1)} meses."))
     return out
 
+
+# ------------------------------------------------------------------------------
+# 7Ps DE SERVIÇOS (v8.3) - Booms; Bitner (1981)
+# ------------------------------------------------------------------------------
+LINHAS_BLUEPRINT = ["Visível ao cliente", "Bastidores", "Apoio (sistemas e fornecedores)"]
+
+
+def resumo_blueprint(df: pd.DataFrame) -> dict:
+    """Mapa do serviço (Shostack, 1984): tempo total, tempo visível ao cliente e pontos de falha."""
+    if df is None or df.empty:
+        return {"etapas": 0, "tempo": 0.0, "visivel": 0.0, "falhas": []}
+    t = df["tempo_min"].astype(float)
+    vis = df["linha"] == "Visível ao cliente"
+    falhas = df.loc[df["ponto_falha"].astype(str).str.strip() != "", "etapa"].tolist()
+    return {"etapas": len(df), "tempo": float(t.sum()), "visivel": float(t[vis].sum()), "falhas": falhas}
+
+
+def e_servico(proj: dict, res: dict) -> bool:
+    tipo = str(proj.get("tipo_negocio") or "")
+    if tipo in ("Serviços", "Assinatura", "Misto"):
+        return True
+    cat = res.get("cat")
+    if cat is not None and not cat.empty and "categoria" in cat:
+        return bool((cat["categoria"] == "Serviço").any())
+    return False
+
+
+# ------------------------------------------------------------------------------
+# COERÊNCIA DO MIX (v8.3)
+# ------------------------------------------------------------------------------
+def coerencia_mix(proj: dict, d: dict, res: dict) -> pd.DataFrame:
+    """Combinações entre os Ps que se reforçam ou se contradizem. Cada linha: combinação, situação e comentário."""
+    pos = proj.get("mix_posicao_preco") or ""
+    est = proj.get("mix_estrategia_preco") or ""
+    dist = proj.get("mix_distribuicao") or ""
+    obj = proj.get("mix_objetivo_com") or ""
+    ciclo = proj.get("mix_ciclo") or ""
+    ampliado = str(proj.get("mix_ampliado") or "").strip()
+    mm = mc_media(res)
+    linhas = []
+
+    def add(comb, ok, bom, ruim):
+        linhas.append({"Combinação": comb, "Situação": "✅ coerente" if ok else "⚠️ contradição",
+                       "Comentário": bom if ok else ruim})
+
+    if pos == "Premium":
+        add("Preço premium × produto ampliado", bool(ampliado),
+            "O preço mais alto vem acompanhado de serviços e garantias que o justificam.",
+            "Preço premium sem nada além do produto básico: o cliente não vê por que pagar mais.")
+        if dist:
+            add("Preço premium × distribuição", dist != "Intensiva",
+                "Distribuição seletiva ou exclusiva protege a imagem e o controle da experiência.",
+                "Distribuição intensiva espalha o produto em pontos onde ele disputa preço lado a lado.")
+        if est:
+            add("Preço premium × estratégia de preço", est != "Penetração",
+                "A estratégia de preço sustenta a posição premium.",
+                "Penetração é preço baixo para ganhar volume: contradiz a posição premium.")
+    if pos == "Econômico":
+        if dist:
+            add("Preço econômico × distribuição", dist != "Exclusiva",
+                "Preço baixo pede volume, e a distribuição ajuda a alcançá-lo.",
+                "Preço baixo em poucos pontos exclusivos: falta volume para compensar a margem menor.")
+        if mm == mm:
+            add("Preço econômico × margem", mm >= 0.20,
+                "Mesmo com preço baixo, a margem de contribuição deixa folga para os custos fixos.",
+                "Preço econômico com margem estreita: o negócio depende de um volume muito alto.")
+    if est == "Penetração" and obj:
+        add("Penetração × objetivo de comunicação", obj in ("Tornar a marca conhecida", "Fazer o cliente experimentar"),
+            "A comunicação busca alcance e experimentação, que é o que a penetração precisa.",
+            "Penetração depende de muita gente conhecendo e experimentando; a comunicação está focada em outra coisa.")
+    if est == "Desnatação" and ciclo:
+        add("Desnatação × ciclo de vida", ciclo == "Introdução",
+            "Preço alto no lançamento, quando o produto ainda é novidade.",
+            "Desnatação perde força depois do lançamento, quando o cliente já conhece as alternativas.")
+    if ciclo and obj:
+        add("Ciclo de vida × objetivo de comunicação",
+            not (ciclo == "Introdução" and obj == "Fidelizar e fazer voltar"),
+            "O objetivo da comunicação combina com a fase do produto.",
+            "Na introdução quase ninguém conhece o produto: antes de fidelizar é preciso ser conhecido e experimentado.")
+    cv = d.get("canais_venda")
+    if cv is not None and not cv.empty and dist:
+        n = int((cv["pct_vendas"] > 0).sum())
+        add("Distribuição declarada × canais usados", not (dist == "Intensiva" and n <= 1) and not (dist == "Exclusiva" and n >= 4),
+            "Os canais cadastrados batem com a intensidade de distribuição escolhida.",
+            "O número de canais cadastrados não bate com a intensidade de distribuição escolhida.")
+    return pd.DataFrame(linhas)
+
+
+# ------------------------------------------------------------------------------
+# 4Cs (v8.3) - Lauterborn (1990)
+# ------------------------------------------------------------------------------
+QUATRO_CS = [
+    ("mix_4c_n1", "mix_4c_cliente", "Cliente (em vez de produto)",
+     "O produto resolve uma necessidade que o cliente reconhece? Que dor das personas ele alivia?"),
+    ("mix_4c_n2", "mix_4c_custo", "Custo para o cliente (em vez de preço)",
+     "Quanto custa ao cliente comprar, somando preço, deslocamento, tempo e o risco de não gostar?"),
+    ("mix_4c_n3", "mix_4c_conveniencia", "Conveniência (em vez de praça)",
+     "É fácil encontrar, comprar e pagar? Horários, entrega, formas de pagamento e atendimento ajudam?"),
+    ("mix_4c_n4", "mix_4c_comunicacao", "Comunicação (em vez de promoção)",
+     "Há conversa com o cliente, e não só anúncio? Ele consegue perguntar, reclamar e indicar?"),
+]
+

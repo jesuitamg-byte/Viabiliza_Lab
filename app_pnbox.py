@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v8.2 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v8.3 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -107,6 +107,16 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v8.3 (25/11/2026): 7Ps de serviços, coerência do mix e 4Cs
+
+**Mix de marketing: 7Ps de serviços, coerência do mix e 4Cs**
+- **Pessoas, processos e evidência física** (Booms; Bitner, 1981), nova aba do mix: quem atende e como o atendimento é padronizado, o que o cliente vê e toca, e o **mapa do serviço** (Shostack, 1984), com etapas visíveis ao cliente, bastidores e apoio, tempo de cada etapa e pontos de falha.
+- **Coerência entre os Ps:** tabela de combinações que se reforçam ou se contradizem (preço premium com produto ampliado e distribuição seletiva, penetração com comunicação de alcance, desnatação no lançamento, objetivo da comunicação conforme a fase do ciclo de vida, canais cadastrados conforme a intensidade de distribuição).
+- **Autoavaliação pelos 4Cs** (Lauterborn, 1990): cliente, custo para o cliente, conveniência e comunicação, com nota, evidência e indicação do ponto mais fraco.
+- Os modelos TecVale e Café Mucuri trazem exemplos do mapa do serviço.
 
 ---
 
@@ -294,6 +304,10 @@ SCHEMA = {
         ("mix_estrategia_preco", "TEXT"), ("mix_posicao_preco", "TEXT"),
         # v8.2: Praça e Promoção
         ("mix_distribuicao", "TEXT"), ("mix_objetivo_com", "TEXT"), ("mix_ticket", "REAL"), ("mix_freq", "REAL"),
+        # v8.3: 7Ps de serviços e 4Cs
+        ("mix_pessoas", "TEXT"), ("mix_processos", "TEXT"), ("mix_evidencia", "TEXT"),
+        ("mix_4c_cliente", "TEXT"), ("mix_4c_custo", "TEXT"), ("mix_4c_conveniencia", "TEXT"), ("mix_4c_comunicacao", "TEXT"),
+        ("mix_4c_n1", "REAL"), ("mix_4c_n2", "REAL"), ("mix_4c_n3", "REAL"), ("mix_4c_n4", "REAL"),
     ],
     "socios": [("nome", "TEXT"), ("funcao", "TEXT"), ("contato", "TEXT"),
                ("perfil", "TEXT"), ("capital_integralizado", "REAL"), ("perda_aceitavel", "REAL")],
@@ -396,6 +410,7 @@ SCHEMA = {
     "precos_concorrentes": [("concorrente", "TEXT"), ("produto", "TEXT"), ("preco", "REAL"), ("fonte", "TEXT")],
     "meios_pagamento": [("forma", "TEXT"), ("pct_vendas", "REAL"), ("taxa_pct", "REAL"), ("prazo_dias", "REAL")],
     "canais_venda": [("canal", "TEXT"), ("pct_vendas", "REAL"), ("comissao_pct", "REAL"), ("observacao", "TEXT")],
+    "blueprint": [("etapa", "TEXT"), ("linha", "TEXT"), ("tempo_min", "REAL"), ("ponto_falha", "TEXT")],
     "dados_publicos": [("chave", "TEXT"), ("rotulo", "TEXT"), ("valor", "REAL"), ("periodo", "TEXT"), ("fonte", "TEXT")],
 }
 
@@ -1821,6 +1836,25 @@ _MIX2 = {   # distribuição, objetivo de comunicação, compras por mês, canai
 }
 
 
+_MIX3 = {   # pessoas, evidência física, etapas do mapa do serviço (etapa, onde, minutos, ponto de falha)
+    "servico": ("Dois técnicos com certificação e roteiro padrão de atendimento; o sócio faz o contato comercial",
+                "Ordem de serviço impressa, relatório do que foi feito, etiqueta de garantia no equipamento, avaliações no Google",
+                [("Cliente pede atendimento pelo WhatsApp", "Visível ao cliente", 5, "Demora em responder"),
+                 ("Agendamento e coleta do equipamento", "Visível ao cliente", 30, "Atraso na coleta"),
+                 ("Diagnóstico na bancada", "Bastidores", 60, ""),
+                 ("Orçamento enviado e aprovado", "Visível ao cliente", 15, "Orçamento sem detalhes"),
+                 ("Compra de peças", "Apoio (sistemas e fornecedores)", 120, "Peça em falta no fornecedor"),
+                 ("Reparo e testes", "Bastidores", 90, ""),
+                 ("Entrega com relatório e garantia", "Visível ao cliente", 20, "")]),
+    "cafe": ("Atendentes treinadas em preparo de café e no cardápio regional", "Ambiente com madeira e fotos dos produtores, "
+             "xícaras com a marca, cardápio com a origem dos grãos",
+             [("Cliente chega e escolhe no balcão", "Visível ao cliente", 3, "Fila no horário de pico"),
+              ("Pedido e pagamento", "Visível ao cliente", 2, "Maquininha sem sinal"),
+              ("Preparo do café", "Bastidores", 4, "Moagem errada"),
+              ("Entrega na mesa", "Visível ao cliente", 1, "")]),
+}
+
+
 def popular_mix(conn, qual: str) -> None:
     """Exemplo do mix integrado (v8.1): níveis de produto, estratégia de preço e preços de concorrentes."""
     if qual not in _MIX:
@@ -1840,6 +1874,10 @@ def popular_mix(conn, qual: str) -> None:
         conn.execute("UPDATE projeto SET mix_distribuicao=?, mix_objetivo_com=?, mix_freq=? WHERE id=1", (dist, obj, freq))
         conn.executemany("INSERT INTO canais_venda (canal, pct_vendas, comissao_pct, observacao) VALUES (?,?,?,?)",
                          [(c, p, k, "Exemplo didático: confira a taxa real do canal") for c, p, k in canais])
+    if qual in _MIX3:
+        pessoas, evid, etapas = _MIX3[qual]
+        conn.execute("UPDATE projeto SET mix_pessoas=?, mix_evidencia=? WHERE id=1", (pessoas, evid))
+        conn.executemany("INSERT INTO blueprint (etapa, linha, tempo_min, ponto_falha) VALUES (?,?,?,?)", etapas)
 
 
 def popular_validacao(conn, qual: str) -> None:
@@ -4990,6 +5028,108 @@ def checar_praca_promocao(proj: dict, d: dict, res: dict) -> list[tuple[str, str
             out.append((nivel, f"Cada cliente novo custa R$ {_n(pv['cac'], 2)} e devolve isso em margem de contribuição em cerca de {_n(pb, 1)} meses."))
     return out
 
+
+# ------------------------------------------------------------------------------
+# 7Ps DE SERVIÇOS (v8.3) - Booms; Bitner (1981)
+# ------------------------------------------------------------------------------
+LINHAS_BLUEPRINT = ["Visível ao cliente", "Bastidores", "Apoio (sistemas e fornecedores)"]
+
+
+def resumo_blueprint(df: pd.DataFrame) -> dict:
+    """Mapa do serviço (Shostack, 1984): tempo total, tempo visível ao cliente e pontos de falha."""
+    if df is None or df.empty:
+        return {"etapas": 0, "tempo": 0.0, "visivel": 0.0, "falhas": []}
+    t = df["tempo_min"].astype(float)
+    vis = df["linha"] == "Visível ao cliente"
+    falhas = df.loc[df["ponto_falha"].astype(str).str.strip() != "", "etapa"].tolist()
+    return {"etapas": len(df), "tempo": float(t.sum()), "visivel": float(t[vis].sum()), "falhas": falhas}
+
+
+def e_servico(proj: dict, res: dict) -> bool:
+    tipo = str(proj.get("tipo_negocio") or "")
+    if tipo in ("Serviços", "Assinatura", "Misto"):
+        return True
+    cat = res.get("cat")
+    if cat is not None and not cat.empty and "categoria" in cat:
+        return bool((cat["categoria"] == "Serviço").any())
+    return False
+
+
+# ------------------------------------------------------------------------------
+# COERÊNCIA DO MIX (v8.3)
+# ------------------------------------------------------------------------------
+def coerencia_mix(proj: dict, d: dict, res: dict) -> pd.DataFrame:
+    """Combinações entre os Ps que se reforçam ou se contradizem. Cada linha: combinação, situação e comentário."""
+    pos = proj.get("mix_posicao_preco") or ""
+    est = proj.get("mix_estrategia_preco") or ""
+    dist = proj.get("mix_distribuicao") or ""
+    obj = proj.get("mix_objetivo_com") or ""
+    ciclo = proj.get("mix_ciclo") or ""
+    ampliado = str(proj.get("mix_ampliado") or "").strip()
+    mm = mc_media(res)
+    linhas = []
+
+    def add(comb, ok, bom, ruim):
+        linhas.append({"Combinação": comb, "Situação": "✅ coerente" if ok else "⚠️ contradição",
+                       "Comentário": bom if ok else ruim})
+
+    if pos == "Premium":
+        add("Preço premium × produto ampliado", bool(ampliado),
+            "O preço mais alto vem acompanhado de serviços e garantias que o justificam.",
+            "Preço premium sem nada além do produto básico: o cliente não vê por que pagar mais.")
+        if dist:
+            add("Preço premium × distribuição", dist != "Intensiva",
+                "Distribuição seletiva ou exclusiva protege a imagem e o controle da experiência.",
+                "Distribuição intensiva espalha o produto em pontos onde ele disputa preço lado a lado.")
+        if est:
+            add("Preço premium × estratégia de preço", est != "Penetração",
+                "A estratégia de preço sustenta a posição premium.",
+                "Penetração é preço baixo para ganhar volume: contradiz a posição premium.")
+    if pos == "Econômico":
+        if dist:
+            add("Preço econômico × distribuição", dist != "Exclusiva",
+                "Preço baixo pede volume, e a distribuição ajuda a alcançá-lo.",
+                "Preço baixo em poucos pontos exclusivos: falta volume para compensar a margem menor.")
+        if mm == mm:
+            add("Preço econômico × margem", mm >= 0.20,
+                "Mesmo com preço baixo, a margem de contribuição deixa folga para os custos fixos.",
+                "Preço econômico com margem estreita: o negócio depende de um volume muito alto.")
+    if est == "Penetração" and obj:
+        add("Penetração × objetivo de comunicação", obj in ("Tornar a marca conhecida", "Fazer o cliente experimentar"),
+            "A comunicação busca alcance e experimentação, que é o que a penetração precisa.",
+            "Penetração depende de muita gente conhecendo e experimentando; a comunicação está focada em outra coisa.")
+    if est == "Desnatação" and ciclo:
+        add("Desnatação × ciclo de vida", ciclo == "Introdução",
+            "Preço alto no lançamento, quando o produto ainda é novidade.",
+            "Desnatação perde força depois do lançamento, quando o cliente já conhece as alternativas.")
+    if ciclo and obj:
+        add("Ciclo de vida × objetivo de comunicação",
+            not (ciclo == "Introdução" and obj == "Fidelizar e fazer voltar"),
+            "O objetivo da comunicação combina com a fase do produto.",
+            "Na introdução quase ninguém conhece o produto: antes de fidelizar é preciso ser conhecido e experimentado.")
+    cv = d.get("canais_venda")
+    if cv is not None and not cv.empty and dist:
+        n = int((cv["pct_vendas"] > 0).sum())
+        add("Distribuição declarada × canais usados", not (dist == "Intensiva" and n <= 1) and not (dist == "Exclusiva" and n >= 4),
+            "Os canais cadastrados batem com a intensidade de distribuição escolhida.",
+            "O número de canais cadastrados não bate com a intensidade de distribuição escolhida.")
+    return pd.DataFrame(linhas)
+
+
+# ------------------------------------------------------------------------------
+# 4Cs (v8.3) - Lauterborn (1990)
+# ------------------------------------------------------------------------------
+QUATRO_CS = [
+    ("mix_4c_n1", "mix_4c_cliente", "Cliente (em vez de produto)",
+     "O produto resolve uma necessidade que o cliente reconhece? Que dor das personas ele alivia?"),
+    ("mix_4c_n2", "mix_4c_custo", "Custo para o cliente (em vez de preço)",
+     "Quanto custa ao cliente comprar, somando preço, deslocamento, tempo e o risco de não gostar?"),
+    ("mix_4c_n3", "mix_4c_conveniencia", "Conveniência (em vez de praça)",
+     "É fácil encontrar, comprar e pagar? Horários, entrega, formas de pagamento e atendimento ajudam?"),
+    ("mix_4c_n4", "mix_4c_comunicacao", "Comunicação (em vez de promoção)",
+     "Há conversa com o cliente, e não só anúncio? Ele consegue perguntar, reclamar e indicar?"),
+]
+
 # ##############################################################################
 # PARTE: pnbox_pdf.py
 # ##############################################################################
@@ -7869,7 +8009,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "8.2"
+VERSAO_PROGRAMA = "8.3"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -12507,11 +12647,88 @@ def _aba_promocao():
                                                         height=110, key=wk("m4"))})
 
 
+def _aba_servico():
+    res = R()
+    st.caption("Em serviços o cliente compra algo que não pode ver antes. Booms e Bitner (1981) acrescentam três Ps "
+               "ao mix: as pessoas que atendem, o processo pelo qual o serviço acontece e a evidência física que o torna visível.")
+    if not e_servico(proj, res):
+        st.info("O projeto não está marcado como serviço, mas estes três Ps também ajudam no varejo e na alimentação, "
+                "onde o atendimento faz parte do que se vende.", icon="💡")
+    st.markdown("#### 👥 Pessoas")
+    pes = d["pessoal"]
+    n = float(pes["num_empregados"].sum()) if not pes.empty else 0.0
+    st.caption(f"Equipe no plano: {num_br(n, 0)} pessoa(s), cadastradas em Custos e despesas.")
+    v = {"mix_pessoas": st.text_area("Quem atende o cliente, que preparo precisa ter e como o atendimento será padronizado",
+                                     proj.get("mix_pessoas") or "", height=100, key=wk("mx_pe"))}
+    st.markdown("#### 🔁 Processos: mapa do serviço")
+    st.caption("Liste as etapas do serviço na ordem em que acontecem, separando o que o cliente vê do que acontece nos "
+               "bastidores (Shostack, 1984). Marque onde algo costuma dar errado.")
+    editor("blueprint", {"etapa": T("Etapa", required=True, width="medium"),
+                         "linha": S("Onde acontece", options=LINHAS_BLUEPRINT),
+                         "tempo_min": N("Tempo (minutos)", min_value=0.0, step=1.0),
+                         "ponto_falha": T("O que pode dar errado", width="medium")}, "etapa")
+    bp = resumo_blueprint(d["blueprint"])
+    if bp["etapas"]:
+        a, b, c = st.columns(3)
+        a.metric("Etapas", num_br(bp["etapas"], 0))
+        b.metric("Tempo total", f"{num_br(bp['tempo'], 0)} min")
+        c.metric("Pontos de falha", num_br(len(bp["falhas"]), 0))
+        if bp["falhas"]:
+            st.caption("Etapas com risco de falha: " + ", ".join(bp["falhas"]) +
+                       ". Cada uma merece um padrão de atendimento ou uma checagem.")
+    v["mix_processos"] = st.text_area("Observações sobre o processo", proj.get("mix_processos") or "", height=80,
+                                      key=wk("mx_pr"))
+    st.markdown("#### 🏠 Evidência física")
+    v["mix_evidencia"] = st.text_area("O que o cliente vê e toca: ambiente, uniforme, embalagem, site, contrato, "
+                                      "certificados, avaliações", proj.get("mix_evidencia") or "", height=100, key=wk("mx_ev"))
+    auto_unica("projeto", v)
+
+
+def _aba_diagnostico():
+    vw = None
+    try:
+        vw = van_westendorp(d["precos_vw"])
+    except Exception:
+        pass
+    res = R()
+    st.markdown("#### Coerência entre os Ps")
+    st.caption("Os Ps precisam contar a mesma história. As combinações abaixo aparecem conforme as escolhas feitas nas outras abas.")
+    co = coerencia_mix(proj, d, res)
+    if co.empty:
+        st.info("Escolha a posição e a estratégia de preço, a distribuição e o objetivo da comunicação para ver a coerência do mix.",
+                icon="💡")
+    else:
+        st.dataframe(co, hide_index=True, width="stretch")
+        ok = int(co["Situação"].str.startswith("✅").sum())
+        st.caption(f"{ok} de {len(co)} combinações coerentes.")
+    st.markdown("#### Produto e preço")
+    mostrar_alertas(checar_produto_preco(proj, d, res, vw))
+    st.markdown("#### Praça e promoção")
+    mostrar_alertas(checar_praca_promocao(proj, d, res))
+    st.markdown("#### Autoavaliação pelos olhos do cliente (4Cs)")
+    st.caption("Lauterborn (1990) propõe olhar cada P do ponto de vista de quem compra. Dê uma nota de 1 a 5 e escreva a evidência.")
+    v, notas = {}, []
+    for campo_n, campo_t, titulo, pergunta in QUATRO_CS:
+        c1, c2 = st.columns([1, 3])
+        v[campo_n] = c1.slider(titulo, 0, 5, int(proj.get(campo_n) or 0), key=wk(campo_n), help="0 = ainda não avaliado")
+        v[campo_t] = c2.text_area(pergunta, proj.get(campo_t) or "", height=80, key=wk(campo_t))
+        notas.append((titulo.split(" (")[0], v[campo_n]))
+    auto_unica("projeto", v)
+    avaliadas = [(t, n) for t, n in notas if n > 0]
+    if len(avaliadas) == 4:
+        pior = min(avaliadas, key=lambda x: x[1])
+        st.altair_chart(alt.Chart(pd.DataFrame(avaliadas, columns=["C", "Nota"])).mark_bar(color="#2f6fd0").encode(
+            x=alt.X("Nota:Q", scale=alt.Scale(domain=[0, 5])), y=alt.Y("C:N", sort=None, title=None)), width="stretch")
+        st.caption(f"O ponto mais fraco pelo olhar do cliente é **{pior[0].lower()}** (nota {pior[1]}). "
+                   "É por ele que vale começar a ajustar o mix.")
+
+
 def pg_marketing():
     cabecalho("marketing")
     st.caption("Cada P tem escolhas que alimentam o restante do plano. Os campos de texto continuam "
                "valendo como justificativa.")
-    abas = st.tabs(["📦 Produto", "🏷️ Preço", "📍 Praça", "📣 Promoção", "🔎 Diagnóstico do mix"])
+    abas = st.tabs(["📦 Produto", "🏷️ Preço", "📍 Praça", "📣 Promoção", "👥 Pessoas, processos e evidência física",
+                    "🔎 Diagnóstico do mix"])
     with abas[0]:
         _aba_produto()
     with abas[1]:
@@ -12521,15 +12738,9 @@ def pg_marketing():
     with abas[3]:
         _aba_promocao()
     with abas[4]:
-        vw = None
-        try:
-            vw = van_westendorp(d["precos_vw"])
-        except Exception:
-            pass
-        st.markdown("**Produto e preço**")
-        mostrar_alertas(checar_produto_preco(proj, d, R(), vw))
-        st.markdown("**Praça e promoção**")
-        mostrar_alertas(checar_praca_promocao(proj, d, R()))
+        _aba_servico()
+    with abas[5]:
+        _aba_diagnostico()
     proxima("marketing")
 
 # ##############################################################################

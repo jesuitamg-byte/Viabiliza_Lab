@@ -214,11 +214,88 @@ def _aba_promocao():
                                                         height=110, key=wk("m4"))})
 
 
+def _aba_servico():
+    res = R()
+    st.caption("Em serviços o cliente compra algo que não pode ver antes. Booms e Bitner (1981) acrescentam três Ps "
+               "ao mix: as pessoas que atendem, o processo pelo qual o serviço acontece e a evidência física que o torna visível.")
+    if not e_servico(proj, res):
+        st.info("O projeto não está marcado como serviço, mas estes três Ps também ajudam no varejo e na alimentação, "
+                "onde o atendimento faz parte do que se vende.", icon="💡")
+    st.markdown("#### 👥 Pessoas")
+    pes = d["pessoal"]
+    n = float(pes["num_empregados"].sum()) if not pes.empty else 0.0
+    st.caption(f"Equipe no plano: {num_br(n, 0)} pessoa(s), cadastradas em Custos e despesas.")
+    v = {"mix_pessoas": st.text_area("Quem atende o cliente, que preparo precisa ter e como o atendimento será padronizado",
+                                     proj.get("mix_pessoas") or "", height=100, key=wk("mx_pe"))}
+    st.markdown("#### 🔁 Processos: mapa do serviço")
+    st.caption("Liste as etapas do serviço na ordem em que acontecem, separando o que o cliente vê do que acontece nos "
+               "bastidores (Shostack, 1984). Marque onde algo costuma dar errado.")
+    editor("blueprint", {"etapa": T("Etapa", required=True, width="medium"),
+                         "linha": S("Onde acontece", options=LINHAS_BLUEPRINT),
+                         "tempo_min": N("Tempo (minutos)", min_value=0.0, step=1.0),
+                         "ponto_falha": T("O que pode dar errado", width="medium")}, "etapa")
+    bp = resumo_blueprint(d["blueprint"])
+    if bp["etapas"]:
+        a, b, c = st.columns(3)
+        a.metric("Etapas", num_br(bp["etapas"], 0))
+        b.metric("Tempo total", f"{num_br(bp['tempo'], 0)} min")
+        c.metric("Pontos de falha", num_br(len(bp["falhas"]), 0))
+        if bp["falhas"]:
+            st.caption("Etapas com risco de falha: " + ", ".join(bp["falhas"]) +
+                       ". Cada uma merece um padrão de atendimento ou uma checagem.")
+    v["mix_processos"] = st.text_area("Observações sobre o processo", proj.get("mix_processos") or "", height=80,
+                                      key=wk("mx_pr"))
+    st.markdown("#### 🏠 Evidência física")
+    v["mix_evidencia"] = st.text_area("O que o cliente vê e toca: ambiente, uniforme, embalagem, site, contrato, "
+                                      "certificados, avaliações", proj.get("mix_evidencia") or "", height=100, key=wk("mx_ev"))
+    auto_unica("projeto", v)
+
+
+def _aba_diagnostico():
+    vw = None
+    try:
+        vw = van_westendorp(d["precos_vw"])
+    except Exception:
+        pass
+    res = R()
+    st.markdown("#### Coerência entre os Ps")
+    st.caption("Os Ps precisam contar a mesma história. As combinações abaixo aparecem conforme as escolhas feitas nas outras abas.")
+    co = coerencia_mix(proj, d, res)
+    if co.empty:
+        st.info("Escolha a posição e a estratégia de preço, a distribuição e o objetivo da comunicação para ver a coerência do mix.",
+                icon="💡")
+    else:
+        st.dataframe(co, hide_index=True, width="stretch")
+        ok = int(co["Situação"].str.startswith("✅").sum())
+        st.caption(f"{ok} de {len(co)} combinações coerentes.")
+    st.markdown("#### Produto e preço")
+    mostrar_alertas(checar_produto_preco(proj, d, res, vw))
+    st.markdown("#### Praça e promoção")
+    mostrar_alertas(checar_praca_promocao(proj, d, res))
+    st.markdown("#### Autoavaliação pelos olhos do cliente (4Cs)")
+    st.caption("Lauterborn (1990) propõe olhar cada P do ponto de vista de quem compra. Dê uma nota de 1 a 5 e escreva a evidência.")
+    v, notas = {}, []
+    for campo_n, campo_t, titulo, pergunta in QUATRO_CS:
+        c1, c2 = st.columns([1, 3])
+        v[campo_n] = c1.slider(titulo, 0, 5, int(proj.get(campo_n) or 0), key=wk(campo_n), help="0 = ainda não avaliado")
+        v[campo_t] = c2.text_area(pergunta, proj.get(campo_t) or "", height=80, key=wk(campo_t))
+        notas.append((titulo.split(" (")[0], v[campo_n]))
+    auto_unica("projeto", v)
+    avaliadas = [(t, n) for t, n in notas if n > 0]
+    if len(avaliadas) == 4:
+        pior = min(avaliadas, key=lambda x: x[1])
+        st.altair_chart(alt.Chart(pd.DataFrame(avaliadas, columns=["C", "Nota"])).mark_bar(color="#2f6fd0").encode(
+            x=alt.X("Nota:Q", scale=alt.Scale(domain=[0, 5])), y=alt.Y("C:N", sort=None, title=None)), width="stretch")
+        st.caption(f"O ponto mais fraco pelo olhar do cliente é **{pior[0].lower()}** (nota {pior[1]}). "
+                   "É por ele que vale começar a ajustar o mix.")
+
+
 def pg_marketing():
     cabecalho("marketing")
     st.caption("Cada P tem escolhas que alimentam o restante do plano. Os campos de texto continuam "
                "valendo como justificativa.")
-    abas = st.tabs(["📦 Produto", "🏷️ Preço", "📍 Praça", "📣 Promoção", "🔎 Diagnóstico do mix"])
+    abas = st.tabs(["📦 Produto", "🏷️ Preço", "📍 Praça", "📣 Promoção", "👥 Pessoas, processos e evidência física",
+                    "🔎 Diagnóstico do mix"])
     with abas[0]:
         _aba_produto()
     with abas[1]:
@@ -228,13 +305,7 @@ def pg_marketing():
     with abas[3]:
         _aba_promocao()
     with abas[4]:
-        vw = None
-        try:
-            vw = van_westendorp(d["precos_vw"])
-        except Exception:
-            pass
-        st.markdown("**Produto e preço**")
-        mostrar_alertas(checar_produto_preco(proj, d, R(), vw))
-        st.markdown("**Praça e promoção**")
-        mostrar_alertas(checar_praca_promocao(proj, d, R()))
+        _aba_servico()
+    with abas[5]:
+        _aba_diagnostico()
     proxima("marketing")
