@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.1"
+VERSAO_PROGRAMA = "9.1.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -776,7 +776,7 @@ def _drive_ligar(caminho, id_arq: str, mod: str):
 
 
 def drive_conectado() -> bool:
-    return bool(ss.get("g_token")) and time.time() < ss.get("g_exp", 0)
+    return bool(ss.get("g_token")) and bool(ss.get("g_email")) and bool(ss.get("g_pasta")) and time.time() < ss.get("g_exp", 0)
 
 
 def _drive_processar_canal():
@@ -798,6 +798,8 @@ def _drive_processar_canal():
             ss.g_erro = None
         except Exception as e:
             ss.g_erro = drive_mensagem_erro(e)
+            for k in ("g_token", "g_exp", "g_email", "g_pasta"):
+                ss.pop(k, None)
     elif tipo == "sair":
         for k in ("g_token", "g_exp", "g_email", "g_pasta", "g_erro", "g_conflito", "g_lista"):
             ss.pop(k, None)

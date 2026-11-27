@@ -2,7 +2,7 @@ import re
 partes=["pnbox_db.py","pnbox_modelo.py","pnbox_motor.py","pnbox_estrategia.py","pnbox_validacao.py","pnbox_v8.py","pnbox_mix.py","pnbox_leituras.py","pnbox_v9.py","pnbox_pdf.py","pnbox_extras.py","pnbox_abnt.py","pnbox_drive.py","pnbox_ui_base.py","pnbox_ui_paginas1.py","pnbox_ui_paginas2.py","pnbox_ui_paginas4.py","pnbox_ui_paginas5.py","pnbox_ui_paginas6.py","pnbox_ui_paginas7.py","pnbox_ui_paginas8.py","pnbox_ui_paginas3.py"]
 cab='''"""
 ================================================================================
-VIABILIZALAB v9.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v9.1.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou

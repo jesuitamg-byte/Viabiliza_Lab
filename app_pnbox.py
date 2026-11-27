@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v9.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v9.1.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -125,6 +125,13 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v9.1.1 (26/11/2026): correção no login com Google
+
+**Correção no login com Google**
+- Se a autorização do Google falhasse logo depois do login (permissão negada, conexão caída ou token inválido), o menu lateral mostrava um erro técnico. Agora o programa descarta a autorização com problema e mostra a mensagem em português para entrar de novo.
 
 ---
 
@@ -9940,7 +9947,7 @@ def drive_botao(acao: str, rotulo: str, cor: str = "#1a73e8", texto: str = "#fff
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.1"
+VERSAO_PROGRAMA = "9.1.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -10688,7 +10695,7 @@ def _drive_ligar(caminho, id_arq: str, mod: str):
 
 
 def drive_conectado() -> bool:
-    return bool(ss.get("g_token")) and time.time() < ss.get("g_exp", 0)
+    return bool(ss.get("g_token")) and bool(ss.get("g_email")) and bool(ss.get("g_pasta")) and time.time() < ss.get("g_exp", 0)
 
 
 def _drive_processar_canal():
@@ -10710,6 +10717,8 @@ def _drive_processar_canal():
             ss.g_erro = None
         except Exception as e:
             ss.g_erro = drive_mensagem_erro(e)
+            for k in ("g_token", "g_exp", "g_email", "g_pasta"):
+                ss.pop(k, None)
     elif tipo == "sair":
         for k in ("g_token", "g_exp", "g_email", "g_pasta", "g_erro", "g_conflito", "g_lista"):
             ss.pop(k, None)

@@ -7,6 +7,13 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.1.1 (26/11/2026): correção no login com Google
+
+**Correção no login com Google**
+- Se a autorização do Google falhasse logo depois do login (permissão negada, conexão caída ou token inválido), o menu lateral mostrava um erro técnico. Agora o programa descarta a autorização com problema e mostra a mensagem em português para entrar de novo.
+
+---
+
 ## v9.1 (26/11/2026): login com Google e projetos no Google Drive
 
 **Login com Google e projetos no Google Drive**
