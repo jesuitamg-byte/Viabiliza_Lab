@@ -21,3 +21,4 @@ v9.0 | 99f5e6b | mapa de concorrentes, árvore de decisão e acessibilidade
 v9.0.1 | cbab537 | ajustes de navegação
 v9.0.2 | 1fbf868 | correção do botão Voltar do navegador
 v9.0.3 | 3ec1915 | instalador com a versão correta
+v9.0.4 | 9eb0871 | encerramento, política de privacidade e porta fixa
