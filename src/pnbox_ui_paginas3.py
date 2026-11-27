@@ -338,6 +338,38 @@ def pg_relatorio():
             else:
                 st.warning("A biblioteca python-docx não está instalada neste computador.")
     with st.container(border=True):
+        st.markdown("#### ☁️ Enviar para o Google Documentos e o Google Planilhas")
+        if not drive_conectado():
+            st.caption("Entre com a sua conta Google no menu lateral (☁️ Google Drive) para enviar o relatório e a planilha, "
+                       "já convertidos, para a pasta ViabilizaLab do seu Drive.")
+        else:
+            st.caption(f"Os arquivos vão para a pasta ViabilizaLab do Drive de {ss.g_email}, convertidos para o formato do Google, "
+                       "prontos para editar e compartilhar.")
+            g1, g2 = st.columns(2)
+            if g1.button("📝 Enviar relatório para o Google Documentos", width="stretch", key="b_gdoc"):
+                with st.spinner("Montando o documento e enviando ao Drive..."):
+                    try:
+                        docx_ = ss.get(f"docx_{PID}") or gerar_docx(proj, d, res, piv_i)
+                        if not docx_:
+                            raise RuntimeError("python-docx")
+                        r = drive_enviar_convertido(ss.g_token, f"Plano - {Path(ss.db).stem}", docx_, "doc", ss.g_pasta)
+                        ss[f"gdoc_{PID}"] = r.get("webViewLink")
+                    except RuntimeError:
+                        st.warning("A biblioteca python-docx não está instalada neste computador.")
+                    except Exception as e:
+                        st.error(drive_mensagem_erro(e))
+            if ss.get(f"gdoc_{PID}"):
+                g1.link_button("Abrir no Google Documentos ↗", ss[f"gdoc_{PID}"], width="stretch")
+            if g2.button("📊 Enviar planilha para o Google Planilhas", width="stretch", key="b_gsheet"):
+                with st.spinner("Montando a planilha e enviando ao Drive..."):
+                    try:
+                        r = drive_enviar_convertido(ss.g_token, f"Planilha - {Path(ss.db).stem}", planilha_excel(res), "planilha", ss.g_pasta)
+                        ss[f"gsheet_{PID}"] = r.get("webViewLink")
+                    except Exception as e:
+                        st.error(drive_mensagem_erro(e))
+            if ss.get(f"gsheet_{PID}"):
+                g2.link_button("Abrir no Google Planilhas ↗", ss[f"gsheet_{PID}"], width="stretch")
+    with st.container(border=True):
         st.markdown("#### 🎓 Relatório acadêmico no padrão ABNT (PDF)")
         st.caption("Capa, folha de rosto, sumário com páginas, seções numeradas, tabelas com título e fonte, citações e referências. "
                    "Margens de 3 e 2 cm, fonte 12 e espaçamento 1,5.")

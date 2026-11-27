@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.0.4"
+VERSAO_PROGRAMA = "9.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -744,6 +744,219 @@ def completude() -> float:
 # ------------------------------------------------------------------------------
 # MENU LATERAL
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# GOOGLE DRIVE (v9.1): login, pasta do aluno no Drive e salvamento automático
+# ------------------------------------------------------------------------------
+_MAPA_DRIVE = PASTA / ".drive.json"
+
+
+def _drive_mapa() -> dict:
+    try:
+        return json.loads(_MAPA_DRIVE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _drive_registro(caminho=None) -> dict | None:
+    """Arquivo do Drive ligado ao projeto local (para a conta conectada)."""
+    if not ss.get("g_email"):
+        return None
+    return _drive_mapa().get(ss.g_email, {}).get(Path(caminho or ss.db).name)
+
+
+def _drive_ligar(caminho, id_arq: str, mod: str):
+    m = _drive_mapa()
+    m.setdefault(ss.g_email, {})[Path(caminho).name] = {"id": id_arq, "mod": mod}
+    try:
+        _MAPA_DRIVE.write_text(json.dumps(m, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    ss.g_enviado = Path(caminho).stat().st_mtime if Path(caminho).exists() else 0
+    ss.g_hora = datetime.now().strftime("%H:%M")
+
+
+def drive_conectado() -> bool:
+    return bool(ss.get("g_token")) and time.time() < ss.get("g_exp", 0)
+
+
+def _drive_processar_canal():
+    """Mensagens que o código da página manda pelo campo oculto (login, saída, arquivo escolhido)."""
+    bruto = ss.get("gcanal") or ""
+    if not bruto or bruto == ss.get("_gcanal_lido"):
+        return
+    ss._gcanal_lido = bruto
+    try:
+        msg = json.loads(bruto)
+    except Exception:
+        return
+    tipo = msg.get("tipo")
+    if tipo == "token":
+        ss.g_token, ss.g_exp = msg["token"], time.time() + float(msg.get("expira", 3600)) - 120
+        try:
+            ss.g_email = drive_usuario(ss.g_token)
+            ss.g_pasta = drive_pasta(ss.g_token)
+            ss.g_erro = None
+        except Exception as e:
+            ss.g_erro = drive_mensagem_erro(e)
+    elif tipo == "sair":
+        for k in ("g_token", "g_exp", "g_email", "g_pasta", "g_erro", "g_conflito", "g_lista"):
+            ss.pop(k, None)
+    elif tipo == "picker" and drive_conectado():
+        _drive_abrir(msg["id"], msg.get("nome") or "Projeto do Drive.pnbox")
+    elif tipo == "erro":
+        ss.g_erro = {"popup_closed": "A janela do Google foi fechada antes de terminar o login.",
+                     "popup_failed_to_open": "O navegador bloqueou a janela do Google. Libere as janelas para este site e tente de novo.",
+                     "access_denied": "O acesso ao Drive não foi autorizado.",
+                     "sem_login": "Entre com o Google antes de escolher um arquivo.",
+                     "picker": "Não foi possível abrir a janela de escolha de arquivos do Google."}.get(
+            msg.get("erro"), f"Não foi possível concluir o login ({msg.get('erro')}).")
+
+
+def _drive_abrir(id_arq: str, nome: str):
+    """Baixa um projeto do Drive e abre. Se o projeto já existir aqui, a cópia local é substituída."""
+    try:
+        dados = drive_baixar(ss.g_token, id_arq)
+        meta = drive_metadados(ss.g_token, id_arq)
+    except Exception as e:
+        ss.g_erro = drive_mensagem_erro(e)
+        return
+    if not dados.startswith(b"SQLite format 3"):
+        ss.g_erro = "O arquivo escolhido não é um projeto do ViabilizaLab (.pnbox)."
+        return
+    destino = None
+    for nome_local, reg in _drive_mapa().get(ss.g_email, {}).items():
+        if reg.get("id") == id_arq and (PASTA / nome_local).exists():
+            destino = PASTA / nome_local
+    destino = destino or caminho_livre(Path(nome).stem)
+    try:
+        conn.close()
+    except Exception:
+        pass
+    destino.write_bytes(dados)
+    conectar(destino).close()
+    _drive_ligar(destino, id_arq, meta.get("modifiedTime", ""))
+    trocar_projeto(destino)
+    ss.g_conflito = None
+
+
+def drive_salvar(forcar: bool = False, sobrescrever: bool = False) -> bool:
+    """Envia o projeto atual para o Drive se ele mudou desde o último envio. Devolve True se enviou."""
+    if not drive_conectado() or ss.get("g_conflito") and not sobrescrever:
+        return False
+    caminho = Path(ss.db)
+    reg = _drive_registro()
+    if reg is None and not forcar:
+        return False
+    mtime = caminho.stat().st_mtime
+    if not forcar and mtime <= ss.get("g_enviado", 0):
+        return False
+    if not forcar and time.time() - mtime < 4:          # espera o aluno parar de digitar
+        return False
+    try:
+        conn.commit()
+        dados = caminho.read_bytes()
+        if reg is None:
+            r = drive_criar(ss.g_token, caminho.name, dados, ss.g_pasta)
+        else:
+            if not sobrescrever:
+                meta = drive_metadados(ss.g_token, reg["id"])
+                if meta.get("trashed"):
+                    raise ErroDrive(404, "na lixeira")
+                if reg.get("mod") and meta.get("modifiedTime") != reg["mod"]:
+                    ss.g_conflito = meta.get("modifiedTime")
+                    return False
+            r = drive_atualizar(ss.g_token, reg["id"], dados)
+        _drive_ligar(caminho, r["id"], r.get("modifiedTime", ""))
+        ss.g_enviado = mtime
+        ss.g_erro = None
+        return True
+    except Exception as e:
+        ss.g_erro = drive_mensagem_erro(e)
+        return False
+
+
+def _drive_status():
+    reg = _drive_registro()
+    if ss.get("g_conflito"):
+        st.warning("Este projeto foi alterado em outro aparelho depois da última vez que você salvou daqui.", icon="⚠️")
+        a, b = st.columns(2)
+        if a.button("Usar a versão do Drive", key="g_conf_baixar", width="stretch"):
+            _drive_abrir(reg["id"], Path(ss.db).name)
+            st.rerun()
+        if b.button("Manter a minha", key="g_conf_subir", width="stretch"):
+            ss.g_conflito = None
+            drive_salvar(forcar=True, sobrescrever=True)
+            st.rerun()
+    elif reg is None:
+        st.caption("Este projeto ainda não está no seu Drive.")
+    elif Path(ss.db).stat().st_mtime > ss.get("g_enviado", 0) + 0.5:
+        st.caption("⏳ Alterações ainda não enviadas ao Drive...")
+    else:
+        st.caption(f"☁️ Salvo no Drive{' às ' + ss.g_hora if ss.get('g_hora') else ''}.")
+    if ss.get("g_erro"):
+        st.caption(f"⚠️ {ss.g_erro}")
+
+
+if hasattr(st, "fragment"):
+    @st.fragment(run_every=15)
+    def _drive_vigia():
+        """Roda sozinho a cada 15 segundos: envia ao Drive o que mudou e atualiza o aviso."""
+        if drive_conectado():
+            drive_salvar()
+            _drive_status()
+else:
+    def _drive_vigia():
+        if drive_conectado():
+            drive_salvar()
+            _drive_status()
+
+
+def painel_drive():
+    import streamlit.components.v1 as components
+    _drive_processar_canal()
+    st.markdown("<style>.st-key-gcanal{position:absolute!important;left:-10000px!important;top:0!important;width:1px!important;"
+                "height:1px!important;overflow:hidden!important}</style>", unsafe_allow_html=True)
+    st.text_input("canal", key="gcanal", label_visibility="collapsed")
+    with st.expander("☁️ Google Drive", expanded=bool(ss.get("g_erro") or ss.get("g_conflito"))):
+        if not drive_conectado():
+            if ss.get("g_email"):
+                st.caption(f"A autorização de {ss.g_email} expirou. Entre de novo para continuar salvando no Drive.")
+            else:
+                st.caption("Entre com a sua conta Google para guardar os projetos numa pasta \"ViabilizaLab\" do seu Drive "
+                           "e abri-los de qualquer computador ou celular.")
+            components.html(drive_botao("entrar", "Entrar com Google"), height=46)
+            if ss.get("g_erro"):
+                st.caption(f"⚠️ {ss.g_erro}")
+            st.caption("[Como seus dados são tratados](https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html)")
+            return
+        st.caption(f"Conectado como **{ss.g_email}**")
+        _drive_vigia()
+        if _drive_registro() is None:
+            if st.button("☁️ Guardar este projeto no Drive", key="g_guardar", type="primary", width="stretch"):
+                drive_salvar(forcar=True)
+                st.rerun()
+            st.caption("Depois disso, cada alteração é enviada ao Drive automaticamente.")
+        elif st.button("Salvar no Drive agora", key="g_salvar", width="stretch"):
+            drive_salvar(forcar=True)
+            st.rerun()
+        st.markdown("**Abrir do Drive**")
+        if st.button("🔄 Ver meus projetos no Drive", key="g_listar", width="stretch"):
+            try:
+                ss.g_lista = drive_listar(ss.g_token, ss.g_pasta)
+            except Exception as e:
+                ss.g_erro = drive_mensagem_erro(e)
+        lista = ss.get("g_lista") or []
+        if lista:
+            nomes = {f["id"]: f"{f['name']} ({f['modifiedTime'][8:10]}/{f['modifiedTime'][5:7]} {f['modifiedTime'][11:16]} UTC)" for f in lista}
+            esc = st.selectbox("Projeto", list(nomes), format_func=nomes.get, key="g_esc", label_visibility="collapsed")
+            if st.button("📂 Abrir este projeto", key="g_abrir", width="stretch"):
+                _drive_abrir(esc, next(f["name"] for f in lista if f["id"] == esc))
+                st.rerun()
+        elif "g_lista" in ss:
+            st.caption("Nenhum projeto na pasta ViabilizaLab do seu Drive ainda.")
+        components.html(drive_botao("escolher", "Escolher outro arquivo do Drive", "#ffffff", "#1a73e8"), height=46)
+        components.html(drive_botao("sair", "Sair da conta Google", "#ffffff", "#555"), height=46)
+
 
 
 with st.sidebar:
@@ -760,6 +973,8 @@ with st.sidebar:
     if escolha != atual:
         trocar_projeto(PASTA / f"{escolha}.pnbox")
         st.rerun()
+
+    painel_drive()
 
     with st.expander("➕ Novo projeto"):
         novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")

@@ -7,6 +7,18 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.1 (26/11/2026): login com Google e projetos no Google Drive
+
+**Login com Google e projetos no Google Drive**
+- **☁️ Google Drive** no menu lateral: o aluno entra com a conta Google e o programa cria a pasta **ViabilizaLab** no Drive dele.
+- **Guardar este projeto no Drive:** depois do primeiro envio, cada alteração é enviada **automaticamente**, alguns segundos depois de o aluno parar de mexer. O menu mostra "☁️ Salvo no Drive às ..." ou "⏳ Alterações ainda não enviadas". Sem internet, o trabalho continua salvo no aparelho e é enviado depois.
+- **Abrir do Drive:** lista os projetos da pasta ViabilizaLab para abrir em qualquer computador ou celular. Também é possível escolher outro arquivo .pnbox do Drive pela janela de arquivos do Google.
+- **Proteção contra perda de trabalho:** se o projeto foi alterado em outro aparelho depois do último envio, o programa não sobrescreve e pergunta qual versão manter.
+- **Enviar para o Google Documentos e o Google Planilhas** (em Relatório e exportação): o relatório em Word e a planilha em Excel vão para a pasta do aluno já convertidos, prontos para editar e compartilhar.
+- **Segurança:** o programa pede só o e-mail e acesso aos arquivos que ele mesmo criou ou que o aluno escolheu (permissão drive.file). A autorização fica só na memória da aba e não é gravada. Não há servidor nem banco de dados central: os arquivos ficam no Drive de cada aluno. Ver a [política de privacidade](https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html).
+
+---
+
 ## v9.0.4 (26/11/2026): encerramento, política de privacidade e porta fixa
 
 **Encerramento, política de privacidade e porta fixa**

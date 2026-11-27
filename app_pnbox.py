@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v9.0.4 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v9.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -114,6 +114,8 @@ import tempfile
 import threading
 import time
 import unicodedata
+import urllib.parse
+import uuid
 
 
 # Historico de versoes (tela Novidades), gerado de CHANGELOG.md
@@ -123,6 +125,18 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v9.1 (26/11/2026): login com Google e projetos no Google Drive
+
+**Login com Google e projetos no Google Drive**
+- **☁️ Google Drive** no menu lateral: o aluno entra com a conta Google e o programa cria a pasta **ViabilizaLab** no Drive dele.
+- **Guardar este projeto no Drive:** depois do primeiro envio, cada alteração é enviada **automaticamente**, alguns segundos depois de o aluno parar de mexer. O menu mostra "☁️ Salvo no Drive às ..." ou "⏳ Alterações ainda não enviadas". Sem internet, o trabalho continua salvo no aparelho e é enviado depois.
+- **Abrir do Drive:** lista os projetos da pasta ViabilizaLab para abrir em qualquer computador ou celular. Também é possível escolher outro arquivo .pnbox do Drive pela janela de arquivos do Google.
+- **Proteção contra perda de trabalho:** se o projeto foi alterado em outro aparelho depois do último envio, o programa não sobrescreve e pergunta qual versão manter.
+- **Enviar para o Google Documentos e o Google Planilhas** (em Relatório e exportação): o relatório em Word e a planilha em Excel vão para a pasta do aluno já convertidos, prontos para editar e compartilhar.
+- **Segurança:** o programa pede só o e-mail e acesso aos arquivos que ele mesmo criou ou que o aluno escolheu (permissão drive.file). A autorização fica só na memória da aba e não é gravada. Não há servidor nem banco de dados central: os arquivos ficam no Drive de cada aluno. Ver a [política de privacidade](https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html).
 
 ---
 
@@ -9704,6 +9718,215 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
     return bytes(pdf.output())
 
 # ##############################################################################
+# PARTE: pnbox_drive.py
+# ##############################################################################
+
+GOOGLE_CLIENT_ID = "724365524589-gf4iv0op3mkdr4umbh85asdi78ar6u50.apps.googleusercontent.com"
+GOOGLE_PICKER_KEY = "AIzaSyBsfjri6BaiiHt-Lu9PnFMz4Um9gyF_WAk"
+GOOGLE_APP_ID = "724365524589"
+ESCOPOS = "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file"
+
+DRIVE_API = "https://www.googleapis.com/drive/v3"
+DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3"
+MIME_PASTA = "application/vnd.google-apps.folder"
+MIME_PNBOX = "application/octet-stream"
+NOME_PASTA = "ViabilizaLab"
+CONVERSOES = {
+    "doc": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.google-apps.document"),
+    "planilha": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.google-apps.spreadsheet"),
+}
+
+
+class ErroDrive(Exception):
+    def __init__(self, status: int, detalhe: str = ""):
+        super().__init__(f"Google Drive respondeu {status}: {detalhe[:200]}")
+        self.status = status
+
+
+def _drive_http(metodo: str, url: str, token: str, corpo: bytes | None = None, tipo: str | None = None) -> bytes:
+    """Requisição síncrona: XMLHttpRequest no navegador (Pyodide, em web worker) ou urllib no computador."""
+    cab = {"Authorization": f"Bearer {token}"}
+    if tipo:
+        cab["Content-Type"] = tipo
+    if sys.platform == "emscripten":
+        import js
+        xhr = js.XMLHttpRequest.new()
+        xhr.open(metodo, url, False)
+        xhr.responseType = "arraybuffer"
+        for k, v in cab.items():
+            xhr.setRequestHeader(k, v)
+        if corpo is None:
+            xhr.send()
+        else:
+            arr = js.Uint8Array.new(len(corpo))
+            arr.assign(corpo)
+            xhr.send(arr)
+        status = int(xhr.status)
+        dados = js.Uint8Array.new(xhr.response).to_bytes() if xhr.response else b""
+    else:
+        import urllib.error
+        import urllib.request
+        req = urllib.request.Request(url, data=corpo, method=metodo, headers=cab)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                status, dados = r.status, r.read()
+        except urllib.error.HTTPError as e:
+            status, dados = e.code, e.read()
+    if status >= 400 or status == 0:
+        raise ErroDrive(status, dados.decode("utf-8", "replace") if dados else "")
+    return dados
+
+
+def _drive_json(metodo, url, token, corpo=None, tipo=None) -> dict:
+    d = _drive_http(metodo, url, token, corpo, tipo)
+    return json.loads(d.decode("utf-8")) if d else {}
+
+
+def _drive_multipart(meta: dict, conteudo: bytes, mime: str) -> tuple[bytes, str]:
+    fronteira = "vl" + uuid.uuid4().hex
+    corpo = (f"--{fronteira}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{json.dumps(meta)}\r\n"
+             f"--{fronteira}\r\nContent-Type: {mime}\r\n\r\n").encode("utf-8") + conteudo + f"\r\n--{fronteira}--".encode()
+    return corpo, f"multipart/related; boundary={fronteira}"
+
+
+def drive_usuario(token: str) -> str:
+    return _drive_json("GET", "https://www.googleapis.com/oauth2/v3/userinfo", token).get("email", "")
+
+
+def drive_pasta(token: str) -> str:
+    """Id da pasta ViabilizaLab do usuário; cria se não existir."""
+    q = urllib.parse.quote(f"name='{NOME_PASTA}' and mimeType='{MIME_PASTA}' and trashed=false")
+    r = _drive_json("GET", f"{DRIVE_API}/files?q={q}&fields=files(id)&spaces=drive", token)
+    if r.get("files"):
+        return r["files"][0]["id"]
+    meta = json.dumps({"name": NOME_PASTA, "mimeType": MIME_PASTA}).encode()
+    return _drive_json("POST", f"{DRIVE_API}/files?fields=id", token, meta, "application/json; charset=UTF-8")["id"]
+
+
+def drive_listar(token: str, id_pasta: str) -> list[dict]:
+    q = urllib.parse.quote(f"'{id_pasta}' in parents and trashed=false and name contains '.pnbox'")
+    r = _drive_json("GET", f"{DRIVE_API}/files?q={q}&orderBy=modifiedTime desc&pageSize=100"
+                     "&fields=files(id,name,modifiedTime,size)", token)
+    return r.get("files", [])
+
+
+def drive_metadados(token: str, id_arq: str) -> dict:
+    return _drive_json("GET", f"{DRIVE_API}/files/{id_arq}?fields=id,name,modifiedTime,trashed", token)
+
+
+def drive_baixar(token: str, id_arq: str) -> bytes:
+    return _drive_http("GET", f"{DRIVE_API}/files/{id_arq}?alt=media", token)
+
+
+def drive_criar(token: str, nome: str, conteudo: bytes, id_pasta: str) -> dict:
+    corpo, tipo = _drive_multipart({"name": nome, "parents": [id_pasta], "mimeType": MIME_PNBOX}, conteudo, MIME_PNBOX)
+    return _drive_json("POST", f"{DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,name,modifiedTime", token, corpo, tipo)
+
+
+def drive_atualizar(token: str, id_arq: str, conteudo: bytes) -> dict:
+    return _drive_json("PATCH", f"{DRIVE_UPLOAD}/files/{id_arq}?uploadType=media&fields=id,name,modifiedTime", token,
+                 conteudo, MIME_PNBOX)
+
+
+def drive_enviar_convertido(token: str, nome: str, conteudo: bytes, tipo: str, id_pasta: str) -> dict:
+    """Envia .docx ou .xlsx pedindo a conversão para Google Documentos ou Google Planilhas."""
+    origem, destino = CONVERSOES[tipo]
+    corpo, ct = _drive_multipart({"name": nome, "parents": [id_pasta], "mimeType": destino}, conteudo, origem)
+    return _drive_json("POST", f"{DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,name,webViewLink", token, corpo, ct)
+
+
+def drive_mensagem_erro(e: Exception) -> str:
+    st_ = getattr(e, "status", None)
+    if st_ == 401:
+        return "A autorização do Google expirou. Clique em \"Entrar com Google\" de novo."
+    if st_ == 403:
+        return "O Google recusou o pedido (permissão ou limite de uso). Tente de novo em alguns minutos."
+    if st_ == 404:
+        return "O arquivo não foi encontrado no Drive (pode ter sido apagado ou o acesso foi retirado)."
+    if st_ in (0, None):
+        return "Sem conexão com o Google Drive. As alterações continuam salvas aqui e serão enviadas depois."
+    return f"O Google Drive respondeu com erro {st_}. Tente de novo."
+
+
+# ------------------------------------------------------------------------------
+# CÓDIGO DA PÁGINA (navegador): login, Picker e canal de mensagens para o Python
+# ------------------------------------------------------------------------------
+# Executado no contexto da página principal (não no quadro do componente, que o Streamlit remove).
+JS_GOOGLE = r"""
+(function () {
+  if (window.__vlGoogle) return;
+  var CLIENT = "%(client)s", CHAVE = "%(chave)s", APP = "%(app)s", ESCOPOS = "%(escopos)s";
+  function carregar(src) {
+    return new Promise(function (ok, erro) {
+      var ja = document.querySelector('script[src="' + src + '"]');
+      if (ja) { if (ja.dataset.ok) return ok(); ja.addEventListener("load", ok); return; }
+      var s = document.createElement("script"); s.src = src; s.async = true;
+      s.onload = function () { s.dataset.ok = "1"; ok(); }; s.onerror = erro; document.head.appendChild(s);
+    });
+  }
+  var gis = carregar("https://accounts.google.com/gsi/client");
+  var cliente = null, token = null;
+  function enviar(msg) {
+    msg.n = Date.now() + "-" + Math.random();
+    var el = document.querySelector(".st-key-gcanal input");
+    if (!el) return;
+    var set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    el.focus(); set.call(el, JSON.stringify(msg));
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+    el.blur();
+  }
+  function iniciar() {
+    if (cliente) return cliente;
+    cliente = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT, scope: ESCOPOS,
+      callback: function (r) {
+        if (r.error) { enviar({ tipo: "erro", erro: r.error }); return; }
+        token = r.access_token;
+        enviar({ tipo: "token", token: r.access_token, expira: r.expires_in });
+      },
+      error_callback: function (e) { enviar({ tipo: "erro", erro: (e && e.type) || "janela" }); }
+    });
+    return cliente;
+  }
+  window.__vlGoogle = {
+    enviar: enviar,
+    entrar: function () {
+      if (window.google && google.accounts && google.accounts.oauth2) { iniciar().requestAccessToken(); return; }
+      gis.then(function () { iniciar().requestAccessToken(); });
+    },
+    sair: function () {
+      gis.then(function () { try { if (token) google.accounts.oauth2.revoke(token, function () {}); } catch (e) {} token = null; enviar({ tipo: "sair" }); });
+    },
+    escolher: function () {
+      if (!token) { enviar({ tipo: "erro", erro: "sem_login" }); return; }
+      carregar("https://apis.google.com/js/api.js")
+        .then(function () { return new Promise(function (ok) { gapi.load("picker", ok); }); })
+        .then(function () {
+          var vis = new google.picker.DocsView(google.picker.ViewId.DOCS).setMode(google.picker.DocsViewMode.LIST)
+            .setQuery(".pnbox").setIncludeFolders(true);
+          var comp = new google.picker.DocsView(google.picker.ViewId.DOCS).setOwnedByMe(false).setQuery(".pnbox");
+          new google.picker.PickerBuilder().addView(vis).addView(comp).setOAuthToken(token).setDeveloperKey(CHAVE)
+            .setAppId(APP).setLocale("pt-BR").setTitle("Escolha um projeto do ViabilizaLab (.pnbox)")
+            .setCallback(function (d) {
+              if (d.action === google.picker.Action.PICKED) { var f = d.docs[0]; enviar({ tipo: "picker", id: f.id, nome: f.name }); }
+            }).build().setVisible(true);
+        }).catch(function () { enviar({ tipo: "erro", erro: "picker" }); });
+    }
+  };
+})();
+""" % {"client": GOOGLE_CLIENT_ID, "chave": GOOGLE_PICKER_KEY, "app": GOOGLE_APP_ID, "escopos": ESCOPOS}
+
+
+def drive_botao(acao: str, rotulo: str, cor: str = "#1a73e8", texto: str = "#fff") -> str:
+    """Botão num quadro do componente que injeta o código acima na página principal e chama a ação.
+    O clique do usuário no quadro conta como gesto também para a página, o que libera a janela do Google."""
+    return ("<script>try{var w=window.parent;if(!w.__vlGoogle){new w.Function(" + json.dumps(JS_GOOGLE) + ")();}}catch(e){}</script>"
+            "<button onclick='window.parent.__vlGoogle." + acao + "()' style='width:100%;padding:8px 10px;border-radius:8px;"
+            f"border:1px solid {texto if cor.lower() == '#ffffff' else cor};background:{cor};color:{texto};font:600 14px system-ui,Segoe UI,sans-serif;cursor:pointer'>"
+            + rotulo + "</button>")
+
+# ##############################################################################
 # PARTE: pnbox_ui_base.py
 # ##############################################################################
 # ==============================================================================
@@ -9717,7 +9940,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.0.4"
+VERSAO_PROGRAMA = "9.1"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -10433,6 +10656,219 @@ def completude() -> float:
 # ------------------------------------------------------------------------------
 # MENU LATERAL
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# GOOGLE DRIVE (v9.1): login, pasta do aluno no Drive e salvamento automático
+# ------------------------------------------------------------------------------
+_MAPA_DRIVE = PASTA / ".drive.json"
+
+
+def _drive_mapa() -> dict:
+    try:
+        return json.loads(_MAPA_DRIVE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _drive_registro(caminho=None) -> dict | None:
+    """Arquivo do Drive ligado ao projeto local (para a conta conectada)."""
+    if not ss.get("g_email"):
+        return None
+    return _drive_mapa().get(ss.g_email, {}).get(Path(caminho or ss.db).name)
+
+
+def _drive_ligar(caminho, id_arq: str, mod: str):
+    m = _drive_mapa()
+    m.setdefault(ss.g_email, {})[Path(caminho).name] = {"id": id_arq, "mod": mod}
+    try:
+        _MAPA_DRIVE.write_text(json.dumps(m, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    ss.g_enviado = Path(caminho).stat().st_mtime if Path(caminho).exists() else 0
+    ss.g_hora = datetime.now().strftime("%H:%M")
+
+
+def drive_conectado() -> bool:
+    return bool(ss.get("g_token")) and time.time() < ss.get("g_exp", 0)
+
+
+def _drive_processar_canal():
+    """Mensagens que o código da página manda pelo campo oculto (login, saída, arquivo escolhido)."""
+    bruto = ss.get("gcanal") or ""
+    if not bruto or bruto == ss.get("_gcanal_lido"):
+        return
+    ss._gcanal_lido = bruto
+    try:
+        msg = json.loads(bruto)
+    except Exception:
+        return
+    tipo = msg.get("tipo")
+    if tipo == "token":
+        ss.g_token, ss.g_exp = msg["token"], time.time() + float(msg.get("expira", 3600)) - 120
+        try:
+            ss.g_email = drive_usuario(ss.g_token)
+            ss.g_pasta = drive_pasta(ss.g_token)
+            ss.g_erro = None
+        except Exception as e:
+            ss.g_erro = drive_mensagem_erro(e)
+    elif tipo == "sair":
+        for k in ("g_token", "g_exp", "g_email", "g_pasta", "g_erro", "g_conflito", "g_lista"):
+            ss.pop(k, None)
+    elif tipo == "picker" and drive_conectado():
+        _drive_abrir(msg["id"], msg.get("nome") or "Projeto do Drive.pnbox")
+    elif tipo == "erro":
+        ss.g_erro = {"popup_closed": "A janela do Google foi fechada antes de terminar o login.",
+                     "popup_failed_to_open": "O navegador bloqueou a janela do Google. Libere as janelas para este site e tente de novo.",
+                     "access_denied": "O acesso ao Drive não foi autorizado.",
+                     "sem_login": "Entre com o Google antes de escolher um arquivo.",
+                     "picker": "Não foi possível abrir a janela de escolha de arquivos do Google."}.get(
+            msg.get("erro"), f"Não foi possível concluir o login ({msg.get('erro')}).")
+
+
+def _drive_abrir(id_arq: str, nome: str):
+    """Baixa um projeto do Drive e abre. Se o projeto já existir aqui, a cópia local é substituída."""
+    try:
+        dados = drive_baixar(ss.g_token, id_arq)
+        meta = drive_metadados(ss.g_token, id_arq)
+    except Exception as e:
+        ss.g_erro = drive_mensagem_erro(e)
+        return
+    if not dados.startswith(b"SQLite format 3"):
+        ss.g_erro = "O arquivo escolhido não é um projeto do ViabilizaLab (.pnbox)."
+        return
+    destino = None
+    for nome_local, reg in _drive_mapa().get(ss.g_email, {}).items():
+        if reg.get("id") == id_arq and (PASTA / nome_local).exists():
+            destino = PASTA / nome_local
+    destino = destino or caminho_livre(Path(nome).stem)
+    try:
+        conn.close()
+    except Exception:
+        pass
+    destino.write_bytes(dados)
+    conectar(destino).close()
+    _drive_ligar(destino, id_arq, meta.get("modifiedTime", ""))
+    trocar_projeto(destino)
+    ss.g_conflito = None
+
+
+def drive_salvar(forcar: bool = False, sobrescrever: bool = False) -> bool:
+    """Envia o projeto atual para o Drive se ele mudou desde o último envio. Devolve True se enviou."""
+    if not drive_conectado() or ss.get("g_conflito") and not sobrescrever:
+        return False
+    caminho = Path(ss.db)
+    reg = _drive_registro()
+    if reg is None and not forcar:
+        return False
+    mtime = caminho.stat().st_mtime
+    if not forcar and mtime <= ss.get("g_enviado", 0):
+        return False
+    if not forcar and time.time() - mtime < 4:          # espera o aluno parar de digitar
+        return False
+    try:
+        conn.commit()
+        dados = caminho.read_bytes()
+        if reg is None:
+            r = drive_criar(ss.g_token, caminho.name, dados, ss.g_pasta)
+        else:
+            if not sobrescrever:
+                meta = drive_metadados(ss.g_token, reg["id"])
+                if meta.get("trashed"):
+                    raise ErroDrive(404, "na lixeira")
+                if reg.get("mod") and meta.get("modifiedTime") != reg["mod"]:
+                    ss.g_conflito = meta.get("modifiedTime")
+                    return False
+            r = drive_atualizar(ss.g_token, reg["id"], dados)
+        _drive_ligar(caminho, r["id"], r.get("modifiedTime", ""))
+        ss.g_enviado = mtime
+        ss.g_erro = None
+        return True
+    except Exception as e:
+        ss.g_erro = drive_mensagem_erro(e)
+        return False
+
+
+def _drive_status():
+    reg = _drive_registro()
+    if ss.get("g_conflito"):
+        st.warning("Este projeto foi alterado em outro aparelho depois da última vez que você salvou daqui.", icon="⚠️")
+        a, b = st.columns(2)
+        if a.button("Usar a versão do Drive", key="g_conf_baixar", width="stretch"):
+            _drive_abrir(reg["id"], Path(ss.db).name)
+            st.rerun()
+        if b.button("Manter a minha", key="g_conf_subir", width="stretch"):
+            ss.g_conflito = None
+            drive_salvar(forcar=True, sobrescrever=True)
+            st.rerun()
+    elif reg is None:
+        st.caption("Este projeto ainda não está no seu Drive.")
+    elif Path(ss.db).stat().st_mtime > ss.get("g_enviado", 0) + 0.5:
+        st.caption("⏳ Alterações ainda não enviadas ao Drive...")
+    else:
+        st.caption(f"☁️ Salvo no Drive{' às ' + ss.g_hora if ss.get('g_hora') else ''}.")
+    if ss.get("g_erro"):
+        st.caption(f"⚠️ {ss.g_erro}")
+
+
+if hasattr(st, "fragment"):
+    @st.fragment(run_every=15)
+    def _drive_vigia():
+        """Roda sozinho a cada 15 segundos: envia ao Drive o que mudou e atualiza o aviso."""
+        if drive_conectado():
+            drive_salvar()
+            _drive_status()
+else:
+    def _drive_vigia():
+        if drive_conectado():
+            drive_salvar()
+            _drive_status()
+
+
+def painel_drive():
+    import streamlit.components.v1 as components
+    _drive_processar_canal()
+    st.markdown("<style>.st-key-gcanal{position:absolute!important;left:-10000px!important;top:0!important;width:1px!important;"
+                "height:1px!important;overflow:hidden!important}</style>", unsafe_allow_html=True)
+    st.text_input("canal", key="gcanal", label_visibility="collapsed")
+    with st.expander("☁️ Google Drive", expanded=bool(ss.get("g_erro") or ss.get("g_conflito"))):
+        if not drive_conectado():
+            if ss.get("g_email"):
+                st.caption(f"A autorização de {ss.g_email} expirou. Entre de novo para continuar salvando no Drive.")
+            else:
+                st.caption("Entre com a sua conta Google para guardar os projetos numa pasta \"ViabilizaLab\" do seu Drive "
+                           "e abri-los de qualquer computador ou celular.")
+            components.html(drive_botao("entrar", "Entrar com Google"), height=46)
+            if ss.get("g_erro"):
+                st.caption(f"⚠️ {ss.g_erro}")
+            st.caption("[Como seus dados são tratados](https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html)")
+            return
+        st.caption(f"Conectado como **{ss.g_email}**")
+        _drive_vigia()
+        if _drive_registro() is None:
+            if st.button("☁️ Guardar este projeto no Drive", key="g_guardar", type="primary", width="stretch"):
+                drive_salvar(forcar=True)
+                st.rerun()
+            st.caption("Depois disso, cada alteração é enviada ao Drive automaticamente.")
+        elif st.button("Salvar no Drive agora", key="g_salvar", width="stretch"):
+            drive_salvar(forcar=True)
+            st.rerun()
+        st.markdown("**Abrir do Drive**")
+        if st.button("🔄 Ver meus projetos no Drive", key="g_listar", width="stretch"):
+            try:
+                ss.g_lista = drive_listar(ss.g_token, ss.g_pasta)
+            except Exception as e:
+                ss.g_erro = drive_mensagem_erro(e)
+        lista = ss.get("g_lista") or []
+        if lista:
+            nomes = {f["id"]: f"{f['name']} ({f['modifiedTime'][8:10]}/{f['modifiedTime'][5:7]} {f['modifiedTime'][11:16]} UTC)" for f in lista}
+            esc = st.selectbox("Projeto", list(nomes), format_func=nomes.get, key="g_esc", label_visibility="collapsed")
+            if st.button("📂 Abrir este projeto", key="g_abrir", width="stretch"):
+                _drive_abrir(esc, next(f["name"] for f in lista if f["id"] == esc))
+                st.rerun()
+        elif "g_lista" in ss:
+            st.caption("Nenhum projeto na pasta ViabilizaLab do seu Drive ainda.")
+        components.html(drive_botao("escolher", "Escolher outro arquivo do Drive", "#ffffff", "#1a73e8"), height=46)
+        components.html(drive_botao("sair", "Sair da conta Google", "#ffffff", "#555"), height=46)
+
 
 
 with st.sidebar:
@@ -10449,6 +10885,8 @@ with st.sidebar:
     if escolha != atual:
         trocar_projeto(PASTA / f"{escolha}.pnbox")
         st.rerun()
+
+    painel_drive()
 
     with st.expander("➕ Novo projeto"):
         novo_nome = st.text_input("Nome do novo projeto", placeholder="Ex.: Padaria Pão Nosso")
@@ -15260,6 +15698,38 @@ def pg_relatorio():
                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", width="stretch")
             else:
                 st.warning("A biblioteca python-docx não está instalada neste computador.")
+    with st.container(border=True):
+        st.markdown("#### ☁️ Enviar para o Google Documentos e o Google Planilhas")
+        if not drive_conectado():
+            st.caption("Entre com a sua conta Google no menu lateral (☁️ Google Drive) para enviar o relatório e a planilha, "
+                       "já convertidos, para a pasta ViabilizaLab do seu Drive.")
+        else:
+            st.caption(f"Os arquivos vão para a pasta ViabilizaLab do Drive de {ss.g_email}, convertidos para o formato do Google, "
+                       "prontos para editar e compartilhar.")
+            g1, g2 = st.columns(2)
+            if g1.button("📝 Enviar relatório para o Google Documentos", width="stretch", key="b_gdoc"):
+                with st.spinner("Montando o documento e enviando ao Drive..."):
+                    try:
+                        docx_ = ss.get(f"docx_{PID}") or gerar_docx(proj, d, res, piv_i)
+                        if not docx_:
+                            raise RuntimeError("python-docx")
+                        r = drive_enviar_convertido(ss.g_token, f"Plano - {Path(ss.db).stem}", docx_, "doc", ss.g_pasta)
+                        ss[f"gdoc_{PID}"] = r.get("webViewLink")
+                    except RuntimeError:
+                        st.warning("A biblioteca python-docx não está instalada neste computador.")
+                    except Exception as e:
+                        st.error(drive_mensagem_erro(e))
+            if ss.get(f"gdoc_{PID}"):
+                g1.link_button("Abrir no Google Documentos ↗", ss[f"gdoc_{PID}"], width="stretch")
+            if g2.button("📊 Enviar planilha para o Google Planilhas", width="stretch", key="b_gsheet"):
+                with st.spinner("Montando a planilha e enviando ao Drive..."):
+                    try:
+                        r = drive_enviar_convertido(ss.g_token, f"Planilha - {Path(ss.db).stem}", planilha_excel(res), "planilha", ss.g_pasta)
+                        ss[f"gsheet_{PID}"] = r.get("webViewLink")
+                    except Exception as e:
+                        st.error(drive_mensagem_erro(e))
+            if ss.get(f"gsheet_{PID}"):
+                g2.link_button("Abrir no Google Planilhas ↗", ss[f"gsheet_{PID}"], width="stretch")
     with st.container(border=True):
         st.markdown("#### 🎓 Relatório acadêmico no padrão ABNT (PDF)")
         st.caption("Capa, folha de rosto, sumário com páginas, seções numeradas, tabelas com título e fonte, citações e referências. "
