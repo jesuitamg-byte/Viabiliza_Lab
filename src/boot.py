@@ -42,10 +42,26 @@ if __name__ == "__main__" and not _no_streamlit():
     _preparar_ambiente()
     import os as _os
     import socket as _socket
-    # Porta livre escolhida pelo sistema (evita conflito com outro programa)
-    with _socket.socket() as _s:
-        _s.bind(("127.0.0.1", 0))
-        _porta = _s.getsockname()[1]
+    # Porta fixa 8765: o login do Google só aceita endereços cadastrados (http://localhost:8765).
+    # Se ela estiver ocupada por um ViabilizaLab já aberto, só abre o navegador nele; se estiver
+    # ocupada por outro programa, usa uma porta livre (o programa funciona, mas sem o Google Drive).
+    _porta = 8765
+    try:
+        with _socket.socket() as _s:
+            _s.bind(("127.0.0.1", _porta))
+    except OSError:
+        try:
+            import urllib.request as _ur
+            _ur.urlopen(f"http://localhost:{_porta}/_stcore/health", timeout=2)
+            import webbrowser as _wb
+            print(f"O ViabilizaLab já está aberto. Abrindo http://localhost:{_porta}")
+            _wb.open(f"http://localhost:{_porta}")
+            _sys.exit(0)
+        except Exception:
+            with _socket.socket() as _s:
+                _s.bind(("127.0.0.1", 0))
+                _porta = _s.getsockname()[1]
+            print("Aviso: a porta 8765 está ocupada por outro programa; o login do Google Drive não vai funcionar.")
     _os.environ["PNBOX_AUTOFECHAR"] = "1"
     print(f"Abrindo o ViabilizaLab em http://localhost:{_porta}  (feche a aba do navegador para encerrar)")
     from streamlit.web import cli as _stcli

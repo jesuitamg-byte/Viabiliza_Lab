@@ -7,6 +7,15 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.0.4 (26/11/2026): encerramento, política de privacidade e porta fixa
+
+**Encerramento, política de privacidade e porta fixa**
+- **Encerrar o programa:** antes de desligar, a aba passa a mostrar o aviso "O ViabilizaLab foi encerrado. Seus projetos estão salvos. Pode fechar esta aba." e tenta se fechar sozinha. Antes aparecia a mensagem técnica "Connection error" do Streamlit. Na versão on-line o botão continua oculto, porque basta fechar a aba.
+- **Política de privacidade** publicada em https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html, com link no rodapé do site e no menu lateral. Explica que o programa não tem servidor nem banco de dados central, quais permissões do Google serão pedidas e como apagar os dados (LGPD).
+- **Versão instalada abre sempre em http://localhost:8765**, endereço que o login do Google vai exigir. Se o ViabilizaLab já estiver aberto, um segundo clique no atalho só traz a janela de volta. Se outro programa ocupar a porta, o ViabilizaLab abre em outra porta, sem o Google Drive.
+
+---
+
 ## v9.0.3 (26/11/2026): instalador com a versão correta
 
 **Instalador mostra a versão certa**

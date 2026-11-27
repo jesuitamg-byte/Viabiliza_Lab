@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v9.0.3 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v9.0.4 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -61,10 +61,26 @@ if __name__ == "__main__" and not _no_streamlit():
     _preparar_ambiente()
     import os as _os
     import socket as _socket
-    # Porta livre escolhida pelo sistema (evita conflito com outro programa)
-    with _socket.socket() as _s:
-        _s.bind(("127.0.0.1", 0))
-        _porta = _s.getsockname()[1]
+    # Porta fixa 8765: o login do Google só aceita endereços cadastrados (http://localhost:8765).
+    # Se ela estiver ocupada por um ViabilizaLab já aberto, só abre o navegador nele; se estiver
+    # ocupada por outro programa, usa uma porta livre (o programa funciona, mas sem o Google Drive).
+    _porta = 8765
+    try:
+        with _socket.socket() as _s:
+            _s.bind(("127.0.0.1", _porta))
+    except OSError:
+        try:
+            import urllib.request as _ur
+            _ur.urlopen(f"http://localhost:{_porta}/_stcore/health", timeout=2)
+            import webbrowser as _wb
+            print(f"O ViabilizaLab já está aberto. Abrindo http://localhost:{_porta}")
+            _wb.open(f"http://localhost:{_porta}")
+            _sys.exit(0)
+        except Exception:
+            with _socket.socket() as _s:
+                _s.bind(("127.0.0.1", 0))
+                _porta = _s.getsockname()[1]
+            print("Aviso: a porta 8765 está ocupada por outro programa; o login do Google Drive não vai funcionar.")
     _os.environ["PNBOX_AUTOFECHAR"] = "1"
     print(f"Abrindo o ViabilizaLab em http://localhost:{_porta}  (feche a aba do navegador para encerrar)")
     from streamlit.web import cli as _stcli
@@ -107,6 +123,15 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v9.0.4 (26/11/2026): encerramento, política de privacidade e porta fixa
+
+**Encerramento, política de privacidade e porta fixa**
+- **Encerrar o programa:** antes de desligar, a aba passa a mostrar o aviso "O ViabilizaLab foi encerrado. Seus projetos estão salvos. Pode fechar esta aba." e tenta se fechar sozinha. Antes aparecia a mensagem técnica "Connection error" do Streamlit. Na versão on-line o botão continua oculto, porque basta fechar a aba.
+- **Política de privacidade** publicada em https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html, com link no rodapé do site e no menu lateral. Explica que o programa não tem servidor nem banco de dados central, quais permissões do Google serão pedidas e como apagar os dados (LGPD).
+- **Versão instalada abre sempre em http://localhost:8765**, endereço que o login do Google vai exigir. Se o ViabilizaLab já estiver aberto, um segundo clique no atalho só traz a janela de volta. Se outro programa ocupar a porta, o ViabilizaLab abre em outra porta, sem o Google Drive.
 
 ---
 
@@ -9692,7 +9717,7 @@ def gerar_relatorio_abnt(proj: dict, d: dict, res: dict) -> bytes:
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.0.3"
+VERSAO_PROGRAMA = "9.0.4"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -10408,6 +10433,8 @@ def completude() -> float:
 # ------------------------------------------------------------------------------
 # MENU LATERAL
 # ------------------------------------------------------------------------------
+
+
 with st.sidebar:
     st.markdown("### 📊 ViabilizaLab")
     st.caption("Laboratório de plano de negócio e viabilidade (antigo PNBOX Acadêmico)")
@@ -10517,10 +10544,36 @@ with st.sidebar:
     else:
         st.caption(f"Projetos salvos em:\n`{PASTA}`")
     if not MODO_WEB and st.button("⏻ Encerrar o programa", width="stretch"):
-        st.success("Programa encerrado. Pode fechar esta aba.")
-        threading.Timer(1.0, lambda: os._exit(0)).start()
+        tela_de_encerramento()
+        threading.Timer(2.5, lambda: os._exit(0)).start()
         st.stop()
-    st.caption(f"Versão {VERSAO_PROGRAMA}")
+    st.caption(f"Versão {VERSAO_PROGRAMA} · [Política de privacidade](https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html)")
+
+
+def tela_de_encerramento():
+    """
+    Troca a página por um aviso em português antes de o programa desligar. Sem isso, a aba aberta
+    tentaria se reconectar e mostraria a mensagem técnica "Connection error" do Streamlit.
+    O código é criado no contexto da página principal, porque este quadro some quando o servidor cai.
+    """
+    import streamlit.components.v1 as components
+    components.html("""<script>
+    try {
+      const w = window.parent;
+      new w.Function(`
+        const html = '<div style="font-family:system-ui,Segoe UI,sans-serif;max-width:560px;margin:18vh auto;text-align:center;color:#26548c">' +
+          '<div style="font-size:3rem">📊</div><h2>O ViabilizaLab foi encerrado</h2>' +
+          '<p style="color:#333;font-size:1.05rem">Seus projetos estão salvos. Pode fechar esta aba.</p>' +
+          '<p style="color:#666;font-size:.9rem">Para usar de novo, abra o atalho do ViabilizaLab na área de trabalho.</p></div>';
+        const trocar = () => { document.title = "ViabilizaLab encerrado"; document.body.innerHTML = html;
+                               document.body.style.background = "#fff"; };
+        setTimeout(trocar, 600);
+        setTimeout(() => { trocar(); try { window.close(); } catch (e) {} }, 1800);
+        new MutationObserver(() => { if (!document.body.innerText.includes("foi encerrado")) trocar(); })
+          .observe(document.documentElement, {childList: true, subtree: true});
+      `)();
+    } catch (e) {}
+    </script>""", height=0)
 
 
 # ------------------------------------------------------------------------------

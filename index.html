@@ -9,6 +9,8 @@
   <style>
     #carregando{font-family:system-ui,sans-serif;max-width:560px;margin:15vh auto;text-align:center;color:#26548c}
     #carregando small{color:#555}
+    #privacidade{position:fixed;right:10px;bottom:6px;font:12px system-ui,sans-serif;z-index:99999;opacity:.75}
+    #privacidade a{color:#26548c}
   </style>
 </head>
 <body>
@@ -19,6 +21,7 @@
     e os seus dados não saem do seu navegador.</small>
   </div>
   <div id="root"></div>
+  <div id="privacidade"><a href="privacidade.html">Política de privacidade</a></div>
   <script type="module">
     import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.12.3/build/stlite.js";
     const versao = new URLSearchParams(location.search).get("versao") || "modelo";

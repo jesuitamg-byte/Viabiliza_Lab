@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.0.3"
+VERSAO_PROGRAMA = "9.0.4"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -744,6 +744,8 @@ def completude() -> float:
 # ------------------------------------------------------------------------------
 # MENU LATERAL
 # ------------------------------------------------------------------------------
+
+
 with st.sidebar:
     st.markdown("### 📊 ViabilizaLab")
     st.caption("Laboratório de plano de negócio e viabilidade (antigo PNBOX Acadêmico)")
@@ -853,10 +855,36 @@ with st.sidebar:
     else:
         st.caption(f"Projetos salvos em:\n`{PASTA}`")
     if not MODO_WEB and st.button("⏻ Encerrar o programa", width="stretch"):
-        st.success("Programa encerrado. Pode fechar esta aba.")
-        threading.Timer(1.0, lambda: os._exit(0)).start()
+        tela_de_encerramento()
+        threading.Timer(2.5, lambda: os._exit(0)).start()
         st.stop()
-    st.caption(f"Versão {VERSAO_PROGRAMA}")
+    st.caption(f"Versão {VERSAO_PROGRAMA} · [Política de privacidade](https://jesuitamg-byte.github.io/Viabiliza_Lab/privacidade.html)")
+
+
+def tela_de_encerramento():
+    """
+    Troca a página por um aviso em português antes de o programa desligar. Sem isso, a aba aberta
+    tentaria se reconectar e mostraria a mensagem técnica "Connection error" do Streamlit.
+    O código é criado no contexto da página principal, porque este quadro some quando o servidor cai.
+    """
+    import streamlit.components.v1 as components
+    components.html("""<script>
+    try {
+      const w = window.parent;
+      new w.Function(`
+        const html = '<div style="font-family:system-ui,Segoe UI,sans-serif;max-width:560px;margin:18vh auto;text-align:center;color:#26548c">' +
+          '<div style="font-size:3rem">📊</div><h2>O ViabilizaLab foi encerrado</h2>' +
+          '<p style="color:#333;font-size:1.05rem">Seus projetos estão salvos. Pode fechar esta aba.</p>' +
+          '<p style="color:#666;font-size:.9rem">Para usar de novo, abra o atalho do ViabilizaLab na área de trabalho.</p></div>';
+        const trocar = () => { document.title = "ViabilizaLab encerrado"; document.body.innerHTML = html;
+                               document.body.style.background = "#fff"; };
+        setTimeout(trocar, 600);
+        setTimeout(() => { trocar(); try { window.close(); } catch (e) {} }, 1800);
+        new MutationObserver(() => { if (!document.body.innerText.includes("foi encerrado")) trocar(); })
+          .observe(document.documentElement, {childList: true, subtree: true});
+      `)();
+    } catch (e) {}
+    </script>""", height=0)
 
 
 # ------------------------------------------------------------------------------
