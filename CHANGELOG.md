@@ -7,6 +7,14 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.1.2 (26/11/2026): aviso do menu lateral conforme o Google Drive
+
+**Aviso do menu lateral conforme o Google Drive**
+- Na versão on-line, o aviso no fim do menu lateral agora acompanha a situação do projeto. Se ele está no Drive, avisa que as alterações vão para a pasta ViabilizaLab e como continuar em outro aparelho. Se o aluno entrou com o Google mas o projeto ainda não foi enviado, indica o botão "Guardar este projeto no Drive". Sem login, sugere entrar com a conta Google.
+- O botão "Escolher outro arquivo do Drive" passou a se chamar "Outro arquivo do Drive", que cabe inteiro no menu lateral.
+
+---
+
 ## v9.1.1 (26/11/2026): correção no login com Google
 
 **Correção no login com Google**

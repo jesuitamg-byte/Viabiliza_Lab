@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.1.1"
+VERSAO_PROGRAMA = "9.1.2"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -956,7 +956,7 @@ def painel_drive():
                 st.rerun()
         elif "g_lista" in ss:
             st.caption("Nenhum projeto na pasta ViabilizaLab do seu Drive ainda.")
-        components.html(drive_botao("escolher", "Escolher outro arquivo do Drive", "#ffffff", "#1a73e8"), height=46)
+        components.html(drive_botao("escolher", "Outro arquivo do Drive", "#ffffff", "#1a73e8"), height=46)
         components.html(drive_botao("sair", "Sair da conta Google", "#ffffff", "#555"), height=46)
 
 
@@ -1062,10 +1062,17 @@ with st.sidebar:
                     st.rerun()
 
     st.divider()
-    if NAVEGADOR:
+    if NAVEGADOR and drive_conectado() and _drive_registro() is not None:
+        st.success("**Projeto no seu Google Drive:** cada alteração é enviada para a pasta **ViabilizaLab** do seu Drive. "
+                   "Para continuar em outro computador ou no celular, entre com a mesma conta e use **Abrir do Drive**. "
+                   "Para entregar ao professor, compartilhe o arquivo no Drive ou baixe o **.pnbox** em 📤 Relatório e exportação.")
+    elif NAVEGADOR and drive_conectado():
+        st.info("**Versão on-line:** este projeto ainda está só **neste navegador**. Use **☁️ Guardar este projeto no Drive** "
+                "(acima) para salvá-lo automaticamente no seu Google Drive e abri-lo de qualquer lugar.")
+    elif NAVEGADOR:
         st.info("**Versão on-line:** seus projetos ficam guardados **neste navegador, neste computador**. "
-                "Para levar a outro computador ou entregar ao professor, baixe o **.pnbox** em "
-                "📤 Relatório e exportação.")
+                "Para abrir de qualquer lugar, entre com a sua conta Google em **☁️ Google Drive** (acima). "
+                "Para entregar ao professor, baixe o **.pnbox** em 📤 Relatório e exportação.")
     elif MODO_WEB:
         st.warning("**Versão on-line:** o projeto fica só nesta aba. Ao terminar, baixe o **.pnbox** em "
                    "📤 Relatório e exportação.")

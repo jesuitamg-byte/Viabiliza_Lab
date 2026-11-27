@@ -218,5 +218,5 @@ def drive_botao(acao: str, rotulo: str, cor: str = "#1a73e8", texto: str = "#fff
     O clique do usuário no quadro conta como gesto também para a página, o que libera a janela do Google."""
     return ("<script>try{var w=window.parent;if(!w.__vlGoogle){new w.Function(" + json.dumps(JS_GOOGLE) + ")();}}catch(e){}</script>"
             "<button onclick='window.parent.__vlGoogle." + acao + "()' style='width:100%;padding:8px 10px;border-radius:8px;"
-            f"border:1px solid {texto if cor.lower() == '#ffffff' else cor};background:{cor};color:{texto};font:600 14px system-ui,Segoe UI,sans-serif;cursor:pointer'>"
+            f"border:1px solid {texto if cor.lower() == '#ffffff' else cor};background:{cor};color:{texto};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:600 14px system-ui,Segoe UI,sans-serif;cursor:pointer'>"
             + rotulo + "</button>")

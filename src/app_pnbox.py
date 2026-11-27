@@ -1,6 +1,6 @@
 """
 ================================================================================
-VIABILIZALAB v9.1.1 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
+VIABILIZALAB v9.1.2 (antigo PNBOX Acadêmico) - PLANO DE NEGÓCIO E VIABILIDADE ECONÔMICO-FINANCEIRA
 ================================================================================
 Programa único (um só arquivo). Formas de abrir:
     - dois cliques no arquivo "Abrir ViabilizaLab.bat" (na mesma pasta); ou
@@ -125,6 +125,14 @@ Programa gratuito de plano de negócio e análise de viabilidade para o ensino d
 Cada versão publicada tem uma etiqueta (*tag*) e uma página em **Releases** no GitHub. A numeração segue o padrão
 `maior.menor.correção`: o primeiro número muda quando entra um conjunto grande de ferramentas, o segundo quando entram
 funções novas e o terceiro quando há só correções.
+
+---
+
+## v9.1.2 (26/11/2026): aviso do menu lateral conforme o Google Drive
+
+**Aviso do menu lateral conforme o Google Drive**
+- Na versão on-line, o aviso no fim do menu lateral agora acompanha a situação do projeto. Se ele está no Drive, avisa que as alterações vão para a pasta ViabilizaLab e como continuar em outro aparelho. Se o aluno entrou com o Google mas o projeto ainda não foi enviado, indica o botão "Guardar este projeto no Drive". Sem login, sugere entrar com a conta Google.
+- O botão "Escolher outro arquivo do Drive" passou a se chamar "Outro arquivo do Drive", que cabe inteiro no menu lateral.
 
 ---
 
@@ -9930,7 +9938,7 @@ def drive_botao(acao: str, rotulo: str, cor: str = "#1a73e8", texto: str = "#fff
     O clique do usuário no quadro conta como gesto também para a página, o que libera a janela do Google."""
     return ("<script>try{var w=window.parent;if(!w.__vlGoogle){new w.Function(" + json.dumps(JS_GOOGLE) + ")();}}catch(e){}</script>"
             "<button onclick='window.parent.__vlGoogle." + acao + "()' style='width:100%;padding:8px 10px;border-radius:8px;"
-            f"border:1px solid {texto if cor.lower() == '#ffffff' else cor};background:{cor};color:{texto};font:600 14px system-ui,Segoe UI,sans-serif;cursor:pointer'>"
+            f"border:1px solid {texto if cor.lower() == '#ffffff' else cor};background:{cor};color:{texto};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:600 14px system-ui,Segoe UI,sans-serif;cursor:pointer'>"
             + rotulo + "</button>")
 
 # ##############################################################################
@@ -9947,7 +9955,7 @@ def drive_botao(acao: str, rotulo: str, cor: str = "#1a73e8", texto: str = "#fff
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.1.1"
+VERSAO_PROGRAMA = "9.1.2"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -10875,7 +10883,7 @@ def painel_drive():
                 st.rerun()
         elif "g_lista" in ss:
             st.caption("Nenhum projeto na pasta ViabilizaLab do seu Drive ainda.")
-        components.html(drive_botao("escolher", "Escolher outro arquivo do Drive", "#ffffff", "#1a73e8"), height=46)
+        components.html(drive_botao("escolher", "Outro arquivo do Drive", "#ffffff", "#1a73e8"), height=46)
         components.html(drive_botao("sair", "Sair da conta Google", "#ffffff", "#555"), height=46)
 
 
@@ -10981,10 +10989,17 @@ with st.sidebar:
                     st.rerun()
 
     st.divider()
-    if NAVEGADOR:
+    if NAVEGADOR and drive_conectado() and _drive_registro() is not None:
+        st.success("**Projeto no seu Google Drive:** cada alteração é enviada para a pasta **ViabilizaLab** do seu Drive. "
+                   "Para continuar em outro computador ou no celular, entre com a mesma conta e use **Abrir do Drive**. "
+                   "Para entregar ao professor, compartilhe o arquivo no Drive ou baixe o **.pnbox** em 📤 Relatório e exportação.")
+    elif NAVEGADOR and drive_conectado():
+        st.info("**Versão on-line:** este projeto ainda está só **neste navegador**. Use **☁️ Guardar este projeto no Drive** "
+                "(acima) para salvá-lo automaticamente no seu Google Drive e abri-lo de qualquer lugar.")
+    elif NAVEGADOR:
         st.info("**Versão on-line:** seus projetos ficam guardados **neste navegador, neste computador**. "
-                "Para levar a outro computador ou entregar ao professor, baixe o **.pnbox** em "
-                "📤 Relatório e exportação.")
+                "Para abrir de qualquer lugar, entre com a sua conta Google em **☁️ Google Drive** (acima). "
+                "Para entregar ao professor, baixe o **.pnbox** em 📤 Relatório e exportação.")
     elif MODO_WEB:
         st.warning("**Versão on-line:** o projeto fica só nesta aba. Ao terminar, baixe o **.pnbox** em "
                    "📤 Relatório e exportação.")
