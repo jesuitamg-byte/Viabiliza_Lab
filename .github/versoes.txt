@@ -25,3 +25,4 @@ v9.0.4 | 9eb0871 | encerramento, política de privacidade e porta fixa
 v9.1 | 2a963aa | login com Google e projetos no Google Drive
 v9.1.1 | 1f3322c | correção no login com Google
 v9.1.2 | 8ffacef | aviso do menu lateral conforme o Google Drive
+v9.2 | 15308ef | colaboração: convites e trava de edição
