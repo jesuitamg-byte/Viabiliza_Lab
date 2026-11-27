@@ -106,7 +106,8 @@ def drive_listar(token: str, id_pasta: str) -> list[dict]:
 
 
 def drive_metadados(token: str, id_arq: str) -> dict:
-    return _drive_json("GET", f"{DRIVE_API}/files/{id_arq}?fields=id,name,modifiedTime,trashed", token)
+    return _drive_json("GET", f"{DRIVE_API}/files/{id_arq}?fields=id,name,modifiedTime,md5Checksum,trashed,appProperties,"
+                              "owners(emailAddress,displayName),capabilities(canEdit,canShare)", token)
 
 
 def drive_baixar(token: str, id_arq: str) -> bytes:
@@ -115,11 +116,11 @@ def drive_baixar(token: str, id_arq: str) -> bytes:
 
 def drive_criar(token: str, nome: str, conteudo: bytes, id_pasta: str) -> dict:
     corpo, tipo = _drive_multipart({"name": nome, "parents": [id_pasta], "mimeType": MIME_PNBOX}, conteudo, MIME_PNBOX)
-    return _drive_json("POST", f"{DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,name,modifiedTime", token, corpo, tipo)
+    return _drive_json("POST", f"{DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,name,modifiedTime,md5Checksum", token, corpo, tipo)
 
 
 def drive_atualizar(token: str, id_arq: str, conteudo: bytes) -> dict:
-    return _drive_json("PATCH", f"{DRIVE_UPLOAD}/files/{id_arq}?uploadType=media&fields=id,name,modifiedTime", token,
+    return _drive_json("PATCH", f"{DRIVE_UPLOAD}/files/{id_arq}?uploadType=media&fields=id,name,modifiedTime,md5Checksum", token,
                  conteudo, MIME_PNBOX)
 
 
@@ -128,6 +129,53 @@ def drive_enviar_convertido(token: str, nome: str, conteudo: bytes, tipo: str, i
     origem, destino = CONVERSOES[tipo]
     corpo, ct = _drive_multipart({"name": nome, "parents": [id_pasta], "mimeType": destino}, conteudo, origem)
     return _drive_json("POST", f"{DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,name,webViewLink", token, corpo, ct)
+
+
+# ------------------------------------------------------------------------------
+# COLABORAÇÃO (v9.2): convites, compartilhados comigo e trava de edição
+# ------------------------------------------------------------------------------
+TRAVA_SEGUNDOS = 120          # a trava expira 2 minutos depois do último sinal de quem está editando
+PAPEIS = {"Pode editar": "writer", "Só pode ver": "reader"}
+
+
+def drive_travar(token: str, id_arq: str, email: str, ate: float) -> dict:
+    """Marca no próprio arquivo quem está editando e até quando (propriedades do app no Drive)."""
+    corpo = json.dumps({"appProperties": {"vl_editor": email, "vl_ate": str(int(ate))}}).encode()
+    return _drive_json("PATCH", f"{DRIVE_API}/files/{id_arq}?fields=id,appProperties", token, corpo,
+                       "application/json; charset=UTF-8")
+
+
+def drive_estado_trava(meta: dict, eu: str, agora: float) -> str | None:
+    """E-mail de outra pessoa que está editando agora, ou None se o arquivo está livre ou é meu."""
+    ap = meta.get("appProperties") or {}
+    editor, ate = ap.get("vl_editor", ""), float(ap.get("vl_ate", "0") or 0)
+    if editor and editor.lower() != eu.lower() and ate > agora:
+        return editor
+    return None
+
+
+def drive_permissoes(token: str, id_arq: str) -> list[dict]:
+    r = _drive_json("GET", f"{DRIVE_API}/files/{id_arq}/permissions?fields=permissions(id,emailAddress,role,type,displayName)", token)
+    return r.get("permissions", [])
+
+
+def drive_convidar(token: str, id_arq: str, email: str, papel: str, mensagem: str = "") -> dict:
+    q = "sendNotificationEmail=true" + (f"&emailMessage={urllib.parse.quote(mensagem)}" if mensagem else "")
+    corpo = json.dumps({"type": "user", "role": papel, "emailAddress": email.strip()}).encode()
+    return _drive_json("POST", f"{DRIVE_API}/files/{id_arq}/permissions?{q}&fields=id", token, corpo,
+                       "application/json; charset=UTF-8")
+
+
+def drive_remover_permissao(token: str, id_arq: str, id_perm: str) -> None:
+    _drive_http("DELETE", f"{DRIVE_API}/files/{id_arq}/permissions/{id_perm}", token)
+
+
+def drive_compartilhados(token: str) -> list[dict]:
+    """Projetos compartilhados com o usuário que o app já pode abrir (os novos se escolhem pela janela do Google)."""
+    q = urllib.parse.quote("sharedWithMe and trashed=false and name contains '.pnbox'")
+    r = _drive_json("GET", f"{DRIVE_API}/files?q={q}&orderBy=modifiedTime desc&pageSize=100"
+                           "&fields=files(id,name,modifiedTime,owners(emailAddress))", token)
+    return r.get("files", [])
 
 
 def drive_mensagem_erro(e: Exception) -> str:

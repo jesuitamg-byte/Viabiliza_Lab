@@ -7,6 +7,18 @@ funções novas e o terceiro quando há só correções.
 
 ---
 
+## v9.2 (26/11/2026): colaboração: convites e trava de edição
+
+**Colaboração: convites e trava de edição**
+- **👥 Colaboradores do projeto** (menu lateral, para projetos no Drive): o dono convida pessoas por e-mail, com permissão para **editar** ou **só ver**. O Google envia o convite com as instruções de como abrir. A lista mostra quem tem acesso, e o dono pode retirar o acesso com um clique.
+- **O arquivo continua no Drive do dono.** As alterações de quem colabora são salvas nesse mesmo arquivo.
+- **Projetos compartilhados comigo:** quem recebe o convite entra com a conta Google e, na primeira vez, abre o projeto em "Outro arquivo do Drive", na aba de compartilhados. Depois ele aparece em "Ver projetos compartilhados comigo".
+- **Trava de edição:** uma pessoa edita de cada vez. Quem abrir o projeto enquanto outra pessoa edita vê "🔒 fulano está editando este projeto agora", e as alterações dessa pessoa não são enviadas até a vez ficar livre. A trava é liberada ao clicar em "Sair da conta Google" ou expira 2 minutos depois que a pessoa para (por exemplo, ao fechar a aba). Há um botão para atualizar com a versão do Drive.
+- **Quem só pode ver** recebe o aviso de que as alterações feitas no aparelho dele não vão para o Drive.
+- A checagem de alterações feitas em outro aparelho passou a comparar o conteúdo do arquivo, e não a data, para não acusar conflito quando só a trava muda.
+
+---
+
 ## v9.1.2 (26/11/2026): aviso do menu lateral conforme o Google Drive
 
 **Aviso do menu lateral conforme o Google Drive**

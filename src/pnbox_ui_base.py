@@ -28,7 +28,7 @@ from pnbox_motor import (CATEGORIAS, QUADRANTES, brl, num_br, pct, div, custos_u
 st.set_page_config(page_title="ViabilizaLab - Plano de Negócio", page_icon="📊", layout="wide",
                    initial_sidebar_state="auto")      # aberto no computador, recolhido no celular
 ss = st.session_state
-VERSAO_PROGRAMA = "9.1.2"
+VERSAO_PROGRAMA = "9.2"
 
 # ------------------------------------------------------------------------------
 # ENCERRAMENTO AUTOMÁTICO: quando todas as abas do navegador forem fechadas,
@@ -764,9 +764,9 @@ def _drive_registro(caminho=None) -> dict | None:
     return _drive_mapa().get(ss.g_email, {}).get(Path(caminho or ss.db).name)
 
 
-def _drive_ligar(caminho, id_arq: str, mod: str):
+def _drive_ligar(caminho, id_arq: str, mod: str, md5: str = ""):
     m = _drive_mapa()
-    m.setdefault(ss.g_email, {})[Path(caminho).name] = {"id": id_arq, "mod": mod}
+    m.setdefault(ss.g_email, {})[Path(caminho).name] = {"id": id_arq, "mod": mod, "md5": md5}
     try:
         _MAPA_DRIVE.write_text(json.dumps(m, ensure_ascii=False), encoding="utf-8")
     except Exception:
@@ -801,7 +801,8 @@ def _drive_processar_canal():
             for k in ("g_token", "g_exp", "g_email", "g_pasta"):
                 ss.pop(k, None)
     elif tipo == "sair":
-        for k in ("g_token", "g_exp", "g_email", "g_pasta", "g_erro", "g_conflito", "g_lista"):
+        for k in ("g_token", "g_exp", "g_email", "g_pasta", "g_erro", "g_conflito", "g_lista", "g_comp", "g_travado",
+                  "g_leitura", "g_dono", "g_trava_ate", "g_perms"):
             ss.pop(k, None)
     elif tipo == "picker" and drive_conectado():
         _drive_abrir(msg["id"], msg.get("nome") or "Projeto do Drive.pnbox")
@@ -836,14 +837,55 @@ def _drive_abrir(id_arq: str, nome: str):
         pass
     destino.write_bytes(dados)
     conectar(destino).close()
-    _drive_ligar(destino, id_arq, meta.get("modifiedTime", ""))
+    _drive_ligar(destino, id_arq, meta.get("modifiedTime", ""), meta.get("md5Checksum", ""))
     trocar_projeto(destino)
     ss.g_conflito = None
+    ss.g_trava_ate = 0
+    _drive_aplicar_meta(meta)
 
 
-def drive_salvar(forcar: bool = False, sobrescrever: bool = False) -> bool:
+def _drive_aplicar_meta(meta: dict):
+    """Guarda quem é o dono, se posso editar e se outra pessoa está editando agora."""
+    ss.g_leitura = not (meta.get("capabilities") or {}).get("canEdit", True)
+    ss.g_pode_compartilhar = (meta.get("capabilities") or {}).get("canShare", False)
+    donos = meta.get("owners") or []
+    ss.g_dono = donos[0].get("emailAddress", "") if donos else ""
+    ss.g_travado = drive_estado_trava(meta, ss.g_email, time.time())
+
+
+def _drive_sinal() -> dict | None:
+    """A cada ciclo: lê o estado do arquivo no Drive e, se ninguém mais está editando, renova a minha trava."""
+    reg = _drive_registro()
+    if reg is None or not drive_conectado():
+        return None
+    try:
+        meta = drive_metadados(ss.g_token, reg["id"])
+        _drive_aplicar_meta(meta)
+        if not ss.g_travado and not ss.g_leitura and ss.get("g_trava_ate", 0) - time.time() < TRAVA_SEGUNDOS / 2:
+            ss.g_trava_ate = time.time() + TRAVA_SEGUNDOS
+            drive_travar(ss.g_token, reg["id"], ss.g_email, ss.g_trava_ate)
+        return meta
+    except Exception as e:
+        ss.g_erro = drive_mensagem_erro(e)
+        return None
+
+
+def _drive_liberar():
+    """Retira a minha trava ao sair, para o colega não precisar esperar ela expirar."""
+    reg = _drive_registro()
+    if reg and drive_conectado() and ss.get("g_trava_ate", 0) > time.time():
+        try:
+            drive_travar(ss.g_token, reg["id"], ss.g_email, 0)
+        except Exception:
+            pass
+    ss.g_trava_ate = 0
+
+
+def drive_salvar(forcar: bool = False, sobrescrever: bool = False, meta: dict | None = None) -> bool:
     """Envia o projeto atual para o Drive se ele mudou desde o último envio. Devolve True se enviou."""
     if not drive_conectado() or ss.get("g_conflito") and not sobrescrever:
+        return False
+    if ss.get("g_travado") or ss.get("g_leitura"):
         return False
     caminho = Path(ss.db)
     reg = _drive_registro()
@@ -861,14 +903,16 @@ def drive_salvar(forcar: bool = False, sobrescrever: bool = False) -> bool:
             r = drive_criar(ss.g_token, caminho.name, dados, ss.g_pasta)
         else:
             if not sobrescrever:
-                meta = drive_metadados(ss.g_token, reg["id"])
+                meta = meta or drive_metadados(ss.g_token, reg["id"])
                 if meta.get("trashed"):
                     raise ErroDrive(404, "na lixeira")
-                if reg.get("mod") and meta.get("modifiedTime") != reg["mod"]:
-                    ss.g_conflito = meta.get("modifiedTime")
+                mudou = (meta.get("md5Checksum") != reg["md5"]) if reg.get("md5") and meta.get("md5Checksum") else \
+                        bool(reg.get("mod") and meta.get("modifiedTime") != reg["mod"])
+                if mudou:
+                    ss.g_conflito = meta.get("modifiedTime") or "?"
                     return False
             r = drive_atualizar(ss.g_token, reg["id"], dados)
-        _drive_ligar(caminho, r["id"], r.get("modifiedTime", ""))
+        _drive_ligar(caminho, r["id"], r.get("modifiedTime", ""), r.get("md5Checksum", ""))
         ss.g_enviado = mtime
         ss.g_erro = None
         return True
@@ -879,6 +923,15 @@ def drive_salvar(forcar: bool = False, sobrescrever: bool = False) -> bool:
 
 def _drive_status():
     reg = _drive_registro()
+    if reg is not None and ss.get("g_leitura"):
+        st.info(f"👁️ Você pode só visualizar este projeto{' de ' + ss.g_dono if ss.get('g_dono') else ''}. "
+                "Alterações feitas aqui não são enviadas ao Drive.")
+    elif reg is not None and ss.get("g_travado"):
+        st.warning(f"🔒 **{ss.g_travado}** está editando este projeto agora. Suas alterações neste aparelho não serão "
+                   "enviadas. Aguarde e atualize com a versão do Drive (a vez fica livre 2 minutos depois que a pessoa para).", icon="⏳")
+        if st.button("🔄 Atualizar com a versão do Drive", key="g_trava_baixar", width="stretch"):
+            _drive_abrir(reg["id"], Path(ss.db).name)
+            st.rerun()
     if ss.get("g_conflito"):
         st.warning("Este projeto foi alterado em outro aparelho depois da última vez que você salvou daqui.", icon="⚠️")
         a, b = st.columns(2)
@@ -904,12 +957,12 @@ if hasattr(st, "fragment"):
     def _drive_vigia():
         """Roda sozinho a cada 15 segundos: envia ao Drive o que mudou e atualiza o aviso."""
         if drive_conectado():
-            drive_salvar()
+            drive_salvar(meta=_drive_sinal())
             _drive_status()
 else:
     def _drive_vigia():
         if drive_conectado():
-            drive_salvar()
+            drive_salvar(meta=_drive_sinal())
             _drive_status()
 
 
@@ -919,6 +972,8 @@ def painel_drive():
     st.markdown("<style>.st-key-gcanal{position:absolute!important;left:-10000px!important;top:0!important;width:1px!important;"
                 "height:1px!important;overflow:hidden!important}</style>", unsafe_allow_html=True)
     st.text_input("canal", key="gcanal", label_visibility="collapsed")
+    if ss.pop("_g_sair_js", False):        # revoga a autorização no Google e esquece o token na página
+        components.html("<script>try{window.parent.__vlGoogle.sair();}catch(e){}</script>", height=0)
     with st.expander("☁️ Google Drive", expanded=bool(ss.get("g_erro") or ss.get("g_conflito"))):
         if not drive_conectado():
             if ss.get("g_email"):
@@ -956,8 +1011,79 @@ def painel_drive():
                 st.rerun()
         elif "g_lista" in ss:
             st.caption("Nenhum projeto na pasta ViabilizaLab do seu Drive ainda.")
+        if st.button("👥 Ver projetos compartilhados comigo", key="g_comp_ver", width="stretch"):
+            try:
+                ss.g_comp = drive_compartilhados(ss.g_token)
+            except Exception as e:
+                ss.g_erro = drive_mensagem_erro(e)
+        comp = ss.get("g_comp") or []
+        if comp:
+            nomes_c = {f["id"]: f"{f['name']} (de {(f.get('owners') or [{}])[0].get('emailAddress', '?')})" for f in comp}
+            esc_c = st.selectbox("Compartilhado", list(nomes_c), format_func=nomes_c.get, key="g_esc_c", label_visibility="collapsed")
+            if st.button("📂 Abrir o compartilhado", key="g_abrir_c", width="stretch"):
+                _drive_abrir(esc_c, next(f["name"] for f in comp if f["id"] == esc_c))
+                st.rerun()
+        elif "g_comp" in ss:
+            st.caption("Nenhum projeto compartilhado com você foi aberto aqui ainda.")
+        st.caption("Recebeu um convite? Na primeira vez, abra o projeto pelo botão abaixo, na aba de compartilhados.")
         components.html(drive_botao("escolher", "Outro arquivo do Drive", "#ffffff", "#1a73e8"), height=46)
-        components.html(drive_botao("sair", "Sair da conta Google", "#ffffff", "#555"), height=46)
+        if st.button("Sair da conta Google", key="g_sair", width="stretch"):
+            _drive_liberar()
+            for k in ("g_token", "g_exp", "g_email", "g_pasta", "g_erro", "g_conflito", "g_lista", "g_comp", "g_travado",
+                      "g_leitura", "g_dono", "g_trava_ate", "g_perms"):
+                ss.pop(k, None)
+            ss._g_sair_js = True
+            st.rerun()
+    painel_colaboradores()
+
+
+def painel_colaboradores():
+    """Convites para colaborar no projeto (só para quem pode compartilhar o arquivo no Drive)."""
+    reg = _drive_registro()
+    if not drive_conectado() or reg is None:
+        return
+    with st.expander("👥 Colaboradores do projeto"):
+        if ss.get("g_dono"):
+            st.caption(f"O arquivo fica no Drive de **{ss.g_dono}**. As alterações de todos são salvas nele, uma pessoa de cada vez.")
+        if not ss.get("g_pode_compartilhar"):
+            st.caption("Só quem é dono ou pode editar e compartilhar o arquivo consegue convidar pessoas.")
+            return
+        if st.button("🔄 Ver quem tem acesso", key="g_perm_ver", width="stretch") or "g_perms" not in ss:
+            try:
+                ss.g_perms = drive_permissoes(ss.g_token, reg["id"])
+            except Exception as e:
+                ss.g_perms = []
+                ss.g_erro = drive_mensagem_erro(e)
+        nomes_papel = {"owner": "dono", "writer": "edita", "commenter": "comenta", "reader": "só vê"}
+        for pm in ss.get("g_perms") or []:
+            if pm.get("type") != "user":
+                continue
+            a, b = st.columns([3, 1])
+            a.caption(f"{pm.get('emailAddress', '?')} · {nomes_papel.get(pm.get('role'), pm.get('role'))}")
+            if pm.get("role") != "owner" and b.button("✕", key=f"g_rem_{pm['id']}", help="Retirar o acesso"):
+                try:
+                    drive_remover_permissao(ss.g_token, reg["id"], pm["id"])
+                    ss.pop("g_perms", None)
+                except Exception as e:
+                    ss.g_erro = drive_mensagem_erro(e)
+                st.rerun()
+        st.markdown("**Convidar**")
+        email_c = st.text_input("E-mail da pessoa (de preferência uma conta Google)", key="g_conv_email")
+        papel = st.radio("Permissão", list(PAPEIS), horizontal=True, key="g_conv_papel")
+        if st.button("✉️ Enviar convite", key="g_conv_env", type="primary", width="stretch"):
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email_c.strip()):
+                st.error("Informe um e-mail válido.")
+            else:
+                msg = (f"{ss.g_email} convidou você para colaborar no plano de negócio \"{Path(ss.db).stem}\" no ViabilizaLab. "
+                       "Para abrir: acesse https://jesuitamg-byte.github.io/Viabiliza_Lab/ , entre com a sua conta Google em "
+                       "☁️ Google Drive e, na primeira vez, use \"Outro arquivo do Drive\" e escolha o projeto na aba de compartilhados.")
+                try:
+                    drive_convidar(ss.g_token, reg["id"], email_c, PAPEIS[papel], msg)
+                    ss.pop("g_perms", None)
+                    st.success(f"Convite enviado para {email_c.strip()}.")
+                except Exception as e:
+                    st.error(drive_mensagem_erro(e))
+        st.caption("O Google envia o convite por e-mail. Você pode retirar o acesso a qualquer momento aqui ou no Drive.")
 
 
 
@@ -1161,6 +1287,8 @@ def cabecalho(p: str):
     _, grupo, icone, titulo, descricao = PAG[p]
     st.caption(f"{grupo}  ›  {titulo}")
     st.title(f"{icone} {titulo}")
+    if ss.get("g_travado") and drive_conectado():
+        st.warning(f"🔒 {ss.g_travado} está editando este projeto agora. O que você mudar aqui não será enviado ao Drive.", icon="⏳")
     st.markdown(f"<div class='pn-card-info'>ℹ️ {descricao}</div>", unsafe_allow_html=True)
     if ss.alerta and ss.alerta[0] == p:
         st.warning(f"**O que ajustar aqui:** {ss.alerta[1]}")
